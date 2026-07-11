@@ -64,7 +64,7 @@ Aesthetic north star: **Sublime Text / Zed austerity** — near-zero chrome, syn
 | Persistence | Codable JSON in Application Support + `UserDefaults` for scalar prefs. No SwiftData / Core Data. | D-07 |
 | File access | `FileManager` + security-scoped bookmarks; App Sandbox **ON** | D-09 |
 | Highlighting | Hand-rolled line-based Markdown tokenizer, attributes only | D-11 |
-| File watching | None in v1 core; DispatchSource/FSEvents at Stage 10 hardening | D-12 |
+| File watching | None in v1 core; DispatchSource/FSEvents at Stage 11 hardening | D-12 |
 | Build | Xcode + SwiftPM (no runtime packages); SwiftLint/swift-format as dev tools |
 | Testing | XCTest (unit + integration), XCUITest (smoke), manual data-loss QA gate |
 | CI | GitHub Actions: build + unit tests on every push, from Stage 0 |
@@ -328,7 +328,8 @@ Scratchpad/                             # repo root
 │   │   │                               # RecentItemsStore
 │   ├── Editor/                         # EditorRepresentable, EditorCoordinator,
 │   │   │                               # MarkdownTokenizer, HighlightApplier, LayoutApplier
-│   ├── Features/                       # Welcome/ Sidebar/ Tabs/ QuickSwitcher/ Settings/ StatusBar/
+│   ├── Features/                       # Zen/ Sidebar/ Tabs/ QuickSwitcher/ Settings/ StatusBar/
+│   │                                   # (no Welcome — the app launches into a scratch buffer)
 │   ├── Persistence/                    # ApplicationSupportPaths, JSONStore, AtomicFileWriter
 │   ├── Utilities/                      # Debouncer, FuzzyMatcher, Hashing,
 │   │                                   # EncodingDetector, Logger (os.Logger)
@@ -475,7 +476,7 @@ Order rationale (2026-07-11): the product is a complete, usable **scratchpad bef
 | Silent TK2→TK1 downgrade | Banned API + debug assertion |
 | Dependency / scope creep | §3 non-negotiables; ADR required to amend |
 | Notarization friction late | Stage-0 dry-run |
-| Solo-dev stall | ≤ 1-week stages; Stage-7 dogfooding loop |
+| Solo-dev stall | ≤ 1-week stages; Stage-4 dogfooding loop |
 
 ## 16. Future Expansion (Post-v1 Direction, Non-Binding)
 
