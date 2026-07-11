@@ -1,0 +1,6 @@
+Document,Grade,Score,Best Use,Main Strength,Main Weakness
+GPT-5.5-Council-Synthesis,A-,92,Master plan,Scope discipline and architecture,Less implementation-prompt-ready than Kimi
+GPT-5.5-Local-First,A-,91,Engineering rules,"File safety, testing, implementation order",Long and repetitive
+Kimi-K2.6,B+,86,Agent prompt pack,Concrete sprint prompts and macOS patterns,Overcommits to dependencies and platform assumptions
+DeepSeek-V4-Pro,B,82,Executive/readable overview,Clear phased roadmap,Insufficient file safety and acceptance criteria
+Grok-4.3,C+,76,Reference brief,Concise vision/non-negotiables,Too shallow for execution

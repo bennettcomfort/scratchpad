@@ -1,0 +1,37 @@
+# Architecture Diagram
+
+```mermaid
+flowchart TD
+    App[SwiftUI App Shell]
+    App --> Commands[AppCommands / Menu Bar]
+    App --> Window[MainWindowView]
+    App --> Settings[Settings]
+
+    Window --> Workspace[WorkspaceManager]
+    Window --> Docs[DocumentManager]
+    Window --> Editor[EditorViewModel]
+    Window --> Session[SessionManager]
+    Window --> Theme[ThemeManager]
+    Window --> Quick[QuickSwitcher]
+
+    Workspace --> Bookmarks[Security-Scoped Bookmarks]
+    Workspace --> Tree[FileTreeBuilder]
+    Workspace --> Index[FileIndexer]
+    Workspace --> External[ExternalChangeMonitor]
+
+    Docs --> FileService[FileService]
+    Docs --> Buffers[DocumentBuffer]
+    Docs --> Atomic[AtomicFileWriter]
+    Docs --> Recovery[RecoveryBufferStore]
+
+    Editor --> TextView[NSTextView Wrapper]
+    TextView --> Storage[NSTextStorage]
+    TextView --> Layout[NSLayoutManager]
+    TextView --> Container[NSTextContainer]
+    Editor --> Highlighter[MarkdownHighlighter]
+
+    Session --> SessionJSON[latest-session.json]
+    Recovery --> RecoveryJSON[recovery/buffer-uuid.json]
+    Theme --> ThemeDefs[Built-in Themes]
+    Settings --> Defaults[UserDefaults / AppStorage]
+```

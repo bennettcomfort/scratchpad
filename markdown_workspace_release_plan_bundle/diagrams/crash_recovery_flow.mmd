@@ -1,0 +1,24 @@
+# Crash Recovery Flow
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant SessionStore
+    participant RecoveryStore
+    participant BookmarkManager
+    participant User
+
+    App->>SessionStore: Load latest-session.json
+    App->>RecoveryStore: Check dirty recovery buffers
+    App->>BookmarkManager: Resolve workspace bookmark
+
+    alt Recovery exists
+        App->>User: Offer restore recovered session
+        User->>App: Restore
+        App->>SessionStore: Restore tabs/layout/cursors
+        App->>RecoveryStore: Restore dirty buffer text
+        App->>User: Show restored dirty tabs
+    else No recovery
+        App->>User: Open normal workspace/welcome
+    end
+```

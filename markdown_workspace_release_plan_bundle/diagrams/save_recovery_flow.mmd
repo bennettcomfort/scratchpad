@@ -1,0 +1,30 @@
+# Save and Recovery Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Editor
+    participant DocumentManager
+    participant AtomicWriter
+    participant RecoveryStore
+    participant Disk
+
+    User->>Editor: Type text
+    Editor->>DocumentManager: Mark buffer dirty
+    DocumentManager->>RecoveryStore: Debounced recovery snapshot
+
+    User->>Editor: Cmd+S
+    Editor->>DocumentManager: Save active buffer
+    DocumentManager->>Disk: Check exists + metadata/hash
+
+    alt File changed externally
+        DocumentManager->>User: Show conflict options
+    else Safe to save
+        DocumentManager->>AtomicWriter: Write temp file
+        AtomicWriter->>Disk: Atomic replace original
+        Disk-->>AtomicWriter: Success
+        AtomicWriter-->>DocumentManager: Save confirmed
+        DocumentManager->>RecoveryStore: Delete recovery buffer
+        DocumentManager->>Editor: Mark clean
+    end
+```
