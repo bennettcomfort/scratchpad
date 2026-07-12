@@ -68,32 +68,30 @@ Scratchpad/                              # repo root
 
 ## Stage 0 — Foundation
 
-### Task 1: Repository and Documents
+### Task 1: Repository Readiness
 
-**Files:** Create: `~/Projects/Active/Scratchpad/` repo root, `.gitignore`, `README.md`, `CHANGELOG.md`; Copy in: `AGENTS.md`, `SPEC.md`, `IMPLEMENTATION_PLAN.md` from the planning folder (`~/Projects/Active/Prompt Markdown Editor Project/`).
+**Context:** The repo already exists at `~/Projects/Active/scratchpad` (remote: `github.com/bennettcomfort/scratchpad`) and already contains the governance docs (`AGENTS.md`, `SPEC.md`, `IMPLEMENTATION_PLAN.md`, `MASTER_CANON.md`) plus the historical planning corpus (`Project Plans/`, `markdown_workspace_release_plan_bundle/`, `ARCHITECTURAL_REVIEW_REPORT.md`, `docs/`). App code is built **in this same repo**. Never read the historical corpus — `AGENTS.md` and `SPEC.md` are your only context docs.
 
-**Interfaces:** Produces the repo every later task works in. All later paths are relative to this root.
+**Files:** Modify: `.gitignore`; Create: `README.md`, `CHANGELOG.md`
 
-- [ ] **Step 1: Create repo and docs**
+**Interfaces:** Produces the repo state every later task assumes. All later paths are relative to this root.
+
+- [ ] **Step 1: Extend .gitignore and add README/CHANGELOG**
 
 ```bash
-mkdir -p ~/Projects/Active/Scratchpad && cd ~/Projects/Active/Scratchpad
-git init
-printf '.DS_Store\n*.xcodeproj\nDerivedData/\nbuild/\n.build/\n' > .gitignore
-printf '# Scratchpad\n\nScratch-first, local-first, native macOS Markdown workspace.\nSee SPEC.md for the product spec and AGENTS.md for agent rules.\n\n## Build\n\n    brew install xcodegen\n    xcodegen\n    xcodebuild -scheme Scratchpad -destination "platform=macOS" build\n' > README.md
+cd ~/Projects/Active/scratchpad
+printf '*.xcodeproj\nDerivedData/\nbuild/\n.build/\n' >> .gitignore
+printf '# Scratchpad\n\nScratch-first, local-first, native macOS Markdown workspace.\n\n- Product spec: SPEC.md\n- Agent rules: AGENTS.md\n- Plan: IMPLEMENTATION_PLAN.md\n- Full architecture: MASTER_CANON.md\n\n## Build\n\n    brew install xcodegen\n    xcodegen\n    xcodebuild -scheme Scratchpad -destination "platform=macOS" build\n' > README.md
 printf '# Changelog\n\n## [Unreleased]\n' > CHANGELOG.md
-cp "../Prompt Markdown Editor Project/AGENTS.md" .
-cp "../Prompt Markdown Editor Project/SPEC.md" .
-cp "../Prompt Markdown Editor Project/IMPLEMENTATION_PLAN.md" .
 ```
 
 - [ ] **Step 2: Commit**
 
 ```bash
-git add -A && git commit -m "chore: initialize repository with governance docs"
+git add -A && git commit -m "chore: repo readiness — gitignore, README, changelog"
 ```
 
-**Done when:** `git log` shows the commit; all five docs present at root.
+**Done when:** `.gitignore` covers Xcode artifacts; README and CHANGELOG exist at root; committed.
 
 ---
 
