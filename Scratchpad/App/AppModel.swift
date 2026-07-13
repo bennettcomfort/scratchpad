@@ -6,6 +6,8 @@ final class AppModel {
     let bufferStore = BufferStore()
     let sessionService: SessionService
     private let sessionWriter: SessionWriter
+    private(set) lazy var zenController = ZenWindowController(model: self)
+    private let hotkeyManager = HotkeyManager()
 
     init() {
         let paths = (try? ApplicationSupportPaths.standard())
@@ -32,5 +34,9 @@ final class AppModel {
     func newScratchBuffer() {
         bufferStore.createScratchBuffer()
         sessionService.noteStructuralChange()
+    }
+
+    func startGlobalHotkey() {
+        hotkeyManager.register { [weak self] in self?.zenController.summon() }
     }
 }

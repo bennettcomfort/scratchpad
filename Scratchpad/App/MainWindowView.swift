@@ -16,7 +16,10 @@ struct MainWindowView: View {
         }
         .frame(minWidth: 480, minHeight: 320)
         .onAppear {
-            Task { await model.sessionService.restoreOnLaunch() }
+            Task {
+                await model.sessionService.restoreOnLaunch()
+                model.startGlobalHotkey()
+            }
         }
     }
 }
