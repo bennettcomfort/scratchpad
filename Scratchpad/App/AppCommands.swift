@@ -7,6 +7,14 @@ struct AppCommands: Commands {
             Button("New Scratch Buffer") { model.newScratchBuffer() }
                 .keyboardShortcut("n", modifiers: .command)
         }
-        CommandGroup(replacing: .printItem) { }   // frees ⌘P for quick switcher (Stage 8)
+        CommandGroup(after: .newItem) {
+            Button("Open…") { model.openFile() }
+                .keyboardShortcut("o", modifiers: .command)
+            Button("Save") { model.saveFile() }
+                .keyboardShortcut("s", modifiers: .command)
+            Button("Save As…") { model.saveFileAs() }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+        }
+        CommandGroup(replacing: .printItem) { }
     }
 }

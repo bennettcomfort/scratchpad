@@ -13,6 +13,8 @@ final class OpenBuffer: Identifiable {
     private(set) var generation: Int = 0
     var cursorLocation: Int = 0
     var scrollOffsetY: Double = 0
+    var lastKnownDiskMTime: Date?
+    var lastSavedHash: String?
     let storage: NSTextStorage
 
     var text: String { storage.string }
