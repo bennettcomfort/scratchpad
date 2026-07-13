@@ -14,6 +14,9 @@ final class BufferStore {
         return b
     }
 
+    /// Restore path: insert a reconstructed buffer without changing activeBufferID.
+    func adopt(_ buffer: OpenBuffer) { buffers.append(buffer) }
+
     func buffer(id: UUID) -> OpenBuffer? { buffers.first { $0.id == id } }
 
     func close(id: UUID) {

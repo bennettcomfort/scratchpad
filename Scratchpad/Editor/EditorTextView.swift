@@ -3,10 +3,12 @@ import AppKit
 
 struct EditorTextView: NSViewRepresentable {
     let buffer: OpenBuffer
+    var onEdit: ((OpenBuffer) -> Void)? = nil
 
     func makeCoordinator() -> EditorCoordinator { EditorCoordinator(buffer: buffer) }
 
     func makeNSView(context: Context) -> NSScrollView {
+        context.coordinator.onEdit = onEdit
         // TextKit 2 stack, explicitly. (H1: never touch .layoutManager.)
         let textView = NSTextView(usingTextLayoutManager: true)
         assert(textView.textLayoutManager != nil, "TextKit 2 must be active")

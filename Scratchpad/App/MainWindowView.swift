@@ -7,16 +7,16 @@ struct MainWindowView: View {
         Group {
             if let id = model.bufferStore.activeBufferID,
                let buffer = model.bufferStore.buffer(id: id) {
-                EditorTextView(buffer: buffer)
+                EditorTextView(
+                    buffer: buffer,
+                    onEdit: { model.sessionService.noteBufferEdited($0) })
             } else {
                 Color.clear
             }
         }
         .frame(minWidth: 480, minHeight: 320)
         .onAppear {
-            if model.bufferStore.buffers.isEmpty {
-                model.bufferStore.createScratchBuffer()
-            }
+            Task { await model.sessionService.restoreOnLaunch() }
         }
     }
 }
