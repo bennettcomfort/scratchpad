@@ -105,4 +105,49 @@ final class AppModel {
             }
         }
     }
+
+    func closeActiveTab() {
+        guard let id = bufferStore.activeBufferID,
+              let buffer = bufferStore.buffer(id: id) else { return }
+        if buffer.saveState == .dirty, buffer.fileURL != nil {
+            let alert = NSAlert()
+            alert.messageText = "Do you want to save changes to \"\(buffer.displayName)\"?"
+            alert.informativeText = "Your changes will be lost if you don't save."
+            alert.addButton(withTitle: "Save")
+            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: "Discard")
+            alert.beginSheetModal(for: NSApp.keyWindow ?? NSWindow()) { [weak self] response in
+                guard let self else { return }
+                switch response {
+                case .alertFirstButtonReturn:
+                    Task {
+                        do { try await self.fileService.save(buffer: buffer) }
+                        catch { Log.logger("file").error("Save failed on close: \(error, privacy: .public)") }
+                    }
+                    fallthrough
+                case .alertThirdButtonReturn:
+                    self.bufferStore.close(id: id)
+                    self.sessionService.noteStructuralChange()
+                default: break
+                }
+            }
+        } else {
+            bufferStore.close(id: id)
+            sessionService.noteStructuralChange()
+        }
+    }
+
+    func nextTab() {
+        guard let id = bufferStore.activeBufferID,
+              let idx = bufferStore.buffers.firstIndex(where: { $0.id == id }) else { return }
+        let next = (idx + 1) % bufferStore.buffers.count
+        bufferStore.activeBufferID = bufferStore.buffers[next].id
+    }
+
+    func previousTab() {
+        guard let id = bufferStore.activeBufferID,
+              let idx = bufferStore.buffers.firstIndex(where: { $0.id == id }) else { return }
+        let prev = (idx - 1 + bufferStore.buffers.count) % bufferStore.buffers.count
+        bufferStore.activeBufferID = bufferStore.buffers[prev].id
+    }
 }

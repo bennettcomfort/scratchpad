@@ -4,7 +4,9 @@ struct MainWindowView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
+            TabBarView()
+
             if let id = model.bufferStore.activeBufferID,
                let buffer = model.bufferStore.buffer(id: id) {
                 EditorTextView(

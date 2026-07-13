@@ -14,6 +14,13 @@ struct AppCommands: Commands {
                 .keyboardShortcut("s", modifiers: .command)
             Button("Save As…") { model.saveFileAs() }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
+            Divider()
+            Button("Close Tab") { model.closeActiveTab() }
+                .keyboardShortcut("w", modifiers: .command)
+            Button("Next Tab") { model.nextTab() }
+                .keyboardShortcut("}", modifiers: .command)
+            Button("Previous Tab") { model.previousTab() }
+                .keyboardShortcut("{", modifiers: .command)
         }
         CommandGroup(replacing: .printItem) { }
     }
