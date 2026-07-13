@@ -28,6 +28,11 @@ struct AppCommands: Commands {
                 NotificationCenter.default.post(name: .toggleSidebar, object: nil)
             }
                 .keyboardShortcut("\\", modifiers: .command)
+            Divider()
+            Button("Quick Open…") {
+                NotificationCenter.default.post(name: .showQuickSwitcher, object: nil)
+            }
+                .keyboardShortcut("p", modifiers: .command)
         }
         CommandGroup(replacing: .printItem) { }
     }
