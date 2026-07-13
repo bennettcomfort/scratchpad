@@ -6,7 +6,7 @@ final class AppModel {
     let bufferStore = BufferStore()
     let sessionService: SessionService
     private let sessionWriter: SessionWriter
-    private(set) lazy var zenController = ZenWindowController(model: self)
+    private(set) var zenController: ZenWindowController?
     private let hotkeyManager = HotkeyManager()
 
     init() {
@@ -29,6 +29,8 @@ final class AppModel {
             UserDefaults.standard.set(true, forKey: "didCloseCleanly")
             self?.sessionService.noteStructuralChange()
         }
+
+        self.zenController = ZenWindowController(model: self)
     }
 
     func newScratchBuffer() {
@@ -37,6 +39,6 @@ final class AppModel {
     }
 
     func startGlobalHotkey() {
-        hotkeyManager.register { [weak self] in self?.zenController.summon() }
+        hotkeyManager.register { [weak self] in self?.zenController?.summon() }
     }
 }
