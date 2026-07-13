@@ -6,6 +6,20 @@ struct EditorTextView: NSViewRepresentable {
     let theme: EditorTheme
     var onEdit: ((OpenBuffer) -> Void)? = nil
 
+    @AppStorage("editorFontSize") private var fontSize = 14.0
+    @AppStorage("editorFontFamily") private var fontFamily = ""
+
+    private var resolvedFont: NSFont {
+        let size = CGFloat(fontSize)
+        if !fontFamily.isEmpty {
+            let descriptor = NSFontDescriptor(fontAttributes: [.family: fontFamily])
+            if let font = NSFont(descriptor: descriptor, size: size) {
+                return font
+            }
+        }
+        return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+
     func makeCoordinator() -> EditorCoordinator { EditorCoordinator(buffer: buffer) }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -25,7 +39,7 @@ struct EditorTextView: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.font = theme.nsFont
+        textView.font = resolvedFont
         textView.textContainerInset = NSSize(width: theme.leftPadding, height: theme.topPadding)
         textView.autoresizingMask = [.width]
         textView.backgroundColor = theme.nsBackground
@@ -34,7 +48,7 @@ struct EditorTextView: NSViewRepresentable {
 
         // Set typing attributes so newly typed text uses the theme color.
         textView.typingAttributes = [
-            .font: theme.nsFont,
+            .font: resolvedFont,
             .foregroundColor: theme.nsText
         ]
 
@@ -58,19 +72,28 @@ struct EditorTextView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
-        textView.font = theme.nsFont
+        let newFont = resolvedFont
+        let fontChanged = textView.font?.pointSize != newFont.pointSize ||
+                          textView.font?.familyName != newFont.familyName
+
+        textView.font = newFont
         textView.textContainerInset = NSSize(width: theme.leftPadding, height: theme.topPadding)
         textView.backgroundColor = theme.nsBackground
         textView.insertionPointColor = theme.nsText
         textView.drawsBackground = true
         textView.typingAttributes = [
-            .font: theme.nsFont,
+            .font: newFont,
             .foregroundColor: theme.nsText
         ]
         // Re-apply foreground color to existing text when theme changes.
         let fullRange = NSRange(location: 0, length: buffer.storage.length)
         if fullRange.length > 0 {
             buffer.storage.addAttribute(.foregroundColor, value: theme.nsText, range: fullRange)
+        }
+        // Re-highlight when font changes so token fonts match.
+        if fontChanged, fullRange.length > 0, fullRange.length < 2_000_000 {
+            let tokens = MarkdownTokenizer.tokenize(buffer.storage.string)
+            HighlightApplier.apply(tokens, to: buffer.storage, font: newFont)
         }
         nsView.backgroundColor = theme.nsBackground
     }
