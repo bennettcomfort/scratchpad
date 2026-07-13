@@ -29,7 +29,7 @@ final class EditorCoordinator: NSObject, NSTextViewDelegate {
                 return nil
             case ([.command, .shift], "K", _),
                  ([.command, .shift], "k", _):
-                self.deleteCurrentLine(in: tv)
+                self.deleteLineAtCursor(in: tv)
                 return nil
             case (.command, "]", _):
                 self.indent(in: tv)
@@ -90,7 +90,7 @@ final class EditorCoordinator: NSObject, NSTextViewDelegate {
 
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.deleteToBeginningOfLine(_:)) {
-            deleteCurrentLine(in: textView)
+            deleteLineAtCursor(in: textView)
             return true
         }
         return false
@@ -136,10 +136,11 @@ final class EditorCoordinator: NSObject, NSTextViewDelegate {
         noteEditAndRehighlight(textView)
     }
 
-    private func deleteCurrentLine(in textView: NSTextView) {
+    private func deleteLineAtCursor(in textView: NSTextView) {
         guard let storage = textView.textStorage, storage.length > 0 else { return }
-        let line = selectedLineRange(in: textView)
+        let cursor = textView.selectedRange().location
         let text = storage.string as NSString
+        let line = lineRange(at: cursor, in: text)
 
         var deleteRange = line
         // If last line has no newline but there's a line before it, eat the previous newline too
