@@ -2,14 +2,17 @@ import SwiftUI
 
 struct MainWindowView: View {
     @Environment(AppModel.self) private var model
+    @State private var themeManager = ThemeManager()
 
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
             if let id = model.bufferStore.activeBufferID,
                let buffer = model.bufferStore.buffer(id: id) {
                 EditorTextView(
                     buffer: buffer,
-                    onEdit: { model.sessionService.noteBufferEdited($0) })
+                    onEdit: { model.sessionService.noteBufferEdited($0) },
+                    theme: themeManager.current)
+                StatusBarView(buffer: buffer, theme: themeManager.current)
             } else {
                 Color.clear
             }
