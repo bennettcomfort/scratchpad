@@ -43,6 +43,7 @@ struct EditorTextView: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: theme.leftPadding, height: theme.topPadding)
         textView.autoresizingMask = [.width]
         textView.backgroundColor = theme.nsBackground
+        textView.textColor = theme.nsText
         textView.insertionPointColor = theme.nsText
         textView.drawsBackground = true
 
@@ -79,6 +80,7 @@ struct EditorTextView: NSViewRepresentable {
         textView.font = newFont
         textView.textContainerInset = NSSize(width: theme.leftPadding, height: theme.topPadding)
         textView.backgroundColor = theme.nsBackground
+        textView.textColor = theme.nsText
         textView.insertionPointColor = theme.nsText
         textView.drawsBackground = true
         textView.typingAttributes = [
