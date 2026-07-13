@@ -25,22 +25,22 @@ struct EditorTheme: Sendable, Equatable, Codable {
     static let scratchDark = EditorTheme(
         name: "Scratch Dark",
         backgroundHex: "#2E2E2E", textHex: "#ECECEC", secondaryHex: "#9A9A9A",
-        fontSize: 22, lineHeight: 1.45, leftPadding: 60, topPadding: 42)
+        fontSize: 22, lineHeight: 1.45, leftPadding: 18, topPadding: 12)
 
     static let scratchLight = EditorTheme(
         name: "Scratch Light",
         backgroundHex: "#F6F6F4", textHex: "#1E1E1E", secondaryHex: "#8C8C8C",
-        fontSize: 22, lineHeight: 1.45, leftPadding: 60, topPadding: 42)
+        fontSize: 22, lineHeight: 1.45, leftPadding: 18, topPadding: 12)
 
     static let system = EditorTheme(
         name: "System",
         backgroundHex: "#FFFFFF", textHex: "#000000", secondaryHex: "#888888",
-        fontSize: 22, lineHeight: 1.45, leftPadding: 60, topPadding: 42)
+        fontSize: 22, lineHeight: 1.45, leftPadding: 18, topPadding: 12)
 
     static let highContrast = EditorTheme(
         name: "High Contrast",
         backgroundHex: "#FFFFFF", textHex: "#000000", secondaryHex: "#4D4D4D",
-        fontSize: 22, lineHeight: 1.45, leftPadding: 60, topPadding: 42)
+        fontSize: 22, lineHeight: 1.45, leftPadding: 18, topPadding: 12)
 
     static let all: [EditorTheme] = [.scratchDark, .scratchLight, .system, .highContrast]
 }

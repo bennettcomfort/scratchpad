@@ -4,6 +4,7 @@ struct TabBarView: View {
     @Environment(AppModel.self) private var model
     @State private var hoveredID: UUID?
 
+    private var theme: EditorTheme { model.themeManager.current }
     private var buffers: [OpenBuffer] { model.bufferStore.buffers }
 
     var body: some View {
@@ -24,7 +25,7 @@ struct TabBarView: View {
                 .padding(.horizontal, 4)
             }
             .frame(height: 32)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .background(theme.background)
         }
     }
 

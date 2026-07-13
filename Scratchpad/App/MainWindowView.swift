@@ -10,6 +10,8 @@ struct MainWindowView: View {
     @State private var sidebarVisible = false
     @State private var showQuickSwitcher = false
 
+    private var theme: EditorTheme { model.themeManager.current }
+
     var body: some View {
         VStack(spacing: 0) {
             TabBarView()
@@ -24,7 +26,7 @@ struct MainWindowView: View {
                        let buffer = model.bufferStore.buffer(id: id) {
                         EditorTextView(
                             buffer: buffer,
-                            theme: model.themeManager.current,
+                            theme: theme,
                             onEdit: { model.sessionService.noteBufferEdited($0) })
                     } else {
                         Color.clear
@@ -33,20 +35,23 @@ struct MainWindowView: View {
             }
         }
         .frame(minWidth: 480, minHeight: 320)
+        .background(theme.background)
         .overlay {
             if showQuickSwitcher {
-                Color.black.opacity(0.2)
+                theme.background.opacity(0.6)
                     .ignoresSafeArea()
                     .onTapGesture { showQuickSwitcher = false }
                 QuickSwitcherView()
             }
         }
         .onAppear {
+            syncWindow()
             Task {
                 await model.sessionService.restoreOnLaunch()
                 model.startGlobalHotkey()
             }
         }
+        .onChange(of: theme.name) { _, _ in syncWindow() }
         .onReceive(NotificationCenter.default.publisher(for: .toggleSidebar)) { _ in
             withAnimation { sidebarVisible.toggle() }
         }
@@ -56,5 +61,13 @@ struct MainWindowView: View {
         .onReceive(NotificationCenter.default.publisher(for: .dismissQuickSwitcher)) { _ in
             showQuickSwitcher = false
         }
+    }
+
+    private func syncWindow() {
+        guard let window = NSApp.mainWindow else { return }
+        window.titlebarAppearsTransparent = true
+        window.backgroundColor = theme.nsBackground
+        window.isOpaque = true
+        window.hasShadow = true
     }
 }
