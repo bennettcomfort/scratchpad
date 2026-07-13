@@ -9,4 +9,13 @@ ditto -c -k --keepParent build/Scratchpad.xcarchive/Products/Applications/Scratc
 xcrun notarytool submit build/Scratchpad.zip \
   --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APP_PASSWORD" --wait
 xcrun stapler staple build/Scratchpad.xcarchive/Products/Applications/Scratchpad.app
-echo "Notarization dry-run complete."
+spctl -a -vv build/Scratchpad.xcarchive/Products/Applications/Scratchpad.app
+echo "Notarization + stapling complete. Gatekeeper check passed."
+
+# DMG
+mkdir -p build/dmg
+cp -R build/Scratchpad.xcarchive/Products/Applications/Scratchpad.app build/dmg/
+ln -sf /Applications build/dmg/Applications
+hdiutil create -volname Scratchpad -srcfolder build/dmg -ov -format UDZO build/Scratchpad.dmg
+rm -rf build/dmg
+echo "DMG created: build/Scratchpad.dmg"
