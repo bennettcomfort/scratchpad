@@ -31,12 +31,14 @@ final class EditorCoordinator: NSObject, NSTextViewDelegate {
 
     private func runHighlight(storage: NSTextStorage, font: NSFont, generation: Int) {
         let text = storage.string
+        let fontSize = font.pointSize
         // Tokenize on a background queue (pure function, no AppKit).
-        Task.detached(priority: .medium) { [text] in
+        Task.detached(priority: .medium) {
             let tokens = MarkdownTokenizer.tokenize(text)
+            let bgFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
             await MainActor.run { [weak self] in
                 guard let self, self.buffer.generation == generation else { return }
-                HighlightApplier.apply(tokens, to: storage, font: font)
+                HighlightApplier.apply(tokens, to: storage, font: bgFont)
             }
         }
     }
