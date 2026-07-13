@@ -68,7 +68,13 @@ struct EditorTextView: NSViewRepresentable {
         // Restore cursor if valid.
         let loc = min(buffer.cursorLocation, buffer.storage.length)
         textView.setSelectedRange(NSRange(location: loc, length: 0))
+
+        context.coordinator.setupEventMonitor(for: textView)
         return scroll
+    }
+
+    static func dismantleNSView(_ nsView: NSScrollView, coordinator: EditorCoordinator) {
+        coordinator.removeEventMonitor()
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
