@@ -21,6 +21,13 @@ struct AppCommands: Commands {
                 .keyboardShortcut("}", modifiers: .command)
             Button("Previous Tab") { model.previousTab() }
                 .keyboardShortcut("{", modifiers: .command)
+            Divider()
+            Button("Open Folder…") { model.openFolder() }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+            Button("Toggle Sidebar") {
+                NotificationCenter.default.post(name: .toggleSidebar, object: nil)
+            }
+                .keyboardShortcut("\\", modifiers: .command)
         }
         CommandGroup(replacing: .printItem) { }
     }

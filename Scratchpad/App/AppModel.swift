@@ -6,7 +6,8 @@ final class AppModel {
     let bufferStore = BufferStore()
     let sessionService: SessionService
     private let sessionWriter: SessionWriter
-    let bookmarkManager = BookmarkManager()
+    let bookmarkManager: BookmarkManager
+    let workspace: WorkspaceModel
     private(set) var fileService: FileService!
     private(set) var zenController: ZenWindowController?
     private let hotkeyManager = HotkeyManager()
@@ -18,6 +19,10 @@ final class AppModel {
         let writer = SessionWriter(paths: paths)
         self.sessionWriter = writer
         self.sessionService = SessionService(bufferStore: bufferStore, writer: writer)
+
+        let bm = BookmarkManager()
+        self.bookmarkManager = bm
+        self.workspace = WorkspaceModel(bookmarkManager: bm)
 
         let closedCleanly = UserDefaults.standard.bool(forKey: "didCloseCleanly")
         UserDefaults.standard.set(false, forKey: "didCloseCleanly")
@@ -149,5 +154,30 @@ final class AppModel {
               let idx = bufferStore.buffers.firstIndex(where: { $0.id == id }) else { return }
         let prev = (idx - 1 + bufferStore.buffers.count) % bufferStore.buffers.count
         bufferStore.activeBufferID = bufferStore.buffers[prev].id
+    }
+
+    func openFolder() {
+        workspace.openFolder()
+    }
+
+    func openWorkspaceFile(_ url: URL) {
+        // Check if already open — if so, switch to it.
+        if let existing = bufferStore.buffers.first(where: { $0.fileURL == url }) {
+            bufferStore.activeBufferID = existing.id
+            return
+        }
+        Task {
+            do {
+                let (text, mtime, hash) = try await fileService.open(url: url)
+                let buffer = OpenBuffer(fileURL: url, displayName: url.deletingPathExtension().lastPathComponent)
+                buffer.replaceEntireContents(text)
+                buffer.lastKnownDiskMTime = mtime
+                buffer.lastSavedHash = hash
+                bufferStore.adopt(buffer)
+                sessionService.noteStructuralChange()
+            } catch {
+                Log.logger("file").error("Workspace open failed: \(error, privacy: .public)")
+            }
+        }
     }
 }
