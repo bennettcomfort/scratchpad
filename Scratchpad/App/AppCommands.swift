@@ -26,14 +26,10 @@ struct AppCommands: Commands {
             Divider()
             Button("Open Folder…") { model.openFolder() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
-            Button("Toggle Sidebar") {
-                NotificationCenter.default.post(name: .toggleSidebar, object: nil)
-            }
+            Button("Toggle Sidebar") { model.sidebarVisible.toggle() }
                 .keyboardShortcut("\\", modifiers: .command)
             Divider()
-            Button("Quick Open…") {
-                NotificationCenter.default.post(name: .showQuickSwitcher, object: nil)
-            }
+            Button("Quick Open…") { model.showQuickSwitcher = true }
                 .keyboardShortcut("p", modifiers: .command)
             Divider()
             Button("Reveal in Finder") {

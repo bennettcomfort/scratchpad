@@ -1,16 +1,9 @@
 import SwiftUI
 
-extension Notification.Name {
-    static let toggleSidebar = Notification.Name("toggleSidebar")
-    static let showQuickSwitcher = Notification.Name("showQuickSwitcher")
-}
-
 struct MainWindowView: View {
     @Environment(AppModel.self) private var model
     @AppStorage("editorFontSize") private var fontSize = 14.0
     @AppStorage("editorFontFamily") private var fontFamily = ""
-    @State private var sidebarVisible = false
-    @State private var showQuickSwitcher = false
 
     private var theme: EditorTheme { model.themeManager.current }
 
@@ -19,7 +12,7 @@ struct MainWindowView: View {
             TabBarView()
 
             HStack(spacing: 0) {
-                if sidebarVisible {
+                if model.sidebarVisible {
                     SidebarView()
                 }
 
@@ -43,10 +36,10 @@ struct MainWindowView: View {
         .frame(minWidth: 480, minHeight: 320)
         .background(theme.background)
         .overlay {
-            if showQuickSwitcher {
+            if model.showQuickSwitcher {
                 theme.background.opacity(0.6)
                     .ignoresSafeArea()
-                    .onTapGesture { showQuickSwitcher = false }
+                    .onTapGesture { model.showQuickSwitcher = false }
                 QuickSwitcherView()
             }
         }
@@ -58,15 +51,6 @@ struct MainWindowView: View {
             }
         }
         .onChange(of: theme.name) { _, _ in syncWindow() }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleSidebar)) { _ in
-            withAnimation { sidebarVisible.toggle() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showQuickSwitcher)) { _ in
-            showQuickSwitcher = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .dismissQuickSwitcher)) { _ in
-            showQuickSwitcher = false
-        }
     }
 
     private func syncWindow() {
