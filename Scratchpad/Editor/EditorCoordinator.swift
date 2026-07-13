@@ -101,14 +101,6 @@ final class EditorCoordinator: NSObject, NSTextViewDelegate {
         buffer.cursorLocation = tv.selectedRange().location
     }
 
-    func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        if commandSelector == #selector(NSResponder.deleteToBeginningOfLine(_:)) {
-            deleteLineAtCursor(in: textView)
-            return true
-        }
-        return false
-    }
-
     // MARK: – Helpers
 
     private func lineRange(at location: Int, in text: NSString) -> NSRange {
