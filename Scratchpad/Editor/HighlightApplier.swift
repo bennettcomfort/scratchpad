@@ -51,9 +51,9 @@ enum HighlightApplier {
                     range: range)
             case .italic:
                 let italicDesc = font.fontDescriptor.withSymbolicTraits(.italic)
-                if let italicFont = italicDesc.map({ NSFont(descriptor: $0, size: font.pointSize) }) {
-                    storage.addAttribute(.font, value: italicFont, range: range)
-                }
+                let italicFont = NSFont(descriptor: italicDesc, size: font.pointSize)
+                    ?? font
+                storage.addAttribute(.font, value: italicFont, range: range)
             case .codeFence:
                 storage.addAttribute(.backgroundColor,
                     value: NSColor.systemGray.withAlphaComponent(0.15), range: range)
