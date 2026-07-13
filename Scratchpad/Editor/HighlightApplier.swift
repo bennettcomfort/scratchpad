@@ -5,13 +5,13 @@ enum HighlightApplier {
     private static let log = Log.logger("highlight")
 
     static func apply(_ tokens: [MarkdownToken], to storage: NSTextStorage,
-                      font: NSFont) {
+                      font: NSFont, textColor: NSColor) {
         // Clear existing attributes (except font) for the whole range.
         let fullRange = NSRange(location: 0, length: storage.length)
 
         // Set base font + color
         storage.addAttribute(.font, value: font, range: fullRange)
-        storage.addAttribute(.foregroundColor, value: NSColor.textColor, range: fullRange)
+        storage.addAttribute(.foregroundColor, value: textColor, range: fullRange)
 
         let headingFont = NSFont.monospacedSystemFont(ofSize: font.pointSize * 1.18,
                                                       weight: .semibold)

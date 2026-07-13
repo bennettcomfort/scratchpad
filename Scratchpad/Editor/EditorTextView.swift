@@ -95,7 +95,7 @@ struct EditorTextView: NSViewRepresentable {
         // Re-highlight when font changes so token fonts match.
         if fontChanged, fullRange.length > 0, fullRange.length < 2_000_000 {
             let tokens = MarkdownTokenizer.tokenize(buffer.storage.string)
-            HighlightApplier.apply(tokens, to: buffer.storage, font: newFont)
+            HighlightApplier.apply(tokens, to: buffer.storage, font: newFont, textColor: theme.nsText)
         }
         nsView.backgroundColor = theme.nsBackground
     }
