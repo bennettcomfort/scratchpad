@@ -1,0 +1,35 @@
+name: Scratchpad
+options:
+  bundleIdPrefix: com.scratchpad
+  deploymentTarget:
+    macOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+  configs:
+    Debug:
+      ENABLE_HARDENED_RUNTIME: NO
+    Release:
+      ENABLE_HARDENED_RUNTIME: YES
+targets:
+  Scratchpad:
+    type: application
+    platform: macOS
+    sources: [Scratchpad]
+    settings:
+      CODE_SIGN_ENTITLEMENTS: Scratchpad/App/Scratchpad.entitlements
+      INFOPLIST_FILE: Scratchpad/App/Info.plist
+      PRODUCT_BUNDLE_IDENTIFIER: com.scratchpad.app
+  ScratchpadTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [ScratchpadTests]
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: Scratchpad
+schemes:
+  Scratchpad:
+    build: { targets: { Scratchpad: all } }
+    test: { targets: [ScratchpadTests] }
