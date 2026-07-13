@@ -4,7 +4,7 @@ Rules for every coding agent working on this repo. `SPEC.md` is the full spec; `
 
 ## Current Stage
 
-> **Stage: 9 — Highlighting** (update this pointer when a stage merges)
+> **Stage: 11 — Hardening** (update this pointer when a stage merges)
 
 Work ONLY on the current stage. Never start the next stage, never "prepare" for future stages, never scaffold deferred features.
 
