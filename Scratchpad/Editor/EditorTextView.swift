@@ -4,20 +4,19 @@ import AppKit
 struct EditorTextView: NSViewRepresentable {
     let buffer: OpenBuffer
     let theme: EditorTheme
+    let fontSize: CGFloat
+    let fontFamily: String
     var onEdit: ((OpenBuffer) -> Void)? = nil
 
-    @AppStorage("editorFontSize") private var fontSize = 14.0
-    @AppStorage("editorFontFamily") private var fontFamily = ""
-
     private var resolvedFont: NSFont {
-        let size = CGFloat(fontSize)
+        let size = fontSize
         if !fontFamily.isEmpty {
             let descriptor = NSFontDescriptor(fontAttributes: [.family: fontFamily])
-            if let font = NSFont(descriptor: descriptor, size: size) {
+            if let font = NSFont(descriptor: descriptor, size: CGFloat(size)) {
                 return font
             }
         }
-        return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        return NSFont.monospacedSystemFont(ofSize: CGFloat(size), weight: .regular)
     }
 
     func makeCoordinator() -> EditorCoordinator { EditorCoordinator(buffer: buffer) }

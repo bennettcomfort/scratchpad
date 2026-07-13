@@ -6,6 +6,8 @@ struct AppCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Scratch Buffer") { model.newScratchBuffer() }
                 .keyboardShortcut("n", modifiers: .command)
+            Button("New Tab") { model.newScratchBuffer() }
+                .keyboardShortcut("t", modifiers: .command)
         }
         CommandGroup(after: .newItem) {
             Button("Open…") { model.openFile() }

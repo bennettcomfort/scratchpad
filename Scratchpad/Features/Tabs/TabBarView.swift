@@ -21,6 +21,13 @@ struct TabBarView: View {
                         )
                         .onHover { hovering in hoveredID = hovering ? buffer.id : nil }
                     }
+                    Button(action: { model.newScratchBuffer() }) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 8)
                 }
                 .padding(.horizontal, 4)
             }

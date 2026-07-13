@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct ScratchpadApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var model = AppModel()
     var body: some Scene {
         Window("Scratchpad", id: "main") {

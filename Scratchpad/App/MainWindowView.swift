@@ -7,6 +7,8 @@ extension Notification.Name {
 
 struct MainWindowView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("editorFontSize") private var fontSize = 14.0
+    @AppStorage("editorFontFamily") private var fontFamily = ""
     @State private var sidebarVisible = false
     @State private var showQuickSwitcher = false
 
@@ -27,6 +29,8 @@ struct MainWindowView: View {
                         EditorTextView(
                             buffer: buffer,
                             theme: theme,
+                            fontSize: fontSize,
+                            fontFamily: fontFamily,
                             onEdit: { model.sessionService.noteBufferEdited($0) })
                         Divider()
                     } else {

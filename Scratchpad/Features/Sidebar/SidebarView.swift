@@ -2,7 +2,6 @@ import SwiftUI
 
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
-    @State private var isVisible = false
 
     private func createFile(in directory: URL) {
         let name = "untitled-\(Int(Date().timeIntervalSince1970)).md"
@@ -20,7 +19,7 @@ struct SidebarView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if isVisible, model.workspace.rootURL != nil {
+            if model.workspace.rootURL != nil {
                 VStack(spacing: 0) {
                     HStack {
                         Text(model.workspace.rootName ?? "Workspace")

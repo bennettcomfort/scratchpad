@@ -63,10 +63,14 @@ struct ZenContainerView: View {
     let buffer: OpenBuffer
     let controller: ZenWindowController
     @Environment(AppModel.self) private var model
+    @AppStorage("editorFontSize") private var fontSize = 14.0
+    @AppStorage("editorFontFamily") private var fontFamily = ""
 
     var body: some View {
         EditorTextView(buffer: buffer,
                        theme: model.themeManager.current,
+                       fontSize: fontSize,
+                       fontFamily: fontFamily,
                        onEdit: { model.sessionService.noteBufferEdited($0) })
             .background(KeyCatcher(
                 onCommandReturn: { controller.dismiss(copyToClipboard: true) },
