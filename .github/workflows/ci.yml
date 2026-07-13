@@ -10,6 +10,6 @@ jobs:
       - name: Generate project
         run: xcodegen
       - name: Build
-        run: xcodebuild -scheme Scratchpad -destination 'platform=macOS' build
+        run: xcodebuild -scheme Scratchpad -destination 'platform=macOS' MACOSX_DEPLOYMENT_TARGET=15.0 build
       - name: Test
-        run: xcodebuild -scheme Scratchpad -destination 'platform=macOS' test
+        run: xcodebuild -scheme Scratchpad -destination 'platform=macOS' MACOSX_DEPLOYMENT_TARGET=15.0 test
