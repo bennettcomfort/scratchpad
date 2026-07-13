@@ -4,15 +4,16 @@ import AppKit
 struct EditorTextView: NSViewRepresentable {
     let buffer: OpenBuffer
     var onEdit: ((OpenBuffer) -> Void)? = nil
-    var theme: EditorTheme = .scratchDark
 
     func makeCoordinator() -> EditorCoordinator { EditorCoordinator(buffer: buffer) }
 
     func makeNSView(context: Context) -> NSScrollView {
         context.coordinator.onEdit = onEdit
+        // TextKit 2 stack, explicitly. (H1: never touch .layoutManager.)
         let textView = NSTextView(usingTextLayoutManager: true)
         assert(textView.textLayoutManager != nil, "TextKit 2 must be active")
 
+        // Bind the view to the buffer's storage — single source of truth.
         if let contentStorage = textView.textContentStorage {
             contentStorage.textStorage = buffer.storage
         }
@@ -23,6 +24,8 @@ struct EditorTextView: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.font = NSFont.monospacedSystemFont(ofSize: 15, weight: .regular)
+        textView.textContainerInset = NSSize(width: 24, height: 20)
         textView.autoresizingMask = [.width]
 
         let scroll = NSScrollView()
@@ -30,36 +33,14 @@ struct EditorTextView: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = true
 
-        apply(theme, to: textView, scroll: scroll)
-
+        // Restore cursor if valid.
         let loc = min(buffer.cursorLocation, buffer.storage.length)
         textView.setSelectedRange(NSRange(location: loc, length: 0))
         return scroll
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
-        guard let textView = nsView.documentView as? NSTextView else { return }
-        apply(theme, to: textView, scroll: nsView)
-    }
-
-    private func apply(_ theme: EditorTheme, to textView: NSTextView, scroll: NSScrollView) {
-        textView.font = NSFont.monospacedSystemFont(ofSize: theme.fontSize, weight: .regular)
-        textView.textContainerInset = NSSize(width: theme.leftPadding, height: theme.topPadding)
-        textView.backgroundColor = NSColor(theme.background)
-        textView.textColor = NSColor(theme.text)
-        textView.insertionPointColor = NSColor(theme.text)
-        scroll.backgroundColor = NSColor(theme.background)
-
-        if let ts = textView.textStorage, ts.length > 0 {
-            let range = NSRange(location: 0, length: ts.length)
-            ts.addAttribute(.font,
-                value: NSFont.monospacedSystemFont(ofSize: theme.fontSize, weight: .regular),
-                range: range)
-            ts.addAttribute(.foregroundColor, value: NSColor(theme.text), range: range)
-        }
-
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineHeightMultiple = theme.lineHeight
-        textView.defaultParagraphStyle = paragraph
+        // Intentionally empty for text: storage IS the source of truth.
+        // Theme/font updates arrive here in Stage 10.
     }
 }
