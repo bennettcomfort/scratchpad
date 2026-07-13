@@ -5,8 +5,7 @@ struct ScratchpadApp: App {
     @State private var model = AppModel()
     var body: some Scene {
         Window("Scratchpad", id: "main") {
-            Text("Scratchpad")
-                .frame(minWidth: 480, minHeight: 320)
+            MainWindowView()
                 .environment(model)
         }
         .windowStyle(.hiddenTitleBar)
