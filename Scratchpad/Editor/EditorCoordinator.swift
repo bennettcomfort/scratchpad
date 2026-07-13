@@ -37,8 +37,21 @@ final class EditorCoordinator: NSObject, NSTextViewDelegate {
             case (.command, "[", _):
                 self.outdent(in: tv)
                 return nil
+            case (.command, "l", _):
+                self.selectLine(in: tv)
+                return nil
+            case (.command, "j", _):
+                self.joinLines(in: tv)
+                return nil
+            case (.control, "k", _),
+                 (.control, "K", _):
+                self.deleteToEndOfLine(in: tv)
+                return nil
             case (.command, _, 36): // ⌘Enter
                 self.insertLineAfter(in: tv)
+                return nil
+            case ([.command, .shift], _, 36): // ⌘⇧Enter
+                self.insertLineBefore(in: tv)
                 return nil
             case ([.command, .shift], _, 126): // ⌘⇧↑
                 self.moveLineUp(in: tv)
@@ -264,6 +277,61 @@ final class EditorCoordinator: NSObject, NSTextViewDelegate {
         let insertPos = line.upperBound
         storage.replaceCharacters(in: NSRange(location: insertPos, length: 0), with: "\n")
         textView.setSelectedRange(NSRange(location: insertPos + 1, length: 0))
+        noteEditAndRehighlight(textView)
+    }
+
+    private func selectLine(in textView: NSTextView) {
+        let cursor = textView.selectedRange().location
+        let text = textView.string as NSString
+        let line = lineRange(at: cursor, in: text)
+        textView.setSelectedRange(line)
+        buffer.cursorLocation = line.location
+    }
+
+    private func joinLines(in textView: NSTextView) {
+        guard let storage = textView.textStorage, storage.length > 0 else { return }
+        let cursor = textView.selectedRange().location
+        let text = storage.string as NSString
+        let currentLine = lineRange(at: cursor, in: text)
+        guard currentLine.upperBound < text.length else { return }
+
+        let newlinePos = currentLine.upperBound - 1
+        guard text.substring(with: NSRange(location: newlinePos, length: 1)) == "\n" else { return }
+
+        let currentContent = text.substring(with: NSRange(location: currentLine.location,
+                                                           length: currentLine.length - 1))
+        let nextLine = lineRange(at: currentLine.upperBound, in: text)
+        let nextContent = text.substring(with: NSRange(location: nextLine.location,
+                                                        length: nextLine.length - 1))
+
+        let needsSpace = !currentContent.isEmpty && !nextContent.isEmpty
+                         && !currentContent.hasSuffix(" ") && !currentContent.hasSuffix("\t")
+                         && !nextContent.hasPrefix(" ") && !nextContent.hasPrefix("\t")
+
+        let replacement = needsSpace ? " " : ""
+        storage.replaceCharacters(in: NSRange(location: newlinePos, length: 1), with: replacement)
+        textView.setSelectedRange(NSRange(location: newlinePos + replacement.utf16.count, length: 0))
+        noteEditAndRehighlight(textView)
+    }
+
+    private func deleteToEndOfLine(in textView: NSTextView) {
+        guard let storage = textView.textStorage, storage.length > 0 else { return }
+        let cursor = textView.selectedRange().location
+        let text = storage.string as NSString
+        let currentLine = lineRange(at: cursor, in: text)
+        let lineText = text.substring(with: currentLine)
+        let contentEnd = lineText.hasSuffix("\n") ? currentLine.upperBound - 1 : currentLine.upperBound
+        let deleteRange = NSRange(location: cursor, length: contentEnd - cursor)
+        guard deleteRange.length > 0 else { return }
+        storage.replaceCharacters(in: deleteRange, with: "")
+        noteEditAndRehighlight(textView)
+    }
+
+    private func insertLineBefore(in textView: NSTextView) {
+        guard let storage = textView.textStorage else { return }
+        let line = selectedLineRange(in: textView)
+        storage.replaceCharacters(in: NSRange(location: line.location, length: 0), with: "\n")
+        textView.setSelectedRange(NSRange(location: line.location, length: 0))
         noteEditAndRehighlight(textView)
     }
 }
