@@ -8,6 +8,7 @@ final class AppModel {
     private let sessionWriter: SessionWriter
     let bookmarkManager: BookmarkManager
     let workspace: WorkspaceModel
+    let themeManager = ThemeManager()
     private(set) var fileService: FileService!
     private(set) var zenController: ZenWindowController?
     private let hotkeyManager = HotkeyManager()

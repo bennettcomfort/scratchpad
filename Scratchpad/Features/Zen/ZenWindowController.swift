@@ -66,6 +66,7 @@ struct ZenContainerView: View {
 
     var body: some View {
         EditorTextView(buffer: buffer,
+                       theme: model.themeManager.current,
                        onEdit: { model.sessionService.noteBufferEdited($0) })
             .background(KeyCatcher(
                 onCommandReturn: { controller.dismiss(copyToClipboard: true) },

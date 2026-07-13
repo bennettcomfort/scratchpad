@@ -3,6 +3,7 @@ import AppKit
 
 struct EditorTextView: NSViewRepresentable {
     let buffer: OpenBuffer
+    let theme: EditorTheme
     var onEdit: ((OpenBuffer) -> Void)? = nil
 
     func makeCoordinator() -> EditorCoordinator { EditorCoordinator(buffer: buffer) }
@@ -24,14 +25,21 @@ struct EditorTextView: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.font = NSFont.monospacedSystemFont(ofSize: 15, weight: .regular)
-        textView.textContainerInset = NSSize(width: 24, height: 20)
+        textView.font = theme.nsFont
+        textView.textContainerInset = NSSize(width: theme.leftPadding, height: theme.topPadding)
         textView.autoresizingMask = [.width]
+        textView.backgroundColor = theme.nsBackground
+        textView.insertionPointColor = theme.nsText
+
+        // Apply base text attributes to the storage.
+        let fullRange = NSRange(location: 0, length: buffer.storage.length)
+        buffer.storage.addAttribute(.foregroundColor, value: theme.nsText, range: fullRange)
 
         let scroll = NSScrollView()
         scroll.documentView = textView
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = true
+        scroll.backgroundColor = theme.nsBackground
 
         // Restore cursor if valid.
         let loc = min(buffer.cursorLocation, buffer.storage.length)
@@ -40,7 +48,11 @@ struct EditorTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
-        // Intentionally empty for text: storage IS the source of truth.
-        // Theme/font updates arrive here in Stage 10.
+        guard let textView = nsView.documentView as? NSTextView else { return }
+        textView.font = theme.nsFont
+        textView.textContainerInset = NSSize(width: theme.leftPadding, height: theme.topPadding)
+        textView.backgroundColor = theme.nsBackground
+        textView.insertionPointColor = theme.nsText
+        nsView.backgroundColor = theme.nsBackground
     }
 }

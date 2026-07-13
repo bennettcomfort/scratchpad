@@ -24,6 +24,7 @@ struct MainWindowView: View {
                        let buffer = model.bufferStore.buffer(id: id) {
                         EditorTextView(
                             buffer: buffer,
+                            theme: model.themeManager.current,
                             onEdit: { model.sessionService.noteBufferEdited($0) })
                     } else {
                         Color.clear
