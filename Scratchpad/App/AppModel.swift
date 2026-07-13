@@ -10,6 +10,7 @@ final class AppModel {
     let workspace: WorkspaceModel
     let themeManager = ThemeManager()
     private(set) var fileService: FileService!
+    private let fileWatcher = FileWatcher()
     private(set) var zenController: ZenWindowController?
     private let hotkeyManager = HotkeyManager()
 
@@ -39,7 +40,8 @@ final class AppModel {
         }
 
         self.zenController = ZenWindowController(model: self)
-        self.fileService = FileService(bookmarkManager: bookmarkManager, sessionWriter: writer)
+        self.fileService = FileService(bookmarkManager: bookmarkManager, sessionWriter: writer, bufferStore: bufferStore)
+        Task { await fileWatcher.start(watching: self.fileService) }
     }
 
     func newScratchBuffer() {

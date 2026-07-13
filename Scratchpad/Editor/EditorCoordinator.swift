@@ -18,6 +18,7 @@ final class EditorCoordinator: NSObject, NSTextViewDelegate {
     private func scheduleHighlight(_ notification: Notification) {
         guard let tv = notification.object as? NSTextView,
               tv.string.utf8.count < 2_000_000 else { return }
+        assert(tv.textLayoutManager != nil, "H1 violation: missing TextKit 2 — NSTextView.layoutManager downgraded to TK1")
         guard let storage = tv.textStorage,
               let font = tv.font else { return }
         let gen = buffer.generation
