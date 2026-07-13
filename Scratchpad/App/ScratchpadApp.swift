@@ -11,6 +11,6 @@ struct ScratchpadApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands { AppCommands(model: model) }
 
-        Settings { SettingsView() }
+        Settings { SettingsView().environment(model) }
     }
 }

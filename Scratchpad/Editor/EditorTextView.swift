@@ -30,10 +30,19 @@ struct EditorTextView: NSViewRepresentable {
         textView.autoresizingMask = [.width]
         textView.backgroundColor = theme.nsBackground
         textView.insertionPointColor = theme.nsText
+        textView.drawsBackground = true
+
+        // Set typing attributes so newly typed text uses the theme color.
+        textView.typingAttributes = [
+            .font: theme.nsFont,
+            .foregroundColor: theme.nsText
+        ]
 
         // Apply base text attributes to the storage.
         let fullRange = NSRange(location: 0, length: buffer.storage.length)
-        buffer.storage.addAttribute(.foregroundColor, value: theme.nsText, range: fullRange)
+        if fullRange.length > 0 {
+            buffer.storage.addAttribute(.foregroundColor, value: theme.nsText, range: fullRange)
+        }
 
         let scroll = NSScrollView()
         scroll.documentView = textView
@@ -53,6 +62,16 @@ struct EditorTextView: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: theme.leftPadding, height: theme.topPadding)
         textView.backgroundColor = theme.nsBackground
         textView.insertionPointColor = theme.nsText
+        textView.drawsBackground = true
+        textView.typingAttributes = [
+            .font: theme.nsFont,
+            .foregroundColor: theme.nsText
+        ]
+        // Re-apply foreground color to existing text when theme changes.
+        let fullRange = NSRange(location: 0, length: buffer.storage.length)
+        if fullRange.length > 0 {
+            buffer.storage.addAttribute(.foregroundColor, value: theme.nsText, range: fullRange)
+        }
         nsView.backgroundColor = theme.nsBackground
     }
 }
