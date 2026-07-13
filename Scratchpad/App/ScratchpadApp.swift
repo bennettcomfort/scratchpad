@@ -9,6 +9,7 @@ struct ScratchpadApp: App {
                 .environment(model)
         }
         .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentMinSize)
         .commands { AppCommands(model: model) }
 
         Settings { SettingsView().environment(model) }

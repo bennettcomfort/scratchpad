@@ -4,6 +4,20 @@ struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @State private var isVisible = false
 
+    private func createFile(in directory: URL) {
+        let name = "untitled-\(Int(Date().timeIntervalSince1970)).md"
+        let url = directory.appendingPathComponent(name)
+        FileManager.default.createFile(atPath: url.path, contents: "# \(name)\n".data(using: .utf8))
+        // Re-index workspace to pick up the new file.
+        if let root = model.workspace.rootURL {
+            Task {
+                model.workspace.setNodes(FileNode.sortFoldersFirst(
+                    await FileIndexer().scan(root: root)))
+            }
+        }
+        model.openWorkspaceFile(url)
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             if isVisible, model.workspace.rootURL != nil {
@@ -44,6 +58,9 @@ struct SidebarView: View {
                             .contextMenu {
                                 if !node.isDirectory {
                                     Button("Open") { model.openWorkspaceFile(node.url) }
+                                }
+                                Button("New File") {
+                                    createFile(in: node.isDirectory ? node.url : node.url.deletingLastPathComponent())
                                 }
                                 Button("Reveal in Finder") {
                                     NSWorkspace.shared.activateFileViewerSelecting([node.url])

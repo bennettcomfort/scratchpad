@@ -28,9 +28,11 @@ struct MainWindowView: View {
                             buffer: buffer,
                             theme: theme,
                             onEdit: { model.sessionService.noteBufferEdited($0) })
+                        Divider()
                     } else {
                         Color.clear
                     }
+                    StatusBarView()
                 }
             }
         }

@@ -92,5 +92,7 @@ struct TabItemView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { onSelect() }
+        .accessibilityLabel("\(buffer.displayName)\(buffer.saveState == .dirty ? " unsaved" : "")")
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 }

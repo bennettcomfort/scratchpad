@@ -33,6 +33,14 @@ struct AppCommands: Commands {
                 NotificationCenter.default.post(name: .showQuickSwitcher, object: nil)
             }
                 .keyboardShortcut("p", modifiers: .command)
+            Divider()
+            Button("Reveal in Finder") {
+                if let id = model.bufferStore.activeBufferID,
+                   let buf = model.bufferStore.buffer(id: id),
+                   let url = buf.fileURL {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            }
         }
         CommandGroup(replacing: .printItem) { }
     }

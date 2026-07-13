@@ -44,4 +44,8 @@ final class WorkspaceModel {
         rootName = nil
         nodes = []
     }
+
+    func setNodes(_ nodes: [FileNode]) {
+        self.nodes = nodes
+    }
 }
