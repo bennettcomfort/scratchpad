@@ -40,7 +40,7 @@ struct StatusBarView: View {
         switch buffer?.saveState {
         case .dirty: return .yellow
         case .conflicted, .deletedOnDisk: return .red
-        default: return .secondary
+        default: return model.themeManager.current.secondary
         }
     }
 
@@ -58,7 +58,7 @@ struct StatusBarView: View {
                 .foregroundStyle(statusColor)
         }
         .font(.system(size: 11, design: .monospaced))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(model.themeManager.current.secondary)
         .padding(.horizontal, 14)
         .padding(.vertical, 4)
         .background(model.themeManager.current.background.opacity(0.6))
