@@ -42,7 +42,10 @@ struct MainWindowView: View {
             if showQuickSwitcher {
                 theme.background.opacity(0.6)
                     .ignoresSafeArea()
-                    .onTapGesture { showQuickSwitcher = false }
+                    .onTapGesture {
+                        showQuickSwitcher = false
+                        UserDefaults.standard.set(false, forKey: "showQuickSwitcher")
+                    }
                 QuickSwitcherView()
             }
         }
