@@ -1,8 +1,10 @@
 # MASTER CANON — Scratchpad
 
-> **Status:** Authoritative. This is the project's single source of truth.
+> **Historical document.** This file describes the superseded prototype plan and has no authority over recovery work. See `SPEC.md`, `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md`, and `AGENTS.md` for the live contract.
+
+> **Status:** Historical prototype canon retained for provenance only.
 > **Amended 2026-07-11:** Scratchpad identity design (see `docs/superpowers/specs/2026-07-11-scratchpad-identity-design.md`) — name finalized, scratch-first concept, zen summon window (D-18/D-19), 4 themes, reordered roadmap, tightened budgets, `AGENTS.md` replaces `CLAUDE.md`.
-> **Supersedes:** All documents in `Project Plans/` and `markdown_workspace_release_plan_bundle/` (historical inputs — do not consult them for decisions).
+> **Superseded by:** `SPEC.md`, `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md`, and `AGENTS.md`.
 > **Audience:** Every human and AI agent working on this project. A new coding agent must be able to begin work from this document alone.
 > **Companion:** `ARCHITECTURAL_REVIEW_REPORT.md` explains *why* these decisions were made. This document contains only the decisions.
 > **Amendments:** Any change to this document requires an entry in `docs/DECISIONS.md` (append-only ADR log).

@@ -1,5 +1,7 @@
 # Architectural Review Report — macOS Markdown Workspace
 
+> **Historical review.** This report explains earlier planning inputs but is not a current specification. See `SPEC.md` and `ARCHITECTURE.md` for approved recovery requirements.
+
 > **Role:** Lead Orchestrator / Principal Engineer review
 > **Date:** 2026-07-11
 > **Corpus reviewed:** 5 independent AI-generated project plans + 1 prior synthesis bundle (council report, master plan, scope table, risk register, agent prompt pack, QA checklist, diagrams)
