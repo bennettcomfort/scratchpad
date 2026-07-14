@@ -2,8 +2,6 @@ import SwiftUI
 
 struct AppCommands: Commands {
     let model: AppModel
-    @AppStorage("sidebarVisible") private var sidebarVisible = false
-    @AppStorage("showQuickSwitcher") private var showQuickSwitcher = false
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Scratch Buffer") { model.newScratchBuffer() }
@@ -28,10 +26,16 @@ struct AppCommands: Commands {
             Divider()
             Button("Open Folder…") { model.openFolder() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
-            Button("Toggle Sidebar") { sidebarVisible.toggle() }
+            Button("Toggle Sidebar") {
+                let key = "sidebarVisible"
+                let current = UserDefaults.standard.bool(forKey: key)
+                UserDefaults.standard.set(!current, forKey: key)
+            }
                 .keyboardShortcut("\\", modifiers: .command)
             Divider()
-            Button("Quick Open…") { showQuickSwitcher = true }
+            Button("Quick Open…") {
+                UserDefaults.standard.set(true, forKey: "showQuickSwitcher")
+            }
                 .keyboardShortcut("p", modifiers: .command)
             Divider()
             Button("Reveal in Finder") {

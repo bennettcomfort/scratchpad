@@ -119,7 +119,7 @@ struct QuickSwitcherView: View {
         .onKeyPress(.downArrow) { selectedIndex = min(selectedIndex + 1, items.count - 1); return .handled }
         .onKeyPress(.upArrow) { selectedIndex = max(selectedIndex - 1, 0); return .handled }
         .onKeyPress(.escape) {
-            showQuickSwitcher = false
+            UserDefaults.standard.set(false, forKey: "showQuickSwitcher")
             return .handled
         }
         .onKeyPress(.return) { activateSelected(); return .handled }
@@ -133,7 +133,7 @@ struct QuickSwitcherView: View {
         } else if let fileURL = item.fileURL {
             model.openWorkspaceFile(fileURL)
         }
-        showQuickSwitcher = false
+        UserDefaults.standard.set(false, forKey: "showQuickSwitcher")
     }
 
     private func activateSelected() { activate(at: selectedIndex) }

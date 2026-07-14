@@ -4,8 +4,8 @@ struct MainWindowView: View {
     @Environment(AppModel.self) private var model
     @AppStorage("editorFontSize") private var fontSize = 14.0
     @AppStorage("editorFontFamily") private var fontFamily = ""
-    @AppStorage("sidebarVisible") private var sidebarVisible = false
-    @AppStorage("showQuickSwitcher") private var showQuickSwitcher = false
+    @State private var sidebarVisible: Bool = UserDefaults.standard.bool(forKey: "sidebarVisible")
+    @State private var showQuickSwitcher: Bool = false
 
     private var theme: EditorTheme { model.themeManager.current }
 
@@ -53,6 +53,12 @@ struct MainWindowView: View {
             }
         }
         .onChange(of: theme.name) { _, _ in syncWindow() }
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            sidebarVisible = UserDefaults.standard.bool(forKey: "sidebarVisible")
+            if UserDefaults.standard.bool(forKey: "showQuickSwitcher") {
+                showQuickSwitcher = true
+            }
+        }
     }
 
     private func syncWindow() {
