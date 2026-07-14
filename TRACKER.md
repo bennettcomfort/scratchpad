@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 0 — Baseline and containment  
 > **Current phase:** Planning  
-> **Current task:** Gate 4A — approve Stage 0 implementation plan  
+> **Current task:** Gate 4B — approve Stage 1 implementation plan
 > **Implementation lock:** ON
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -14,9 +14,9 @@ Only these task states are valid: `pending`, `in progress`, `blocked`, and `veri
 | Design | Controlled recovery design | verified | Approved; commit `f3cb8f1` |
 | 1 | Replace `SPEC.md` | verified | Approved; commit `a4abbe1` |
 | 2 | Create `ARCHITECTURE.md`; mark prior canon and review historical | verified | Approved; commit `273aee6` |
-| 3 | Replace `AGENTS.md`; create `TRACKER.md` | verified | Approved by user on 2026-07-14 |
-| 4A | Stage 0 implementation plan | in progress | Drafting |
-| 4B | Stage 1 implementation plan | pending | — |
+| 3 | Replace `AGENTS.md`; create `TRACKER.md` | verified | Approved; commit `82aee23` |
+| 4A | Stage 0 implementation plan | verified | Approved by user on 2026-07-14 |
+| 4B | Stage 1 implementation plan | in progress | Drafting |
 | 4C | Stage 2 implementation plan | pending | — |
 | 4D | Stage 3 implementation plan | pending | — |
 | 4E | Stages 4–5 implementation plan | pending | — |
@@ -24,7 +24,15 @@ Only these task states are valid: `pending`, `in progress`, `blocked`, and `veri
 
 ## Recovery Roadmap
 
-The task rows below are planning anchors only. Gate 4 will replace them with the approved task-level rows from `IMPLEMENTATION_PLAN.md`; no row authorizes implementation yet.
+The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-level ledger from `IMPLEMENTATION_PLAN.md`; no row authorizes implementation while the implementation lock is ON.
+
+### Stage 0 Task Ledger
+
+| Task | Deliverable | State | Evidence |
+|---|---|---|---|
+| 0.1 | Preserve prototype baseline and regression contract | pending | Awaiting Gate 4A approval and implementation unlock |
+| 0.2 | Enforce the recovery source boundary | pending | Awaiting Gate 4A approval and implementation unlock |
+| 0.3 | Enforce warning, dependency, entitlement, and CI policy | pending | Awaiting Gate 4A approval and implementation unlock |
 
 | Stage | Outcome | State | Approval gate |
 |---|---|---|---|
@@ -76,18 +84,21 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Recovery design | User approval and committed design | verified | `f3cb8f1` |
 | 2026-07-14 | Product contract | User approval; `git diff --check` | verified | `a4abbe1` |
 | 2026-07-14 | Architecture contract | User approval; `git diff --check` | verified | `273aee6` |
-| 2026-07-14 | Gate 3 documents | Authority, stage-pointer, vocabulary, and whitespace review | verified | Uncommitted gate draft |
+| 2026-07-14 | Gate 3 documents | Authority, stage-pointer, vocabulary, and whitespace review | verified | `82aee23` |
+| 2026-07-14 | Gate 4A plan | Invariant comparison, prototype diff, placeholder scan, and whitespace review | verified | Uncommitted gate draft |
 
 ## Current Manual Acceptance Matrix
 
-Stage 0 implementation has not begun. These planning checks are required before Gate 3 can become `verified`.
+Stage 0 implementation has not begun. These checks remain `pending` until the implementation lock is cleared and Tasks 0.1–0.3 produce fresh evidence.
 
 | Check | Expected | State | Evidence |
 |---|---|---|---|
-| Stage pointer | `AGENTS.md` and this tracker both name Recovery Stage 0 | verified | Exact-text comparison on 2026-07-14 |
-| Authority chain | Each live document has one distinct role; historical documents cannot authorize work | verified | Manual cross-document review on 2026-07-14 |
-| Implementation lock | No application or test change is authorized before the final planning gate | verified | `AGENTS.md` and tracker header on 2026-07-14 |
-| Defect coverage | Every audited critical defect is mapped to a recovery or deferred stage | verified | Defect-ledger review on 2026-07-14 |
+| Prototype preservation | Prototype implementation directories have no diff from `a1f36f6` | pending | Awaiting Task 0.1–0.2 execution |
+| Active source boundary | Generated project contains `RecoveryBaseline` and no prototype implementation source | pending | Awaiting Task 0.2 execution |
+| Deferred surface removal | Launched app exposes none of the recovery-milestone deferred surfaces | pending | Awaiting Task 0.2 manual check |
+| Warning and test policy | Warnings are errors; the 7 Stage 0 tests pass | pending | Awaiting Task 0.3 execution |
+| Dependency and network policy | No runtime packages or network entitlements | pending | Awaiting Task 0.3 execution |
+| CI parity | CI uses the approved local build and test commands without deployment override | pending | Awaiting Task 0.3 execution |
 
 ## Update Protocol
 
