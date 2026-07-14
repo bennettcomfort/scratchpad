@@ -1,6 +1,6 @@
 # Scratchpad Recovery Design
 
-**Status:** Approved design, pending written-spec review  
+**Status:** Approved
 **Date:** 2026-07-14  
 **Scope:** Replace the unsafe prototype core with a trustworthy single-document editor before restoring advanced features.
 
