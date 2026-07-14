@@ -19,8 +19,8 @@ struct SidebarView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if model.workspace.rootURL != nil {
-                VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                if model.workspace.rootURL != nil {
                     HStack {
                         Text(model.workspace.rootName ?? "Workspace")
                             .font(.headline)
@@ -72,11 +72,25 @@ struct SidebarView: View {
                         }
                         .listStyle(.sidebar)
                     }
+                } else {
+                    VStack {
+                        Spacer()
+                        VStack(spacing: 12) {
+                            Image(systemName: "folder")
+                                .font(.system(size: 28))
+                                .foregroundStyle(.tertiary)
+                            Text("Open a folder to get started")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                            Button("Open Folder…") { model.openFolder() }
+                        }
+                        Spacer()
+                    }
                 }
-                .frame(minWidth: 200, idealWidth: 240)
-                .background(Color(nsColor: .windowBackgroundColor))
-                Divider()
             }
+            .frame(minWidth: 200, idealWidth: 240)
+            .background(Color(nsColor: .windowBackgroundColor))
+            Divider()
         }
     }
 }
