@@ -1,0 +1,99 @@
+# TRACKER.md — Scratchpad Recovery
+
+> **Current stage:** Recovery Stage 0 — Baseline and containment  
+> **Current phase:** Planning  
+> **Current task:** Gate 4A — approve Stage 0 implementation plan  
+> **Implementation lock:** ON
+
+Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
+
+## Planning Gates
+
+| Gate | Deliverable | State | Evidence |
+|---|---|---|---|
+| Design | Controlled recovery design | verified | Approved; commit `f3cb8f1` |
+| 1 | Replace `SPEC.md` | verified | Approved; commit `a4abbe1` |
+| 2 | Create `ARCHITECTURE.md`; mark prior canon and review historical | verified | Approved; commit `273aee6` |
+| 3 | Replace `AGENTS.md`; create `TRACKER.md` | verified | Approved by user on 2026-07-14 |
+| 4A | Stage 0 implementation plan | in progress | Drafting |
+| 4B | Stage 1 implementation plan | pending | — |
+| 4C | Stage 2 implementation plan | pending | — |
+| 4D | Stage 3 implementation plan | pending | — |
+| 4E | Stages 4–5 implementation plan | pending | — |
+| 5 | Cross-document consistency and implementation unlock | pending | — |
+
+## Recovery Roadmap
+
+The task rows below are planning anchors only. Gate 4 will replace them with the approved task-level rows from `IMPLEMENTATION_PLAN.md`; no row authorizes implementation yet.
+
+| Stage | Outcome | State | Approval gate |
+|---|---|---|---|
+| 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | pending | User approves baseline evidence and contained target |
+| 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | pending | User approves document/editor manual matrix |
+| 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | pending | User approves command matrix |
+| 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | pending | User approves forced-termination and data-loss matrix |
+| 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | pending | User approves visual and settings matrix |
+| 5 | Complete warning, regression, accessibility, performance, and dogfood hardening | pending | User accepts recovery milestone |
+
+## Known Defect Ledger
+
+| Defect | Required disposition | Planned stage | State |
+|---|---|---|---|
+| Editor coordinator remains bound to the first buffer; tabs can show or edit the wrong text | Reduce to one document, then prove editor identity before multi-document returns | 0–1 | pending |
+| Concurrent open paths and double activation can create duplicate tabs | Remove from recovery target; retain a regression requirement for the later tabs stage | 0 / deferred | pending |
+| Save-and-Close closes before an asynchronous save finishes | Replace with an awaited decision transaction that remains open on failure | 3 | pending |
+| Global recovery debounce lets one buffer cancel another and quit can miss the latest edit | Use per-document recovery scheduling and an awaited termination flush | 3 | pending |
+| Clean restoration can produce empty text; dirty restoration lacks complete save metadata | Persist explicit session/recovery records and restore from the correct source | 3 | pending |
+| App Sandbox and persistent security-scoped bookmarks are absent | Enable the real sandbox and persist refreshed bookmarks atomically | 3 | pending |
+| Competing local key monitors mutate storage directly and commands fire unreliably | Replace with responder-chain actions and one typed command router | 2 | pending |
+| Sidebar divider shakes because drag geometry moves under the pointer and writes defaults continuously | Remove from recovery target; require native split view when workspace returns | 0 / deferred | pending |
+| Zen/global hotkey registration and lifecycle are unreliable | Remove from recovery target; restore only through the shared command registry with visible errors | 0 / deferred | pending |
+| Global defaults notifications cause unrelated view and command feedback | Replace active settings flow with typed observable state | 4 | pending |
+| Whole-document Markdown highlighting runs on the main actor and leaves stale attributes | Remove from recovery target; later restore incrementally with generation validation | 0 / deferred | pending |
+
+## Decision Log
+
+| Date | Decision | Affected documents |
+|---|---|---|
+| 2026-07-14 | Recover in place through a controlled core replacement; do not start an empty repository | Design, `SPEC.md`, `ARCHITECTURE.md` |
+| 2026-07-14 | Prove a single-document editor before tabs, workspace, highlighting, or Zen return | All live documents |
+| 2026-07-14 | Ship fixed System, Light, and Dark appearances; System is default; custom theme editing is deferred | `SPEC.md`, `ARCHITECTURE.md` |
+| 2026-07-14 | Ship one fixed, tested Sublime-style macOS shortcut profile; rebinding is deferred | `SPEC.md`, `ARCHITECTURE.md` |
+| 2026-07-14 | Use a native Noto-inspired document title and visible information bar | `SPEC.md`, `ARCHITECTURE.md` |
+| 2026-07-14 | Display approximate prompt tokens as `~ceil(UTF-8 byte count / 4)`, with empty text equal to `0` | `SPEC.md`, `ARCHITECTURE.md` |
+| 2026-07-14 | Require user approval after every planning section and implementation stage | Design, `AGENTS.md`, `TRACKER.md` |
+
+## Blockers
+
+None. Gate 3 is awaiting the required user approval, not blocked.
+
+When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
+
+## Verification Evidence
+
+| Date | Scope | Command or check | Result | Commit |
+|---|---|---|---|---|
+| 2026-07-14 | Recovery design | User approval and committed design | verified | `f3cb8f1` |
+| 2026-07-14 | Product contract | User approval; `git diff --check` | verified | `a4abbe1` |
+| 2026-07-14 | Architecture contract | User approval; `git diff --check` | verified | `273aee6` |
+| 2026-07-14 | Gate 3 documents | Authority, stage-pointer, vocabulary, and whitespace review | verified | Uncommitted gate draft |
+
+## Current Manual Acceptance Matrix
+
+Stage 0 implementation has not begun. These planning checks are required before Gate 3 can become `verified`.
+
+| Check | Expected | State | Evidence |
+|---|---|---|---|
+| Stage pointer | `AGENTS.md` and this tracker both name Recovery Stage 0 | verified | Exact-text comparison on 2026-07-14 |
+| Authority chain | Each live document has one distinct role; historical documents cannot authorize work | verified | Manual cross-document review on 2026-07-14 |
+| Implementation lock | No application or test change is authorized before the final planning gate | verified | `AGENTS.md` and tracker header on 2026-07-14 |
+| Defect coverage | Every audited critical defect is mapped to a recovery or deferred stage | verified | Defect-ledger review on 2026-07-14 |
+
+## Update Protocol
+
+1. Set exactly one task to `in progress`; all other unfinished tasks remain `pending` unless genuinely blocked.
+2. Record failing baseline evidence before implementation and fresh passing evidence before `verified`.
+3. Keep the `AGENTS.md` and `TRACKER.md` stage pointers identical in the same commit.
+4. Record decisions that alter scope, behavior, architecture, task order, or acceptance.
+5. Do not advance a stage, clear the implementation lock, or reinterpret a failed gate without explicit user approval.
+6. At an approval gate, stop and present the changed files, evidence, open risks, and the next proposed gate.
