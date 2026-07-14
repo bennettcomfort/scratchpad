@@ -11,6 +11,7 @@ struct QuickSwitcherItem: Identifiable {
 
 struct QuickSwitcherView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("showQuickSwitcher") private var showQuickSwitcher = false
     @State private var query = ""
     @State private var selectedIndex = 0
     @FocusState private var isFocused: Bool
@@ -118,7 +119,7 @@ struct QuickSwitcherView: View {
         .onKeyPress(.downArrow) { selectedIndex = min(selectedIndex + 1, items.count - 1); return .handled }
         .onKeyPress(.upArrow) { selectedIndex = max(selectedIndex - 1, 0); return .handled }
         .onKeyPress(.escape) {
-            model.showQuickSwitcher = false
+            showQuickSwitcher = false
             return .handled
         }
         .onKeyPress(.return) { activateSelected(); return .handled }
@@ -132,7 +133,7 @@ struct QuickSwitcherView: View {
         } else if let fileURL = item.fileURL {
             model.openWorkspaceFile(fileURL)
         }
-        model.showQuickSwitcher = false
+        showQuickSwitcher = false
     }
 
     private func activateSelected() { activate(at: selectedIndex) }

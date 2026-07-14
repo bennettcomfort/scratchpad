@@ -9,8 +9,6 @@ final class AppModel {
     let bookmarkManager: BookmarkManager
     let workspace: WorkspaceModel
     let themeManager = ThemeManager()
-    var sidebarVisible = false
-    var showQuickSwitcher = false
     private(set) var fileService: FileService!
     private let fileWatcher = FileWatcher()
     private(set) var zenController: ZenWindowController?

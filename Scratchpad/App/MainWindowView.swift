@@ -4,6 +4,8 @@ struct MainWindowView: View {
     @Environment(AppModel.self) private var model
     @AppStorage("editorFontSize") private var fontSize = 14.0
     @AppStorage("editorFontFamily") private var fontFamily = ""
+    @AppStorage("sidebarVisible") private var sidebarVisible = false
+    @AppStorage("showQuickSwitcher") private var showQuickSwitcher = false
 
     private var theme: EditorTheme { model.themeManager.current }
 
@@ -12,7 +14,7 @@ struct MainWindowView: View {
             TabBarView()
 
             HStack(spacing: 0) {
-                if model.sidebarVisible {
+                if sidebarVisible {
                     SidebarView()
                 }
 
@@ -36,10 +38,10 @@ struct MainWindowView: View {
         .frame(minWidth: 480, minHeight: 320)
         .background(theme.background)
         .overlay {
-            if model.showQuickSwitcher {
+            if showQuickSwitcher {
                 theme.background.opacity(0.6)
                     .ignoresSafeArea()
-                    .onTapGesture { model.showQuickSwitcher = false }
+                    .onTapGesture { showQuickSwitcher = false }
                 QuickSwitcherView()
             }
         }
