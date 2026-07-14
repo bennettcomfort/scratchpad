@@ -6,6 +6,7 @@ struct MainWindowView: View {
     @AppStorage("editorFontFamily") private var fontFamily = ""
     @State private var sidebarVisible: Bool = UserDefaults.standard.bool(forKey: "sidebarVisible")
     @State private var showQuickSwitcher: Bool = false
+    @AppStorage("sidebarWidth") private var sidebarWidth = 240.0
 
     private var theme: EditorTheme { model.themeManager.current }
 
@@ -15,7 +16,7 @@ struct MainWindowView: View {
 
             HStack(spacing: 0) {
                 if sidebarVisible {
-                    SidebarView()
+                    SidebarView(sidebarWidth: $sidebarWidth)
                 }
 
                 VStack(spacing: 0) {

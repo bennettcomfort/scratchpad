@@ -2,6 +2,9 @@ import SwiftUI
 
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
+    @Binding var sidebarWidth: Double
+    @State private var dragStartWidth: Double? = nil
+    @State private var isHovering = false
 
     private func createFile(in directory: URL) {
         let name = "untitled-\(Int(Date().timeIntervalSince1970)).md"
@@ -88,9 +91,33 @@ struct SidebarView: View {
                     }
                 }
             }
-            .frame(minWidth: 200, idealWidth: 240)
+            .frame(width: sidebarWidth)
             .background(Color(nsColor: .windowBackgroundColor))
-            Divider()
+
+            // Draggable divider
+            Rectangle()
+                .fill(isHovering ? Color.gray.opacity(0.4) : Color.gray.opacity(0.2))
+                .frame(width: 1)
+                .padding(.vertical, 0)
+                .frame(width: 10) // wider hit target
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    isHovering = hovering
+                    if hovering {
+                        NSCursor.resizeLeftRight.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            if dragStartWidth == nil { dragStartWidth = sidebarWidth }
+                            let newWidth = (dragStartWidth ?? sidebarWidth) + value.translation.width
+                            sidebarWidth = max(150, min(500, Double(newWidth)))
+                        }
+                        .onEnded { _ in dragStartWidth = nil }
+                )
         }
     }
 }
