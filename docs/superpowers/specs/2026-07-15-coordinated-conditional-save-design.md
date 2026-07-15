@@ -1,7 +1,7 @@
 # Coordinated Conditional Save Design
 
-**Status:** Approved direction; pending written-spec review  
-**Date:** 2026-07-15  
+**Status:** Approved
+**Date:** 2026-07-15
 **Scope:** Correct Task 3.4's external-edit race without expanding the recovery milestone beyond one document.
 
 ## 1. Outcome
@@ -31,6 +31,8 @@ struct AtomicFileVersion: Equatable, Sendable {
 enum ConditionalWriteResult: Equatable, Sendable {
     case written(AtomicFileVersion)
     case conflict(AtomicFileVersion)
+    case missing
+    case readOnly
 }
 
 protocol AtomicFileWriting: Sendable {
@@ -83,7 +85,7 @@ TDD additions must first fail against the current check-then-write implementatio
 - every post-token success and failure branch ends the exact acquired token once; and
 - live filesystem tests cover bytes, mtime, writability, missing files, and read failures.
 
-Focused AtomicFileWriter and FileService suites, five repeated race-test iterations, the full warning-free build/test suite, diff/invariant scans, and the Stage 3 manual external-edit scenario are required before Task 3.4 can be verified.
+Focused AtomicFileWriter and FileService suites, five repeated race-test iterations, the full warning-free build/test suite, and diff/invariant scans are required before Task 3.4 can be verified. The signed-app manual external-edit scenario remains required at the Stage 3 integration gate after `ApplicationModel` wires the service into user-visible Save.
 
 ## 7. Alternatives Considered
 

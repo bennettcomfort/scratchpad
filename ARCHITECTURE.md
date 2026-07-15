@@ -426,6 +426,26 @@ struct BookmarkCollection: Codable, Sendable {
 
 `AtomicFileWriter` writes a uniquely named temporary file in the destination directory, flushes it, then atomically replaces or creates the destination. Failure removes only the temporary file.
 
+Normal user-file Save uses a second conditional operation owned by the same writer:
+
+```swift
+struct AtomicFileVersion: Equatable, Sendable {
+    let contentHash: String
+    let modificationDate: Date
+}
+
+enum ConditionalWriteResult: Equatable, Sendable {
+    case written(AtomicFileVersion)
+    case conflict(AtomicFileVersion)
+    case missing
+    case readOnly
+}
+```
+
+The live conditional operation runs inside `NSFileCoordinator` with `.forReplacing`. Inside that coordinated block it reads the destination bytes and modification date, compares both values with the expected base, and returns `.conflict`, `.missing`, or `.readOnly` without replacement when appropriate. Only a matching destination is written through a synchronized same-directory temporary file and atomic replacement. The writer re-reads exact bytes and SHA-256 before returning `.written`.
+
+The existing per-destination transaction lock remains held across coordination, comparison, replacement, and verification. Coordination protects against other macOS participants that use file coordination; macOS exposes no universal content-hash compare-and-swap for arbitrary uncoordinated raw filesystem writers. Post-write verification prevents Scratchpad from reporting success when different bytes are observed. Save As and explicit Overwrite retain the unconditional atomic path because replacement was already confirmed.
+
 `SessionRepository` is the sole session/recovery JSON writer. It serializes writes, validates schema versions on load, and moves corrupt inputs to quarantine through `AtomicFileWriter`-compatible same-volume operations.
 
 If quarantine fails, the original remains untouched and the error is surfaced. Load does not repeatedly overwrite or delete the corrupt input.
@@ -532,12 +552,13 @@ It never mutates `DocumentSession`. `ApplicationModel` applies a successful resu
 main actor captures DocumentSnapshot
     -> FileService begins scoped access
     -> verify file existence and writability
-    -> compare current disk hash + mtime with snapshot base
-    -> return typed conflict before writing on mismatch
+    -> perform an early disk hash + mtime conflict check
     -> encode UTF-8 with stored line-ending convention
-    -> AtomicFileWriter writes
-    -> re-read bytes and metadata
-    -> verify bytes/hash
+    -> AtomicFileWriter coordinates `.forReplacing`
+    -> re-read and compare hash + mtime inside the coordinated transaction
+    -> return typed late conflict without replacement on mismatch
+    -> atomically replace only when the coordinated comparison matches
+    -> re-read and verify exact bytes/hash before leaving the transaction
     -> return FileSaveResult
     -> main actor checks document identity + generation
     -> update base metadata and mark clean

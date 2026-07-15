@@ -139,7 +139,7 @@ An untitled document becomes Edited after its first text mutation. No state tran
 
 ## 6. External Change Behavior
 
-Scratchpad checks file metadata and content before every Save.
+Scratchpad checks file metadata and content before every Save. Normal Save performs a final hash-and-modification-date comparison inside an `NSFileCoordinator` replacement transaction immediately before atomic replacement. A late mismatch returns a conflict and performs no replacement. Save As and an explicit Overwrite decision may use the unconditional verified replacement path because the user has already confirmed the destination change.
 
 | Current state | Disk event | Behavior |
 |---|---|---|

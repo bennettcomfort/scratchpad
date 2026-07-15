@@ -3053,6 +3053,7 @@ The `async` requirements make actor isolation explicit at every call site. Test 
 ## Current Apple API Verification (2026-07-14)
 
 - [`FileManager.replaceItemAt`](https://developer.apple.com/documentation/foundation/filemanager/replaceitemat(_:withitemat:backupitemname:options:)) requires replacement items on the same volume and is the existing-destination primitive behind `AtomicFileWriter`.
+- [`NSFileCoordinator`](https://developer.apple.com/documentation/foundation/nsfilecoordinator) coordinates the final normal-Save comparison and `.forReplacing` transaction with other participating macOS processes.
 - [`URL.startAccessingSecurityScopedResource`](https://developer.apple.com/documentation/foundation/url/startaccessingsecurityscopedresource()) requires every successful start to be balanced by a stop; all FileService exit paths test that accounting.
 - [`NSApplication.TerminateReply.terminateLater`](https://developer.apple.com/documentation/appkit/nsapplication/terminatereply/terminatelater) keeps AppKit's termination flow pending until `reply(toApplicationShouldTerminate:)`; `AppDelegate` owns exactly one such reply.
 
@@ -3297,7 +3298,7 @@ git commit -m "feat: persist sandbox file permissions"
 
 ### Task 3.4: Open, Inspect, and Atomically Save UTF-8 Files
 
-**Files:** Create `Scratchpad/Files/FileResults.swift`, `Scratchpad/Files/FileService.swift`, and `ScratchpadTests/Files/FileServiceTests.swift`; modify `project.yml` and `TRACKER.md`.
+**Files:** Create `Scratchpad/Files/FileResults.swift`, `Scratchpad/Files/FileService.swift`, and `ScratchpadTests/Files/FileServiceTests.swift`; modify `Scratchpad/Persistence/AtomicFileWriter.swift`, `ScratchpadTests/Persistence/AtomicFileWriterTests.swift`, `project.yml`, `AGENTS.md`, and `TRACKER.md`.
 
 **Interfaces:** Consumes `BookmarkAccessing`, `AtomicFileWriting`, and `DocumentSnapshot`. Produces `FileOpenResult`, `FileSaveResult`, `ExternalFileStatus`, `FileServiceError`, and `FileServicing`.
 
@@ -3316,9 +3317,18 @@ func testSaveAsWritesSelectedDestinationWithoutPathFallback()
 func testSaveVerificationFailureThrowsAfterRereadMismatch()
 func testEveryExitPathEndsScopedAccessExactlyOnce()
 func testSuccessfulSaveReturnsVerifiedHashMTimeAndReference()
+func testSaveRejectsMutationAfterPreflightBeforeReplacement()
+func testLiveFileSystemReadsBytesModificationDateAndWritability()
+func testLiveFileSystemMapsMissingAndNonRegularFiles()
+func testConditionalWriteRejectsChangedLiveFileWithoutReplacing()
+func testConditionalWriteReplacesUnchangedLiveFileAndReturnsVerifiedVersion()
 ```
 
-The conflict test varies hash and modification time independently and expects a conflict for either mismatch. The verification test makes the read-back bytes differ from the requested bytes. Assert no successful `FileSaveResult` is returned.
+The conflict test varies hash and modification time independently and expects a conflict for either mismatch. The late-mutation test lets FileService preflight succeed, then makes the injected conditional writer return the newer version; assert `.conflict`, no successful `FileSaveResult`, and no unconditional write. The verification test makes the read-back bytes differ from the requested bytes.
+
+`testEveryExitPathEndsScopedAccessExactlyOnce` is table-driven and records exact acquired and ended token IDs for open success/invalid UTF-8/missing/read failure; inspect unchanged/changed/missing/read-only; Save success/conflict/read-only/write failure/read-back missing/read failure/byte mismatch; and Save As new/existing/read-only/write failure/read-back missing/read failure/byte mismatch.
+
+The two live file-access tests use temporary files to prove real bytes, modification date, writability, missing-file mapping, and non-regular-file mapping. The two live conditional-writer tests prove that a changed destination is untouched and an unchanged destination is atomically replaced with verified metadata.
 
 Run the focused tests. Expected: compilation fails because `FileService` and its result types do not exist.
 
@@ -3351,6 +3361,18 @@ enum ExternalFileStatus: Equatable, Sendable {
     case readOnly
     case accessRequiresReselection
 }
+
+struct AtomicFileVersion: Equatable, Sendable {
+    let contentHash: String
+    let modificationDate: Date
+}
+
+enum ConditionalWriteResult: Equatable, Sendable {
+    case written(AtomicFileVersion)
+    case conflict(AtomicFileVersion)
+    case missing
+    case readOnly
+}
 ```
 
 The exact pipeline is:
@@ -3359,18 +3381,18 @@ The exact pipeline is:
 2. For open, read bytes once, reject non-UTF-8, detect CRLF if any CRLF sequence exists, normalize CRLF and standalone CR to LF for `NSTextStorage`, and return disk-byte SHA-256 plus mtime.
 3. For save, require the snapshot's reference, read current bytes and metadata, and throw `.conflict` before writing if either hash or mtime differs from the snapshot base.
 4. Encode normalized editor text as UTF-8, converting LF to the stored convention.
-5. Call only `AtomicFileWriting.write`.
-6. Re-read bytes and metadata; require exact byte equality and matching SHA-256.
+5. Call only `AtomicFileWriting.write(_:to:ifUnchangedFrom:)` for normal Save. Its live path holds the destination transaction key while `NSFileCoordinator` performs a final hash-and-mtime comparison inside `.forReplacing`; `.conflict`, `.missing`, and `.readOnly` never replace the destination.
+6. The conditional writer atomically replaces only a matching destination, then re-reads bytes and metadata and requires exact byte equality and matching SHA-256 before returning `.written`.
 7. Return an immutable result without touching `DocumentSession`.
 
-`saveAs` skips old-base comparison because the save panel already confirms destination replacement, but it performs the same atomic write and read-back verification. Missing, read-only, and reselection errors remain distinct typed cases.
+`saveAs` skips old-base comparison because the save panel already confirms destination replacement, calls the existing unconditional `AtomicFileWriting.write`, and performs the same read-back verification. Missing, read-only, reselection, generic access, conflict, write, read, and verification failures remain distinct typed cases.
 
 - [ ] **Step 3: Prove file safety and commit**
 
-Run focused tests and the full suite. Expected: 10 new tests pass; cumulative suite count is 70.
+Run the AtomicFileWriter and FileService focused suites, then repeat `testSaveRejectsMutationAfterPreflightBeforeReplacement` five times. Run the full suite and warning-as-error build. Expected: 15 Task 3.4 tests pass; the cumulative suite count is 93; the diff is clean. The signed-app manual external-edit scenario remains at the Stage 3 integration gate after user-visible Save wiring exists.
 
 ```sh
-git add Scratchpad/Files/FileResults.swift Scratchpad/Files/FileService.swift ScratchpadTests/Files/FileServiceTests.swift project.yml TRACKER.md
+git add AGENTS.md Scratchpad/Persistence/AtomicFileWriter.swift ScratchpadTests/Persistence/AtomicFileWriterTests.swift Scratchpad/Files/FileResults.swift Scratchpad/Files/FileService.swift ScratchpadTests/Files/FileServiceTests.swift project.yml TRACKER.md
 git commit -m "feat: add verified sandbox file service"
 ```
 
