@@ -30,9 +30,9 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 0.1 | Preserve prototype baseline and regression contract | verified | `a1f36f6`; XcodeGen/build succeeded; 35/35 tests passed; warnings and regressions recorded; commit pending |
-| 0.2 | Enforce the recovery source boundary | verified | Red compile failure captured; 2/2 focused and 3/3 full tests pass; source boundary and manual containment UI verified; task commit pending |
-| 0.3 | Enforce warning, dependency, entitlement, and CI policy | in progress | Task 0.2 verified; approved policy task starting |
+| 0.1 | Preserve prototype baseline and regression contract | verified | `a1f36f6`; XcodeGen/build succeeded; 35/35 tests passed; warnings and regressions recorded; commit `61be30c` |
+| 0.2 | Enforce the recovery source boundary | verified | Red compile failure captured; 2/2 focused and 3/3 full tests pass; source boundary and manual containment UI verified; commit `f7c765a` |
+| 0.3 | Enforce warning, dependency, entitlement, and CI policy | verified | Two expected policy failures captured; 6/6 focused and 7/7 full tests pass; warnings-as-errors, dependency, entitlement, CI, and whitespace policies verified; this policy commit |
 
 ### Stage 1 Task Ledger
 
@@ -87,7 +87,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Stage | Outcome | State | Approval gate |
 |---|---|---|---|
-| 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | pending | User approves baseline evidence and contained target |
+| 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | in progress | All Stage 0 tasks verified; awaiting explicit user approval |
 | 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | pending | User approves document/editor manual matrix |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | pending | User approves command matrix |
 | 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | pending | User approves forced-termination and data-loss matrix |
@@ -129,7 +129,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 ## Blockers
 
-None. Task 0.3 is in progress, not blocked.
+None. Stage 0 implementation is complete and waiting at its approval gate.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -147,8 +147,9 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Gate 4D plan | Atomicity, bookmark, save, recovery, operation, external-change, termination, test-count, and whitespace review | verified | `05781a2` |
 | 2026-07-14 | Gate 4E plan | Settings, theme, metrics, visual, accessibility, performance, policy, dogfood, test-count, and whitespace review | verified | `8d8ed19`, `a12199e` |
 | 2026-07-14 | Gate 5 consistency | Authority, invariant, product coverage, file/type, task/test arithmetic, historical status, and deferred-scope review | verified | Approved; unlock commit pending |
-| 2026-07-14 | Task 0.1 baseline | `git show`; XcodeGen; prototype build; full prototype tests; regression-name and whitespace checks | verified | 35 tests, zero failures; known SwiftUI, asset, and AppIntents diagnostics; commit pending |
-| 2026-07-14 | Task 0.2 containment | Focused red/green test; generated-project source scan; prototype diff; clean build; full tests; Computer Use window inspection | verified | Expected `RecoveryStage` compile failure; 2 focused and 3 full tests pass; no prototype project references or implementation diffs; malformed icon warning removed; Xcode AppIntents no-dependency diagnostic remains tool-generated; task commit pending |
+| 2026-07-14 | Task 0.1 baseline | `git show`; XcodeGen; prototype build; full prototype tests; regression-name and whitespace checks | verified | 35 tests, zero failures; known SwiftUI, asset, and AppIntents diagnostics; commit `61be30c` |
+| 2026-07-14 | Task 0.2 containment | Focused red/green test; generated-project source scan; prototype diff; clean build; full tests; Computer Use window inspection | verified | Expected `RecoveryStage` compile failure; 2 focused and 3 full tests pass; no prototype project references or implementation diffs; malformed icon warning removed; Xcode AppIntents no-dependency diagnostic remains tool-generated; commit `f7c765a` |
+| 2026-07-14 | Task 0.3 policy | Focused red/green policy tests; clean warning-as-error build; full tests; whitespace check | verified | Two selected tests failed as expected, then 6 focused and all 7 Stage 0 tests passed; build used `-warnings-as-errors`; no project warnings; Xcode AppIntents no-dependency diagnostic remains tool-generated; this policy commit |
 
 ## Current Manual Acceptance Matrix
 
@@ -159,9 +160,9 @@ Stage 0 implementation is in progress. These checks remain `pending` until Tasks
 | Prototype preservation | Prototype implementation directories have no diff from `a1f36f6` | verified | `git diff --exit-code a1f36f6` over all prototype implementation directories returned 0 |
 | Active source boundary | Generated project contains `RecoveryBaseline` and no prototype implementation source | verified | Prototype filename scan of generated `project.pbxproj` returned no matches |
 | Deferred surface removal | Launched app exposes none of the recovery-milestone deferred surfaces | verified | Computer Use inspection showed one containment window with only recovery title and explanation |
-| Warning and test policy | Warnings are errors; the 7 Stage 0 tests pass | pending | Awaiting Task 0.3 execution |
-| Dependency and network policy | No runtime packages or network entitlements | pending | Awaiting Task 0.3 execution |
-| CI parity | CI uses the approved local build and test commands without deployment override | pending | Awaiting Task 0.3 execution |
+| Warning and test policy | Warnings are errors; the 7 Stage 0 tests pass | verified | Generated build uses `-warnings-as-errors`; 7 tests passed with zero failures |
+| Dependency and network policy | No runtime packages or network entitlements | verified | Policy tests confirm no `packages` declaration and no client/server network entitlement |
+| CI parity | CI uses the approved local build and test commands without deployment override | verified | Policy test confirms exact build/test commands and no `MACOSX_DEPLOYMENT_TARGET` override |
 
 ## Update Protocol
 
