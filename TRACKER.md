@@ -1,8 +1,8 @@
 # TRACKER.md — Scratchpad Recovery
 
 > **Current stage:** Recovery Stage 2 — Sublime-style command system
-> **Current phase:** Implementation
-> **Current task:** Task 2.4 — route fixed shortcuts through the first responder
+> **Current phase:** Approval gate
+> **Current task:** Stage 2 approval gate — await explicit user approval
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -51,7 +51,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2.1 | Define command values and UTF-16 line geometry | verified | Expected missing-`LineTable` compile failure captured; 3/3 focused and 21/21 full tests pass; warning-as-error build, whitespace check, and independent review pass; this task commit |
 | 2.2 | Implement and prove pure command transformations | verified | Expected missing-router compile failure captured; 13/13 focused and 34/34 full tests pass; warning-as-error build and whitespace check pass; independent review findings reproduced, fixed, and re-reviewed; this task commit |
 | 2.3 | Apply commands through one undoable AppKit transaction | verified | Expected missing-action compile failure captured; 4/4 focused and 38/38 full tests pass; one-step undo, exactly-once edit accounting, selection-only cleanliness, attribute preservation, TextKit 2 scan, warning-as-error build, and independent review pass; this task commit |
-| 2.4 | Route fixed shortcuts through the first responder | in progress | Task 2.3 verified; approved Stage 2 plan continuing |
+| 2.4 | Route fixed shortcuts through the first responder | verified | Expected missing-`AppCommands` compile failure captured; 2/2 focused and 40/40 full tests pass; warning-as-error build, responder routing, native compatibility, monitor scan, complete shortcut/Undo matrix, and independent review pass; this task commit |
 
 ### Stage 3 Task Ledger
 
@@ -128,6 +128,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2026-07-14 | User explicitly approved aligning the live pointer to Task 0.2 and removing the invalid standalone 1024px app-icon child so containment has zero project-owned warnings | `AGENTS.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md`, app icon catalog |
 | 2026-07-14 | User approved the complete Stage 0 evidence matrix and authorized Recovery Stage 1 | `AGENTS.md`, `TRACKER.md` |
 | 2026-07-15 | User approved the complete Stage 1 evidence matrix and authorized Recovery Stage 2 | `AGENTS.md`, `TRACKER.md` |
+| 2026-07-15 | Place Join Lines immediately before native text-editing commands in Edit so `⌘J` wins over native Jump to Selection without removing `TextEditingCommands` or other native menus | `Scratchpad/App/AppCommands.swift`, `TRACKER.md` |
 
 ## Blockers
 
@@ -162,21 +163,27 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-15 | Task 2.1 command geometry | Missing-`LineTable` compile failure; 3 focused tests; warning-as-error build; 21 full tests; UTF-16, CRLF/LF, range-boundary, scope, and independent review | verified | This task commit |
 | 2026-07-15 | Task 2.2 pure command transformations | Missing-router compile failure; all ten commands covered; two review regressions captured for trailing-empty-line deletion and newline-inclusive movement; 13 focused tests; warning-as-error build; 34 full tests; clean follow-up review | verified | This task commit |
 | 2026-07-15 | Task 2.3 AppKit command transaction | Missing-responder-action compile failure; 4 focused AppKit tests; one grouped undo for all nine text changes; select-line remains clean; attributes preserved; warning-as-error build; 38 full tests; empty TextKit 1 scan; independent review | verified | This task commit |
+| 2026-07-15 | Task 2.4 responder shortcuts | Missing-`AppCommands` compile failure; 2 focused responder tests; warning-as-error build; 40 full tests; empty key-monitor scan; complete live shortcut, Undo, native-editing, non-editor-focus, and menu matrix; independent review | verified | This task commit |
 
 ## Current Manual Acceptance Matrix
 
-Recovery Stage 1 implementation is verified. These checks are the fresh manual evidence required before the user advances the stage.
+Recovery Stage 2 implementation is verified. These are the fresh checks awaiting explicit user approval before Stage 3.
 
 | Check | Expected | State | Evidence |
 |---|---|---|---|
-| Single editor launch | One 820 × 640 window opens with one empty, focused editor | verified | Deterministic `/tmp/ScratchpadStage1` build opened `Untitled`; AX exposed one focused text-entry area and no containment message |
-| Native clipboard and history | Type `alpha`; select/copy/paste; undo and redo | verified | Native typing produced `alpha`; copy/paste produced `alphaph`; undo restored `alpha`; redo restored `alphaph` |
-| Marked text | Input-method composition remains native | verified | Dead-key composition inserted `é` as one composed character |
-| Native Find | `⌘F` opens the standard find bar, searches, and closes | verified | Edit menu exposed the standard Find submenu; native find bar accepted `alpha` and closed with Done |
-| Large edit stability | Paste at least 200 lines, scroll, select, and continue typing without a jump | verified | Native paste restored 220 lines; selection replaced line 150; scroll remained at the edited region with the replacement preserved |
-| Resize stability | Clamp at 480 × 320, restore size, and retain text/scroll | verified | Bottom-right resize stopped at 480 × 320; restoring the window retained line 150 and a valid scroll position |
-| Deferred surface absence | No tabs, sidebar, line numbers, highlighting, Quick Open, Zen, hotkey, or settings UI | verified | Accessibility tree and screenshots show only the native title bar, one scroll view, and one editor |
-| Automated boundary | Replacement allowlist is active and the Stage 1 gate passes | verified | Generated-project scans found no `.layoutManager` access or deleted source names; warning-as-error build and all 18 tests passed |
+| `⇧⌘D` Duplicate | Duplicate once; one Undo restores input | verified | `one` → `one\none` → Undo `one` |
+| `⌃⇧K` Delete Line | Delete current line once; one Undo restores input | verified | `one\ntwo` → `two` → Undo original |
+| `⌃⌘↑` Move Up | Move current line once; one Undo restores input | verified | `one\ntwo` → `two\none` → Undo original |
+| `⌃⌘↓` Move Down | Move current line once; one Undo restores input | verified | `one\ntwo` → `two\none` → Undo original |
+| `⌘L` Select Line | Select exactly the current line without editing | verified | Replacing the selection changed `one\ntwo` to `Xtwo`; Undo of the proof edit restored original; automated test proves no generation/dirty/undo change from selection |
+| `⌘J` Join Lines | Join once; one Undo restores input | verified | Initial live check exposed native Jump-to-Selection conflict; final Edit placement gives `one\ntwo` → `one two` → Undo original |
+| `⌘]` Indent | Prefix current line once; one Undo restores input | verified | `one\ntwo` → tab + `one\ntwo` → Undo original |
+| `⌘[` Outdent | Remove one prefix; one Undo restores input | verified | tab + `one\ntwo` → `one\ntwo` → Undo original |
+| `⌘Return` Insert After | Insert one line after; one Undo restores input | verified | `one` → `one\n` → Undo `one` |
+| `⇧⌘Return` Insert Before | Insert one line before; one Undo restores input | verified | `one` → `\none` → Undo `one` |
+| Non-editor focus | All ten custom shortcuts leave the document unchanged | verified | Native Find field retained first-responder focus through all ten shortcuts; document stayed `one\ntwo` after every invocation |
+| Native editing | Movement, deletion, clipboard, marked text, Find, and Services remain native | verified | `⌘Delete`, Option-Left, Option-Delete, cut/paste, dead-key `é`, standard Find bar, full native Edit menus, and Services menu all passed |
+| Automated gate | Warning-free build, all tests, and source scans pass | verified | `xcodegen`; build succeeded; 40/40 tests passed; no local/global event monitor or general `keyDown` interception; no TextKit 1 access |
 
 ## Update Protocol
 
