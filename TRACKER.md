@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 3 — Data-safe persistence and lifecycle
 > **Current phase:** Implementation
-> **Current task:** Task 3.2 — persist and quarantine session and recovery records
+> **Current task:** Task 3.3 — enable sandboxed persistent security-scoped bookmarks
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -58,8 +58,8 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
 | 3.1 | Establish atomic persistence and canonical internal paths | verified | Trusted-root quarantine, serialized transactions, 15/15 focused tests, 55/55 full tests, warning-free build, and independent review pass; this task commit |
-| 3.2 | Persist and quarantine session and recovery records | in progress | Task 3.1 verified; approved Stage 3 plan starting |
-| 3.3 | Enable sandboxed persistent security-scoped bookmarks | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 3.2 | Persist and quarantine session and recovery records | verified | Missing-record and five data-integrity regression REDs; 12/12 focused and 67/67 full tests pass; warning-free build; identity, canonical filename, schema, quarantine, invariant, scope, data-loss, and whitespace checks pass; this task commit |
+| 3.3 | Enable sandboxed persistent security-scoped bookmarks | in progress | Task 3.2 verified; approved Stage 3 plan starting |
 | 3.4 | Open, inspect, and atomically save UTF-8 files | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 3.5 | Debounce recovery per document and restore the correct source | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 3.6 | Serialize native panels, decisions, and destructive document operations | pending | Approved plan; awaiting Gate 5 implementation unlock |
@@ -90,7 +90,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | verified | User approved Stage 0 on 2026-07-14; commits `61be30c`, `f7c765a`, `81d0865` |
 | 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | verified | User approved Stage 1 on 2026-07-15; commits `988a539`, `3bdacc9`, `3a1e4af`, `2e8c4c7`, `2b703b5` |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | verified | User approved Stage 2 on 2026-07-15; commits `cfaed34`, `04ef7ce`, `c804391`, `9d04dc0` |
-| 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | in progress | Task 3.2 starting; user approval required after Tasks 3.1–3.8 |
+| 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | in progress | Task 3.3 starting; user approval required after Tasks 3.1–3.8 |
 | 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | pending | User approves visual and settings matrix |
 | 5 | Complete warning, regression, accessibility, performance, and dogfood hardening | pending | User accepts recovery milestone |
 
@@ -168,6 +168,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-15 | Task 2.4 responder shortcuts | Missing-`AppCommands` compile failure; 2 focused responder tests; warning-as-error build; 40 full tests; empty key-monitor scan; complete live shortcut, Undo, native-editing, non-editor-focus, and menu matrix; independent review | verified | This task commit |
 | 2026-07-15 | Stage 2 approval | User approval after the complete command transformation, AppKit transaction, responder routing, native compatibility, automated, and manual matrix | verified | Approved; Stage 3 authorized |
 | 2026-07-15 | Task 3.1 atomic persistence | Missing-type, trusted-path, same-destination overlap, and source-lock RED evidence; 15 focused tests; warning-as-error build; 55 full tests; invariant and forbidden-source scans; independent review and clean re-review | verified | This task commit |
+| 2026-07-15 | Task 3.2 session and recovery persistence | Missing-type RED plus controller regressions for mismatched recovery identity, noncanonical siblings, and unsupported write schemas; 12 focused tests; sorted schema-version-1 JSON; independent recovery and deletion checks; quarantine success and source-preserving failure; warning-as-error build; 67 full tests; invariant, scope, data-loss, and whitespace review; no manual check required | verified | This task commit |
 
 ## Current Manual Acceptance Matrix
 

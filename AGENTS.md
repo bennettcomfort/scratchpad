@@ -6,7 +6,7 @@ Rules for every coding agent in this repository. Read this file before acting.
 
 > **Recovery Stage 3 — Data-safe persistence and lifecycle**
 >
-> **Implementation lock: OFF.** Stage 2 was approved by the user. The current implementation task is 3.2; do not begin Task 3.3 or a later task.
+> **Implementation lock: OFF.** Stage 2 was approved by the user. The current implementation task is 3.3; do not begin Task 3.4 or a later task.
 
 Work only on the current stage and current task recorded in `TRACKER.md`. Never prepare, scaffold, or begin a later stage without the user's explicit approval.
 
