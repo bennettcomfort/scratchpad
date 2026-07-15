@@ -3079,6 +3079,8 @@ func testQuarantineFailureLeavesOriginalUntouched()
 
 The failure tests use an injected `AtomicFileSystem` actor that records `writeAndSynchronize`, `replace`, `move`, and `remove` calls and throws before replacement. Assert both the retained destination bytes and that no non-temporary URL is removed.
 
+Additional regression tests prove that out-of-root and symlink-escaping quarantine paths are rejected before mutation, concurrent same-destination writes are serialized, quarantine and source removal share the source transaction key, the live filesystem creates, replaces, synchronizes, and cleans up real files, and `ContentHash` matches the known SHA-256 vector for `abc`.
+
 Run:
 
 ```sh
@@ -3121,7 +3123,7 @@ protocol AtomicFileSystem: Actor {
 }
 
 actor AtomicFileWriter: AtomicFileWriting {
-    init(fileSystem: any AtomicFileSystem)
+    init(fileSystem: any AtomicFileSystem, paths: ApplicationSupportPaths)
     func write(_ data: Data, to destination: URL) async throws
     func removeIfPresent(_ url: URL) async throws
     func quarantine(_ source: URL, as destination: URL) async throws
@@ -3132,14 +3134,14 @@ enum ContentHash {
 }
 ```
 
-`write` creates `.scratchpad-<UUID>.tmp` beside the destination, calls `writeAndSynchronize`, then `replace` when the destination exists or `move` otherwise. Its `catch` removes only that temporary URL and rethrows a typed error. `quarantine` checks that both URLs share the canonical Application Support root before moving. `ContentHash` uses the system `CryptoKit.SHA256`; no package is added.
+The writer stores the trusted, symlink-resolved Application Support root and quarantine directory supplied by `paths`. `write` creates `.scratchpad-<UUID>.tmp` beside the destination, calls `writeAndSynchronize`, then `replace` when the destination exists or `move` otherwise. Its `catch` removes only that temporary URL and rethrows a typed error. Every complete writer transaction is serialized per symlink-resolved destination without sleeps or delays. `quarantine` acquires the symlink-resolved source and destination keys in deterministic sorted order, then rejects the operation before mutation unless the source is inside the trusted root and the destination is inside the trusted quarantine directory. `ContentHash` uses the system `CryptoKit.SHA256`; no package is added.
 
 - [ ] **Step 3: Prove the persistence primitive and commit**
 
-Run the focused test command again, then run `git diff --check`. Expected: 8 tests pass and the diff has no whitespace errors.
+Run the focused test command again, then run `git diff --check`. Expected: 15 tests pass and the diff has no whitespace errors. The cumulative full suite contains 55 tests.
 
 ```sh
-git add Scratchpad/Persistence/ApplicationSupportPaths.swift Scratchpad/Persistence/AtomicFileWriter.swift Scratchpad/Utilities/ContentHash.swift ScratchpadTests/Persistence/AtomicFileWriterTests.swift project.yml TRACKER.md
+git add AGENTS.md IMPLEMENTATION_PLAN.md Scratchpad/Persistence/ApplicationSupportPaths.swift Scratchpad/Persistence/AtomicFileWriter.swift Scratchpad/Utilities/ContentHash.swift ScratchpadTests/Persistence/AtomicFileWriterTests.swift project.yml TRACKER.md
 git commit -m "feat: add atomic persistence foundation"
 ```
 

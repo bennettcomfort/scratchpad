@@ -2,23 +2,58 @@ import Foundation
 
 struct ApplicationSupportPaths: Sendable {
     let root: URL
-    var session: URL { root.appendingPathComponent("session") }
-    var recovery: URL { root.appendingPathComponent("recovery") }
-    var quarantine: URL { root.appendingPathComponent("quarantine") }
-    var logs: URL { root.appendingPathComponent("logs") }
 
-    init(root: URL) { self.root = root }
-
-    func ensureDirectoriesExist() throws {
-        for dir in [session, recovery, quarantine, logs] {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        }
+    var sessionDirectory: URL {
+        root.appending(path: "session", directoryHint: .isDirectory)
     }
 
-    static func standard() throws -> ApplicationSupportPaths {
-        let base = try FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask,
-            appropriateFor: nil, create: true)
-        return ApplicationSupportPaths(root: base.appendingPathComponent("Scratchpad"))
+    var recoveryDirectory: URL {
+        root.appending(path: "recovery", directoryHint: .isDirectory)
+    }
+
+    var bookmarksDirectory: URL {
+        root.appending(path: "bookmarks", directoryHint: .isDirectory)
+    }
+
+    var quarantineDirectory: URL {
+        root.appending(path: "quarantine", directoryHint: .isDirectory)
+    }
+
+    var logsDirectory: URL {
+        root.appending(path: "logs", directoryHint: .isDirectory)
+    }
+
+    var latestSession: URL {
+        sessionDirectory.appending(path: "latest-session.json")
+    }
+
+    var bookmarkCollection: URL {
+        bookmarksDirectory.appending(path: "bookmarks.json")
+    }
+
+    func recovery(documentID: UUID) -> URL {
+        recoveryDirectory.appending(
+            path: "document-\(documentID.uuidString.lowercased()).json"
+        )
+    }
+
+    func quarantine(originalName: String, at date: Date) -> URL {
+        let timestamp = ISO8601DateFormatter().string(from: date)
+        return quarantineDirectory.appending(path: "\(timestamp)-\(originalName)")
+    }
+
+    func createDirectories(using fileManager: FileManager) throws {
+        for directory in [
+            sessionDirectory,
+            recoveryDirectory,
+            bookmarksDirectory,
+            quarantineDirectory,
+            logsDirectory
+        ] {
+            try fileManager.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+        }
     }
 }

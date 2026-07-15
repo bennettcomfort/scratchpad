@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 3 — Data-safe persistence and lifecycle
 > **Current phase:** Implementation
-> **Current task:** Task 3.1 — establish atomic persistence and canonical internal paths
+> **Current task:** Task 3.2 — persist and quarantine session and recovery records
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -57,8 +57,8 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 3.1 | Establish atomic persistence and canonical internal paths | in progress | Stage 2 approved by user; approved Stage 3 plan starting |
-| 3.2 | Persist and quarantine session and recovery records | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 3.1 | Establish atomic persistence and canonical internal paths | verified | Trusted-root quarantine, serialized transactions, 15/15 focused tests, 55/55 full tests, warning-free build, and independent review pass; this task commit |
+| 3.2 | Persist and quarantine session and recovery records | in progress | Task 3.1 verified; approved Stage 3 plan starting |
 | 3.3 | Enable sandboxed persistent security-scoped bookmarks | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 3.4 | Open, inspect, and atomically save UTF-8 files | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 3.5 | Debounce recovery per document and restore the correct source | pending | Approved plan; awaiting Gate 5 implementation unlock |
@@ -90,7 +90,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | verified | User approved Stage 0 on 2026-07-14; commits `61be30c`, `f7c765a`, `81d0865` |
 | 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | verified | User approved Stage 1 on 2026-07-15; commits `988a539`, `3bdacc9`, `3a1e4af`, `2e8c4c7`, `2b703b5` |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | verified | User approved Stage 2 on 2026-07-15; commits `cfaed34`, `04ef7ce`, `c804391`, `9d04dc0` |
-| 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | in progress | Task 3.1 starting; user approval required after Tasks 3.1–3.8 |
+| 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | in progress | Task 3.2 starting; user approval required after Tasks 3.1–3.8 |
 | 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | pending | User approves visual and settings matrix |
 | 5 | Complete warning, regression, accessibility, performance, and dogfood hardening | pending | User accepts recovery milestone |
 
@@ -130,10 +130,11 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2026-07-15 | User approved the complete Stage 1 evidence matrix and authorized Recovery Stage 2 | `AGENTS.md`, `TRACKER.md` |
 | 2026-07-15 | Place Join Lines immediately before native text-editing commands in Edit so `⌘J` wins over native Jump to Selection without removing `TextEditingCommands` or other native menus | `Scratchpad/App/AppCommands.swift`, `TRACKER.md` |
 | 2026-07-15 | User approved the complete Stage 2 responder, shortcut, Undo, native-editing, and focus matrix and authorized Recovery Stage 3 | `AGENTS.md`, `TRACKER.md` |
+| 2026-07-15 | User approved correcting Task 3.1 to inject trusted Application Support paths, reject quarantine escapes, and serialize overlapping persistence transactions | `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
 
 ## Blockers
 
-None. Task 2.4 is in progress, not blocked.
+None.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -166,6 +167,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-15 | Task 2.3 AppKit command transaction | Missing-responder-action compile failure; 4 focused AppKit tests; one grouped undo for all nine text changes; select-line remains clean; attributes preserved; warning-as-error build; 38 full tests; empty TextKit 1 scan; independent review | verified | This task commit |
 | 2026-07-15 | Task 2.4 responder shortcuts | Missing-`AppCommands` compile failure; 2 focused responder tests; warning-as-error build; 40 full tests; empty key-monitor scan; complete live shortcut, Undo, native-editing, non-editor-focus, and menu matrix; independent review | verified | This task commit |
 | 2026-07-15 | Stage 2 approval | User approval after the complete command transformation, AppKit transaction, responder routing, native compatibility, automated, and manual matrix | verified | Approved; Stage 3 authorized |
+| 2026-07-15 | Task 3.1 atomic persistence | Missing-type, trusted-path, same-destination overlap, and source-lock RED evidence; 15 focused tests; warning-as-error build; 55 full tests; invariant and forbidden-source scans; independent review and clean re-review | verified | This task commit |
 
 ## Current Manual Acceptance Matrix
 

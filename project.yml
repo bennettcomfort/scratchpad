@@ -32,6 +32,9 @@ targets:
       - path: Scratchpad/Editor/LineTable.swift
       - path: Scratchpad/Editor/ScratchTextView.swift
       - path: Scratchpad/Files/FileModels.swift
+      - path: Scratchpad/Persistence/ApplicationSupportPaths.swift
+      - path: Scratchpad/Persistence/AtomicFileWriter.swift
+      - path: Scratchpad/Utilities/ContentHash.swift
       - path: Scratchpad/Assets.xcassets
     settings:
       CODE_SIGN_ENTITLEMENTS: Scratchpad/App/Scratchpad.entitlements
@@ -52,6 +55,7 @@ targets:
       - ScratchpadTests/Editor/LineTableTests.swift
       - ScratchpadTests/Editor/EditorCommandRouterTests.swift
       - ScratchpadTests/Editor/ScratchTextViewCommandTests.swift
+      - ScratchpadTests/Persistence/AtomicFileWriterTests.swift
     settings:
       GENERATE_INFOPLIST_FILE: YES
     dependencies:
