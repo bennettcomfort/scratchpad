@@ -23,6 +23,16 @@ struct EditorHost: NSViewRepresentable {
         precondition(textView.textStorage === document.storage)
     }
 
+    static func dismantleNSView(
+        _ scrollView: NSScrollView,
+        coordinator: EditorCoordinator
+    ) {
+        coordinator.detach()
+        if let textView = scrollView.documentView as? ScratchTextView {
+            textView.delegate = nil
+        }
+    }
+
     static func makeScrollView(
         document: DocumentSession,
         coordinator: EditorCoordinator
@@ -44,7 +54,11 @@ struct EditorHost: NSViewRepresentable {
         precondition(textView.textLayoutManager != nil)
         precondition(textView.textStorage === document.storage)
 
-        textView.delegate = coordinator
+        coordinator.attach(to: scrollView, textView: textView)
+        textView.setSelectedRange(document.selection.nsRange)
+        scrollView.contentView.scroll(
+            to: NSPoint(x: 0, y: document.scrollOffsetY)
+        )
         textView.isRichText = false
         textView.importsGraphics = false
         textView.allowsUndo = true

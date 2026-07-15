@@ -40,6 +40,7 @@ targets:
       - ScratchpadTests/Document/DocumentStateTests.swift
       - ScratchpadTests/Document/DocumentSessionTests.swift
       - ScratchpadTests/Editor/EditorHostTests.swift
+      - ScratchpadTests/Editor/EditorCoordinatorTests.swift
     settings:
       GENERATE_INFOPLIST_FILE: YES
     dependencies:

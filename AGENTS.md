@@ -6,7 +6,7 @@ Rules for every coding agent in this repository. Read this file before acting.
 
 > **Recovery Stage 1 — Document and editor core**
 >
-> **Implementation lock: OFF.** Stage 0 was approved by the user. The current implementation task is 1.4; do not begin Task 1.5 or a later task.
+> **Implementation lock: OFF.** Stage 0 was approved by the user. The current implementation task is 1.5; do not begin Recovery Stage 2.
 
 Work only on the current stage and current task recorded in `TRACKER.md`. Never prepare, scaffold, or begin a later stage without the user's explicit approval.
 
