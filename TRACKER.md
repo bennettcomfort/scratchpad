@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 1 — Document and editor core
 > **Current phase:** Implementation
-> **Current task:** Task 1.3 — attach document storage to TextKit 2 exactly once
+> **Current task:** Task 1.4 — synchronize native edits, selection, scroll, and undo
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -40,8 +40,8 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 |---|---|---|---|
 | 1.1 | Define document values and snapshot boundaries | verified | Expected missing-type compile failure captured; 2/2 focused and 9/9 full tests pass; warning-as-error build succeeds; this task commit |
 | 1.2 | Implement single-owner `DocumentSession` | verified | Expected missing-session compile failure captured; 4/4 focused and 13/13 full tests pass; warning-as-error build succeeds; this task commit |
-| 1.3 | Attach document storage to TextKit 2 exactly once | in progress | Task 1.2 verified; approved Stage 1 plan continuing |
-| 1.4 | Synchronize native edits, selection, scroll, and undo | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 1.3 | Attach document storage to TextKit 2 exactly once | verified | Expected missing-editor compile failure captured; 2/2 focused and 15/15 full tests pass; warning-as-error build succeeds; forbidden TextKit 1 scan is empty; this task commit |
+| 1.4 | Synchronize native edits, selection, scroll, and undo | in progress | Task 1.3 verified; approved Stage 1 plan continuing |
 | 1.5 | Replace containment shell with the single editor | pending | Approved plan; awaiting Gate 5 implementation unlock |
 
 ### Stage 2 Task Ledger
@@ -88,7 +88,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | Stage | Outcome | State | Approval gate |
 |---|---|---|---|
 | 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | verified | User approved Stage 0 on 2026-07-14; commits `61be30c`, `f7c765a`, `81d0865` |
-| 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | in progress | Task 1.3 starting; user approval required after Tasks 1.1–1.5 |
+| 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | in progress | Task 1.4 starting; user approval required after Tasks 1.1–1.5 |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | pending | User approves command matrix |
 | 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | pending | User approves forced-termination and data-loss matrix |
 | 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | pending | User approves visual and settings matrix |
@@ -130,7 +130,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 ## Blockers
 
-None. Task 1.3 is in progress, not blocked.
+None. Task 1.4 is in progress, not blocked.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -154,6 +154,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Stage 0 approval | User approval after the complete containment, policy, manual UI, test, and clean-working-tree matrix | verified | Approved; Stage 1 authorized |
 | 2026-07-14 | Task 1.1 document boundaries | Missing-type compile failure; 2 focused tests; warning-as-error build; 9 full tests; invariant, scope, and whitespace review | verified | This task commit |
 | 2026-07-14 | Task 1.2 document session | Missing-session compile failure; 4 focused tests; warning-as-error build; 13 full tests; invariant, scope, and independent review | verified | This task commit |
+| 2026-07-14 | Task 1.3 TextKit 2 attachment | Missing-editor compile failure; SDK numeric ambiguity reproduced and type-qualified; 2 focused tests; empty forbidden-access scan; warning-as-error build; 15 full tests; independent review | verified | This task commit |
 
 ## Current Manual Acceptance Matrix
 
