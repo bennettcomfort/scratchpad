@@ -2,17 +2,17 @@ import SwiftUI
 
 @main
 struct ScratchpadApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @State private var model = AppModel()
+    @State private var model = ApplicationModel()
+
     var body: some Scene {
-        Window("Scratchpad", id: "main") {
+        Window("Untitled", id: "main") {
             MainWindowView()
                 .environment(model)
         }
-        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 820, height: 640)
         .windowResizability(.contentMinSize)
-        .commands { AppCommands(model: model) }
-
-        Settings { SettingsView().environment(model) }
+        .commands {
+            TextEditingCommands()
+        }
     }
 }

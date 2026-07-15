@@ -42,7 +42,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 1.2 | Implement single-owner `DocumentSession` | verified | Expected missing-session compile failure captured; 4/4 focused and 13/13 full tests pass; warning-as-error build succeeds; this task commit |
 | 1.3 | Attach document storage to TextKit 2 exactly once | verified | Expected missing-editor compile failure captured; 2/2 focused and 15/15 full tests pass; warning-as-error build succeeds; forbidden TextKit 1 scan is empty; this task commit |
 | 1.4 | Synchronize native edits, selection, scroll, and undo | verified | Expected missing-delegate compile failure captured; 3/3 focused and 18/18 full tests pass; native undo and exactly-once edit callback verified; warning-as-error build succeeds; forbidden TextKit 1 scan is empty; this task commit |
-| 1.5 | Replace containment shell with the single editor | in progress | Task 1.4 verified; approved Stage 1 plan continuing |
+| 1.5 | Replace containment shell with the single editor | verified | Expected missing-`ApplicationModel` compile failure and missing-`TextEditingCommands` policy failure captured; 6/6 focused and 18/18 full tests pass; warning-as-error build, source scans, and all eight manual checks pass; this task commit |
 
 ### Stage 2 Task Ledger
 
@@ -88,7 +88,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | Stage | Outcome | State | Approval gate |
 |---|---|---|---|
 | 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | verified | User approved Stage 0 on 2026-07-14; commits `61be30c`, `f7c765a`, `81d0865` |
-| 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | in progress | Task 1.5 starting; user approval required after Tasks 1.1–1.5 |
+| 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | in progress | Tasks 1.1–1.5 verified; Stage 1 remains open at its explicit user approval gate |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | pending | User approves command matrix |
 | 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | pending | User approves forced-termination and data-loss matrix |
 | 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | pending | User approves visual and settings matrix |
@@ -130,7 +130,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 ## Blockers
 
-None. Task 1.5 is in progress, not blocked.
+None. All Stage 1 tasks are verified; the stage remains in progress at its required user approval gate.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -156,19 +156,22 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Task 1.2 document session | Missing-session compile failure; 4 focused tests; warning-as-error build; 13 full tests; invariant, scope, and independent review | verified | This task commit |
 | 2026-07-14 | Task 1.3 TextKit 2 attachment | Missing-editor compile failure; SDK numeric ambiguity reproduced and type-qualified; 2 focused tests; empty forbidden-access scan; warning-as-error build; 15 full tests; independent review | verified | This task commit |
 | 2026-07-14 | Task 1.4 native editor synchronization | Missing-delegate compile failure; 3 focused tests; native undo and exactly-once callback evidence; empty forbidden-access scan; warning-as-error build; 18 full tests; independent lifecycle review | verified | This task commit |
+| 2026-07-14 | Task 1.5 editor-core shell | Missing-root-model compile failure; missing-native-Find policy failure; 6 focused tests; warning-as-error build; 18 full tests; empty TextKit 1 and deleted-source scans; whitespace and scoped-diff review; eight-item Computer Use matrix | verified | One root model and one native editor window; standard `TextEditingCommands` restores native Find; this task commit |
 
 ## Current Manual Acceptance Matrix
 
-Stage 0 implementation is in progress. These checks remain `pending` until Tasks 0.1–0.3 produce fresh evidence.
+Recovery Stage 1 implementation is verified. These checks are the fresh manual evidence required before the user advances the stage.
 
 | Check | Expected | State | Evidence |
 |---|---|---|---|
-| Prototype preservation | Prototype implementation directories have no diff from `a1f36f6` | verified | `git diff --exit-code a1f36f6` over all prototype implementation directories returned 0 |
-| Active source boundary | Generated project contains `RecoveryBaseline` and no prototype implementation source | verified | Prototype filename scan of generated `project.pbxproj` returned no matches |
-| Deferred surface removal | Launched app exposes none of the recovery-milestone deferred surfaces | verified | Computer Use inspection showed one containment window with only recovery title and explanation |
-| Warning and test policy | Warnings are errors; the 7 Stage 0 tests pass | verified | Generated build uses `-warnings-as-errors`; 7 tests passed with zero failures |
-| Dependency and network policy | No runtime packages or network entitlements | verified | Policy tests confirm no `packages` declaration and no client/server network entitlement |
-| CI parity | CI uses the approved local build and test commands without deployment override | verified | Policy test confirms exact build/test commands and no `MACOSX_DEPLOYMENT_TARGET` override |
+| Single editor launch | One 820 × 640 window opens with one empty, focused editor | verified | Deterministic `/tmp/ScratchpadStage1` build opened `Untitled`; AX exposed one focused text-entry area and no containment message |
+| Native clipboard and history | Type `alpha`; select/copy/paste; undo and redo | verified | Native typing produced `alpha`; copy/paste produced `alphaph`; undo restored `alpha`; redo restored `alphaph` |
+| Marked text | Input-method composition remains native | verified | Dead-key composition inserted `é` as one composed character |
+| Native Find | `⌘F` opens the standard find bar, searches, and closes | verified | Edit menu exposed the standard Find submenu; native find bar accepted `alpha` and closed with Done |
+| Large edit stability | Paste at least 200 lines, scroll, select, and continue typing without a jump | verified | Native paste restored 220 lines; selection replaced line 150; scroll remained at the edited region with the replacement preserved |
+| Resize stability | Clamp at 480 × 320, restore size, and retain text/scroll | verified | Bottom-right resize stopped at 480 × 320; restoring the window retained line 150 and a valid scroll position |
+| Deferred surface absence | No tabs, sidebar, line numbers, highlighting, Quick Open, Zen, hotkey, or settings UI | verified | Accessibility tree and screenshots show only the native title bar, one scroll view, and one editor |
+| Automated boundary | Replacement allowlist is active and the Stage 1 gate passes | verified | Generated-project scans found no `.layoutManager` access or deleted source names; warning-as-error build and all 18 tests passed |
 
 ## Update Protocol
 
