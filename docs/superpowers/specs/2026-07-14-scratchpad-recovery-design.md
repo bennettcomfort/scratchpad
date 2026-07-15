@@ -40,7 +40,7 @@ The live repository will have five authoritative documents:
 | `TRACKER.md` | Current stage, task state, blockers, decisions, and verification evidence |
 | `AGENTS.md` | Short always-loaded rules and the single current-stage pointer |
 
-`MASTER_CANON.md`, `ARCHITECTURAL_REVIEW_REPORT.md`, the current implementation plan, the council plans, and the release-plan bundle become historical inputs. They may explain a past decision but cannot override the five live documents.
+`MASTER_CANON.md`, `ARCHITECTURAL_REVIEW_REPORT.md`, the pre-recovery implementation plan, the council plans, and the release-plan bundle are historical inputs. They may explain a past decision but cannot override the five live documents.
 
 When live documents disagree, work stops until the inconsistency is resolved. Agents do not choose the convenient interpretation.
 

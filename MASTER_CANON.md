@@ -5,8 +5,8 @@
 > **Status:** Historical prototype canon retained for provenance only.
 > **Amended 2026-07-11:** Scratchpad identity design (see `docs/superpowers/specs/2026-07-11-scratchpad-identity-design.md`) — name finalized, scratch-first concept, zen summon window (D-18/D-19), 4 themes, reordered roadmap, tightened budgets, `AGENTS.md` replaces `CLAUDE.md`.
 > **Superseded by:** `SPEC.md`, `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md`, and `AGENTS.md`.
-> **Audience:** Every human and AI agent working on this project. A new coding agent must be able to begin work from this document alone.
-> **Companion:** `ARCHITECTURAL_REVIEW_REPORT.md` explains *why* these decisions were made. This document contains only the decisions.
+> **Historical audience:** Prototype-planning provenance only; coding agents must not begin implementation from this document.
+> **Historical companion:** `ARCHITECTURAL_REVIEW_REPORT.md` explains why the superseded prototype decisions were made.
 > **Amendments:** Any change to this document requires an entry in `docs/DECISIONS.md` (append-only ADR log).
 
 ---

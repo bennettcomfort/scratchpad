@@ -5,7 +5,7 @@
 > **Role:** Lead Orchestrator / Principal Engineer review
 > **Date:** 2026-07-11
 > **Corpus reviewed:** 5 independent AI-generated project plans + 1 prior synthesis bundle (council report, master plan, scope table, risk register, agent prompt pack, QA checklist, diagrams)
-> **Companion document:** `MASTER_CANON.md` (final decisions only — the single source of truth)
+> **Historical companion:** `MASTER_CANON.md`, which was the prototype source of truth before the recovery contract superseded it.
 > **Note (2026-07-11, later same day):** The product identity was subsequently refined in a brainstorming session — name **Scratchpad**, scratch-first concept, zen summon window (D-18/D-19 amending D-14), 4 themes, reordered roadmap. Where this report and the amended Canon differ, the Canon wins. See `docs/superpowers/specs/2026-07-11-scratchpad-identity-design.md`.
 
 ---

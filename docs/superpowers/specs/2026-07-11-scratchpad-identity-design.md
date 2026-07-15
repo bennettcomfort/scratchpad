@@ -1,9 +1,11 @@
 # Scratchpad — Identity & Design Refinement
 
+> **Historical design input.** This document predates the controlled recovery milestone and has no implementation authority. Workspace, tabs, Zen/global hotkey, highlighting, and other expanded-scope decisions here are deferred. See `SPEC.md`, `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md`, and `AGENTS.md` for the live contract.
+>
 > **Date:** 2026-07-11
-> **Status:** Approved by user (all sections, in-session)
-> **Amends:** `MASTER_CANON.md` (which remains the single source of truth after these amendments are applied)
-> **Consumers:** SPEC.md / IMPLEMENTATION_PLAN.md / AGENTS.md will be generated from Canon + this design for implementation by pi agent running DeepSeek/Kimi models.
+> **Original status:** Approved by user for the superseded prototype direction.
+> **Former relationship:** Amended the now-historical `MASTER_CANON.md`.
+> **Current use:** Product-identity and visual provenance only.
 
 ---
 

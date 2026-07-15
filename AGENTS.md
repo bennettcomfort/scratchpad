@@ -6,7 +6,7 @@ Rules for every coding agent in this repository. Read this file before acting.
 
 > **Recovery Stage 0 — Baseline and containment**
 >
-> **Implementation lock: ON.** Planning gates 4A–4E and the final consistency gate are not yet approved. Do not change application or test code.
+> **Implementation lock: OFF.** All planning gates are approved. The current implementation task is 0.1; do not begin Task 0.2 or a later stage.
 
 Work only on the current stage and current task recorded in `TRACKER.md`. Never prepare, scaffold, or begin a later stage without the user's explicit approval.
 
@@ -34,7 +34,7 @@ H4. All AppKit objects and every NSTextStorage are main-actor isolated.
 H5. Open-document text lives only in its NSTextStorage.
 H6. SwiftUI never owns or two-way binds a document String.
 H7. All external persisted access is resolved through BookmarkStore.
-H8. All user and internal writes go through AtomicFileWriter.
+H8. All user-file and internal JSON writes go through AtomicFileWriter. Scalar preferences write only through SettingsStore.
 H9. A document becomes clean only after a verified successful write.
 H10. Close, replacement, and termination wait for save or explicit discard.
 H11. Corrupt state is quarantined and never deleted.

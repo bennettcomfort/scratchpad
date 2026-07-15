@@ -1,9 +1,9 @@
 # TRACKER.md — Scratchpad Recovery
 
 > **Current stage:** Recovery Stage 0 — Baseline and containment  
-> **Current phase:** Planning  
-> **Current task:** Gate 5 — cross-document consistency and implementation unlock
-> **Implementation lock:** ON
+> **Current phase:** Implementation
+> **Current task:** Task 0.1 — preserve prototype baseline and regression contract
+> **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
 
@@ -19,8 +19,8 @@ Only these task states are valid: `pending`, `in progress`, `blocked`, and `veri
 | 4B | Stage 1 implementation plan | verified | Approved; commit `92c8863` |
 | 4C | Stage 2 implementation plan | verified | Approved; commit `faa86de` |
 | 4D | Stage 3 implementation plan | verified | Approved; commit `05781a2` |
-| 4E | Stages 4–5 implementation plan | verified | Approved by user on 2026-07-14 |
-| 5 | Cross-document consistency and implementation unlock | in progress | Auditing live documents |
+| 4E | Stages 4–5 implementation plan | verified | Approved; plan `8d8ed19`, approval `a12199e` |
+| 5 | Cross-document consistency and implementation unlock | verified | Approved by user on 2026-07-14; unlock commit pending |
 
 ## Recovery Roadmap
 
@@ -30,60 +30,60 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 0.1 | Preserve prototype baseline and regression contract | pending | Awaiting Gate 4A approval and implementation unlock |
-| 0.2 | Enforce the recovery source boundary | pending | Awaiting Gate 4A approval and implementation unlock |
-| 0.3 | Enforce warning, dependency, entitlement, and CI policy | pending | Awaiting Gate 4A approval and implementation unlock |
+| 0.1 | Preserve prototype baseline and regression contract | in progress | Gate 5 approved; baseline audit starting |
+| 0.2 | Enforce the recovery source boundary | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 0.3 | Enforce warning, dependency, entitlement, and CI policy | pending | Approved plan; awaiting Gate 5 implementation unlock |
 
 ### Stage 1 Task Ledger
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 1.1 | Define document values and snapshot boundaries | pending | Awaiting Gate 4B approval and implementation unlock |
-| 1.2 | Implement single-owner `DocumentSession` | pending | Awaiting Gate 4B approval and implementation unlock |
-| 1.3 | Attach document storage to TextKit 2 exactly once | pending | Awaiting Gate 4B approval and implementation unlock |
-| 1.4 | Synchronize native edits, selection, scroll, and undo | pending | Awaiting Gate 4B approval and implementation unlock |
-| 1.5 | Replace containment shell with the single editor | pending | Awaiting Gate 4B approval and implementation unlock |
+| 1.1 | Define document values and snapshot boundaries | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 1.2 | Implement single-owner `DocumentSession` | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 1.3 | Attach document storage to TextKit 2 exactly once | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 1.4 | Synchronize native edits, selection, scroll, and undo | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 1.5 | Replace containment shell with the single editor | pending | Approved plan; awaiting Gate 5 implementation unlock |
 
 ### Stage 2 Task Ledger
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 2.1 | Define command values and UTF-16 line geometry | pending | Awaiting Gate 4C approval and implementation unlock |
-| 2.2 | Implement and prove pure command transformations | pending | Awaiting Gate 4C approval and implementation unlock |
-| 2.3 | Apply commands through one undoable AppKit transaction | pending | Awaiting Gate 4C approval and implementation unlock |
-| 2.4 | Route fixed shortcuts through the first responder | pending | Awaiting Gate 4C approval and implementation unlock |
+| 2.1 | Define command values and UTF-16 line geometry | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 2.2 | Implement and prove pure command transformations | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 2.3 | Apply commands through one undoable AppKit transaction | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 2.4 | Route fixed shortcuts through the first responder | pending | Approved plan; awaiting Gate 5 implementation unlock |
 
 ### Stage 3 Task Ledger
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 3.1 | Establish atomic persistence and canonical internal paths | pending | Awaiting Gate 4D approval and implementation unlock |
-| 3.2 | Persist and quarantine session and recovery records | pending | Awaiting Gate 4D approval and implementation unlock |
-| 3.3 | Enable sandboxed persistent security-scoped bookmarks | pending | Awaiting Gate 4D approval and implementation unlock |
-| 3.4 | Open, inspect, and atomically save UTF-8 files | pending | Awaiting Gate 4D approval and implementation unlock |
-| 3.5 | Debounce recovery per document and restore the correct source | pending | Awaiting Gate 4D approval and implementation unlock |
-| 3.6 | Serialize native panels, decisions, and destructive document operations | pending | Awaiting Gate 4D approval and implementation unlock |
-| 3.7 | Monitor external changes without document-identity races | pending | Awaiting Gate 4D approval and implementation unlock |
-| 3.8 | Await window close and application termination | pending | Awaiting Gate 4D approval and implementation unlock |
+| 3.1 | Establish atomic persistence and canonical internal paths | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 3.2 | Persist and quarantine session and recovery records | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 3.3 | Enable sandboxed persistent security-scoped bookmarks | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 3.4 | Open, inspect, and atomically save UTF-8 files | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 3.5 | Debounce recovery per document and restore the correct source | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 3.6 | Serialize native panels, decisions, and destructive document operations | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 3.7 | Monitor external changes without document-identity races | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 3.8 | Await window close and application termination | pending | Approved plan; awaiting Gate 5 implementation unlock |
 
 ### Stage 4 Task Ledger
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 4.1 | Implement typed settings and Launch at Login | pending | Awaiting Gate 4E approval and implementation unlock |
-| 4.2 | Define fixed themes and apply editor appearance safely | pending | Awaiting Gate 4E approval and implementation unlock |
-| 4.3 | Calculate prompt metrics off the main actor | pending | Awaiting Gate 4E approval and implementation unlock |
-| 4.4 | Build the Noto-inspired main window | pending | Awaiting Gate 4E approval and implementation unlock |
-| 4.5 | Build native General, Editor, and Theme settings | pending | Awaiting Gate 4E approval and implementation unlock |
+| 4.1 | Implement typed settings and Launch at Login | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 4.2 | Define fixed themes and apply editor appearance safely | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 4.3 | Calculate prompt metrics off the main actor | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 4.4 | Build the Noto-inspired main window | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 4.5 | Build native General, Editor, and Theme settings | pending | Approved plan; awaiting Gate 5 implementation unlock |
 
 ### Stage 5 Task Ledger
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 5.1 | Prove accessibility and keyboard-only operation | pending | Awaiting Gate 4E approval and implementation unlock |
-| 5.2 | Measure the published performance budgets | pending | Awaiting Gate 4E approval and implementation unlock |
-| 5.3 | Automate the final source and release audit | pending | Awaiting Gate 4E approval and implementation unlock |
-| 5.4 | Complete dogfood and destructive failure injection | pending | Awaiting Gate 4E approval and implementation unlock |
+| 5.1 | Prove accessibility and keyboard-only operation | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 5.2 | Measure the published performance budgets | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 5.3 | Automate the final source and release audit | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 5.4 | Complete dogfood and destructive failure injection | pending | Approved plan; awaiting Gate 5 implementation unlock |
 
 | Stage | Outcome | State | Approval gate |
 |---|---|---|---|
@@ -123,10 +123,11 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2026-07-14 | Require user approval after every planning section and implementation stage | Design, `AGENTS.md`, `TRACKER.md` |
 | 2026-07-14 | Represent editor commands as selection-only outcomes or ordered narrow mutations so Select Line creates no fake edit and multi-line commands preserve unrelated attributes | `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` |
 | 2026-07-14 | Persist `hasUnsavedChanges` separately from display save state because read-only and deleted files can contain either clean or preservation-required text | `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` |
+| 2026-07-14 | Clarify atomic-write scope: user files and internal JSON use `AtomicFileWriter`; scalar preferences write only through typed `SettingsStore` | `AGENTS.md`, `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` |
 
 ## Blockers
 
-None. Gate 5 consistency review is in progress, not blocked.
+None. Task 0.1 is in progress, not blocked.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -142,7 +143,8 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Gate 4B plan | SDK API check, type/test-count review, invariant comparison, and whitespace review | verified | `92c8863` |
 | 2026-07-14 | Gate 4C plan | Responder API check, command-contract correction, transformation review, test-count review, and whitespace review | verified | `faa86de` |
 | 2026-07-14 | Gate 4D plan | Atomicity, bookmark, save, recovery, operation, external-change, termination, test-count, and whitespace review | verified | `05781a2` |
-| 2026-07-14 | Gate 4E plan | Settings, theme, metrics, visual, accessibility, performance, policy, dogfood, test-count, and whitespace review | verified | Approved; commit pending |
+| 2026-07-14 | Gate 4E plan | Settings, theme, metrics, visual, accessibility, performance, policy, dogfood, test-count, and whitespace review | verified | `8d8ed19`, `a12199e` |
+| 2026-07-14 | Gate 5 consistency | Authority, invariant, product coverage, file/type, task/test arithmetic, historical status, and deferred-scope review | verified | Approved; unlock commit pending |
 
 ## Current Manual Acceptance Matrix
 

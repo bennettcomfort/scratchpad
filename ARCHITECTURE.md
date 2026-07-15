@@ -25,7 +25,7 @@ H4. All AppKit objects and every NSTextStorage are main-actor isolated.
 H5. Open-document text lives only in its NSTextStorage.
 H6. SwiftUI never owns or two-way binds a document String.
 H7. All external persisted access is resolved through BookmarkStore.
-H8. All user and internal writes go through AtomicFileWriter.
+H8. All user-file and internal JSON writes go through AtomicFileWriter. Scalar preferences write only through SettingsStore.
 H9. A document becomes clean only after a verified successful write.
 H10. Close, replacement, and termination wait for save or explicit discard.
 H11. Corrupt state is quarantined and never deleted.

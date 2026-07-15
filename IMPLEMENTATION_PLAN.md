@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` (recommended) or `executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Plan status:** Gates 4A–4E approved. The implementation lock in `AGENTS.md` remains ON until the final consistency gate is approved.
+> **Plan status:** Fully approved. Implementation is unlocked for the single current task recorded in `TRACKER.md`.
 
 **Goal:** Replace the unsafe prototype in place with a boringly reliable, single-document native macOS prompt and Markdown editor.
 
@@ -29,7 +29,7 @@ H4. All AppKit objects and every NSTextStorage are main-actor isolated.
 H5. Open-document text lives only in its NSTextStorage.
 H6. SwiftUI never owns or two-way binds a document String.
 H7. All external persisted access is resolved through BookmarkStore.
-H8. All user and internal writes go through AtomicFileWriter.
+H8. All user-file and internal JSON writes go through AtomicFileWriter. Scalar preferences write only through SettingsStore.
 H9. A document becomes clean only after a verified successful write.
 H10. Close, replacement, and termination wait for save or explicit discard.
 H11. Corrupt state is quarantined and never deleted.
@@ -4220,3 +4220,9 @@ Stop with the app still single-document. Present:
 - a deferred-feature inventory proving tabs, sidebar/workspace, Quick Open, highlighting, Zen Mode, global hotkey, custom themes, and shortcut rebinding remain absent.
 
 The user must explicitly accept Stage 5 before the recovery milestone is complete. Deferred features receive new specifications and plans; they are not appended to this implementation plan.
+
+# Gate 5 — Cross-Document Consistency and Implementation Unlock
+
+The completed review is recorded in `PLANNING_CONSISTENCY_REPORT.md`. It verifies authority, product coverage, invariants, file/type naming, 29-task ordering, 149-test arithmetic, historical-document status, stage gates, and deferred-feature absence.
+
+Gate 5 approval authorizes only the documentation unlock transaction in that report. The first implementation action remains Task 0.1; approval does not authorize Task 0.2, application feature work, or a later recovery stage.
