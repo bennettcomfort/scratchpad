@@ -1,8 +1,8 @@
 # TRACKER.md — Scratchpad Recovery
 
-> **Current stage:** Recovery Stage 0 — Baseline and containment  
+> **Current stage:** Recovery Stage 1 — Document and editor core
 > **Current phase:** Implementation
-> **Current task:** Task 0.3 — enforce warning, dependency, entitlement, and CI policy
+> **Current task:** Task 1.1 — define document values and snapshot boundaries
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -38,7 +38,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 1.1 | Define document values and snapshot boundaries | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 1.1 | Define document values and snapshot boundaries | in progress | Stage 0 explicitly approved by user; approved Stage 1 plan starting |
 | 1.2 | Implement single-owner `DocumentSession` | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 1.3 | Attach document storage to TextKit 2 exactly once | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 1.4 | Synchronize native edits, selection, scroll, and undo | pending | Approved plan; awaiting Gate 5 implementation unlock |
@@ -87,8 +87,8 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Stage | Outcome | State | Approval gate |
 |---|---|---|---|
-| 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | in progress | All Stage 0 tasks verified; awaiting explicit user approval |
-| 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | pending | User approves document/editor manual matrix |
+| 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | verified | User approved Stage 0 on 2026-07-14; commits `61be30c`, `f7c765a`, `81d0865` |
+| 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | in progress | Task 1.1 starting; user approval required after Tasks 1.1–1.5 |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | pending | User approves command matrix |
 | 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | pending | User approves forced-termination and data-loss matrix |
 | 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | pending | User approves visual and settings matrix |
@@ -126,10 +126,11 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2026-07-14 | Clarify atomic-write scope: user files and internal JSON use `AtomicFileWriter`; scalar preferences write only through typed `SettingsStore` | `AGENTS.md`, `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` |
 | 2026-07-14 | Align Task 0.1 regression ownership with the exact test names approved in later stage task blocks | `IMPLEMENTATION_PLAN.md`, `docs/recovery/REGRESSION_MATRIX.md` |
 | 2026-07-14 | User explicitly approved aligning the live pointer to Task 0.2 and removing the invalid standalone 1024px app-icon child so containment has zero project-owned warnings | `AGENTS.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md`, app icon catalog |
+| 2026-07-14 | User approved the complete Stage 0 evidence matrix and authorized Recovery Stage 1 | `AGENTS.md`, `TRACKER.md` |
 
 ## Blockers
 
-None. Stage 0 implementation is complete and waiting at its approval gate.
+None. Task 1.1 is in progress, not blocked.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -150,6 +151,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Task 0.1 baseline | `git show`; XcodeGen; prototype build; full prototype tests; regression-name and whitespace checks | verified | 35 tests, zero failures; known SwiftUI, asset, and AppIntents diagnostics; commit `61be30c` |
 | 2026-07-14 | Task 0.2 containment | Focused red/green test; generated-project source scan; prototype diff; clean build; full tests; Computer Use window inspection | verified | Expected `RecoveryStage` compile failure; 2 focused and 3 full tests pass; no prototype project references or implementation diffs; malformed icon warning removed; Xcode AppIntents no-dependency diagnostic remains tool-generated; commit `f7c765a` |
 | 2026-07-14 | Task 0.3 policy | Focused red/green policy tests; clean warning-as-error build; full tests; whitespace check | verified | Two selected tests failed as expected, then 6 focused and all 7 Stage 0 tests passed; build used `-warnings-as-errors`; no project warnings; Xcode AppIntents no-dependency diagnostic remains tool-generated; this policy commit |
+| 2026-07-14 | Stage 0 approval | User approval after the complete containment, policy, manual UI, test, and clean-working-tree matrix | verified | Approved; Stage 1 authorized |
 
 ## Current Manual Acceptance Matrix
 
