@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 2 — Sublime-style command system
 > **Current phase:** Implementation
-> **Current task:** Task 2.1 — define command values and UTF-16 line geometry
+> **Current task:** Task 2.2 — implement and prove pure command transformations
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -48,8 +48,8 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 2.1 | Define command values and UTF-16 line geometry | in progress | Stage 1 explicitly approved by user; approved Stage 2 plan starting |
-| 2.2 | Implement and prove pure command transformations | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 2.1 | Define command values and UTF-16 line geometry | verified | Expected missing-`LineTable` compile failure captured; 3/3 focused and 21/21 full tests pass; warning-as-error build, whitespace check, and independent review pass; this task commit |
+| 2.2 | Implement and prove pure command transformations | in progress | Task 2.1 verified; approved Stage 2 plan continuing |
 | 2.3 | Apply commands through one undoable AppKit transaction | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 2.4 | Route fixed shortcuts through the first responder | pending | Approved plan; awaiting Gate 5 implementation unlock |
 
@@ -131,7 +131,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 ## Blockers
 
-None. Task 2.1 is in progress, not blocked.
+None. Task 2.2 is in progress, not blocked.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -159,6 +159,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Task 1.4 native editor synchronization | Missing-delegate compile failure; 3 focused tests; native undo and exactly-once callback evidence; empty forbidden-access scan; warning-as-error build; 18 full tests; independent lifecycle review | verified | This task commit |
 | 2026-07-14 | Task 1.5 editor-core shell | Missing-root-model compile failure; missing-native-Find policy failure; 6 focused tests; warning-as-error build; 18 full tests; empty TextKit 1 and deleted-source scans; whitespace and scoped-diff review; eight-item Computer Use matrix | verified | One root model and one native editor window; standard `TextEditingCommands` restores native Find; this task commit |
 | 2026-07-15 | Stage 1 approval | User approval after the complete ownership, TextKit 2, native editing, source-boundary, automated, and manual matrix | verified | Approved; Stage 2 authorized |
+| 2026-07-15 | Task 2.1 command geometry | Missing-`LineTable` compile failure; 3 focused tests; warning-as-error build; 21 full tests; UTF-16, CRLF/LF, range-boundary, scope, and independent review | verified | This task commit |
 
 ## Current Manual Acceptance Matrix
 

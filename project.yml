@@ -25,7 +25,9 @@ targets:
       - path: Scratchpad/Document/DocumentSnapshot.swift
       - path: Scratchpad/Document/DocumentState.swift
       - path: Scratchpad/Editor/EditorCoordinator.swift
+      - path: Scratchpad/Editor/EditorCommand.swift
       - path: Scratchpad/Editor/EditorHost.swift
+      - path: Scratchpad/Editor/LineTable.swift
       - path: Scratchpad/Editor/ScratchTextView.swift
       - path: Scratchpad/Files/FileModels.swift
       - path: Scratchpad/Assets.xcassets
@@ -44,6 +46,7 @@ targets:
       - ScratchpadTests/Document/DocumentSessionTests.swift
       - ScratchpadTests/Editor/EditorHostTests.swift
       - ScratchpadTests/Editor/EditorCoordinatorTests.swift
+      - ScratchpadTests/Editor/LineTableTests.swift
     settings:
       GENERATE_INFOPLIST_FILE: YES
     dependencies:
