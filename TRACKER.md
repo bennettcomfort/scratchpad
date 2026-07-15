@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 0 — Baseline and containment  
 > **Current phase:** Planning  
-> **Current task:** Gate 4E — approve Stages 4–5 implementation plan
+> **Current task:** Gate 5 — cross-document consistency and implementation unlock
 > **Implementation lock:** ON
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -19,8 +19,8 @@ Only these task states are valid: `pending`, `in progress`, `blocked`, and `veri
 | 4B | Stage 1 implementation plan | verified | Approved; commit `92c8863` |
 | 4C | Stage 2 implementation plan | verified | Approved; commit `faa86de` |
 | 4D | Stage 3 implementation plan | verified | Approved; commit `05781a2` |
-| 4E | Stages 4–5 implementation plan | in progress | Draft complete; awaiting user approval |
-| 5 | Cross-document consistency and implementation unlock | pending | — |
+| 4E | Stages 4–5 implementation plan | verified | Approved by user on 2026-07-14 |
+| 5 | Cross-document consistency and implementation unlock | in progress | Auditing live documents |
 
 ## Recovery Roadmap
 
@@ -126,7 +126,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 ## Blockers
 
-None. Gate 4E is awaiting the required user approval, not blocked.
+None. Gate 5 consistency review is in progress, not blocked.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -142,7 +142,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Gate 4B plan | SDK API check, type/test-count review, invariant comparison, and whitespace review | verified | `92c8863` |
 | 2026-07-14 | Gate 4C plan | Responder API check, command-contract correction, transformation review, test-count review, and whitespace review | verified | `faa86de` |
 | 2026-07-14 | Gate 4D plan | Atomicity, bookmark, save, recovery, operation, external-change, termination, test-count, and whitespace review | verified | `05781a2` |
-| 2026-07-14 | Gate 4E plan | Settings, theme, metrics, visual, accessibility, performance, policy, dogfood, test-count, and whitespace review | in progress | Draft awaiting approval |
+| 2026-07-14 | Gate 4E plan | Settings, theme, metrics, visual, accessibility, performance, policy, dogfood, test-count, and whitespace review | verified | Approved; commit pending |
 
 ## Current Manual Acceptance Matrix
 

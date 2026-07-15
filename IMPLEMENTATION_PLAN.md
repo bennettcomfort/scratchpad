@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` (recommended) or `executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Plan status:** Gates 4A–4D approved; Gate 4E is drafted below and awaits approval. The implementation lock in `AGENTS.md` remains ON until Gate 4E and the final consistency gate are approved.
+> **Plan status:** Gates 4A–4E approved. The implementation lock in `AGENTS.md` remains ON until the final consistency gate is approved.
 
 **Goal:** Replace the unsafe prototype in place with a boringly reliable, single-document native macOS prompt and Markdown editor.
 
@@ -44,7 +44,7 @@ H14. No print(); use os.Logger with subsystem com.scratchpad.app.
 - Gate 4B: Recovery Stage 1 — Document and editor core. Detailed below.
 - Gate 4C: Recovery Stage 2 — Sublime-style command system. Detailed below.
 - Gate 4D: Recovery Stage 3 — data-safe persistence and lifecycle. Detailed below.
-- Gate 4E: Recovery Stages 4–5 — native presentation and release hardening. Drafted below; awaiting approval.
+- Gate 4E: Recovery Stages 4–5 — native presentation and release hardening. Detailed below.
 - Gate 5: Cross-document consistency review and implementation unlock.
 
 ---
