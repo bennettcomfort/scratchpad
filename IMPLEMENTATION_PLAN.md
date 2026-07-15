@@ -156,8 +156,9 @@ Expected: generation succeeds, build succeeds, and 35 prototype tests pass. A Sw
 
 - XcodeGen generation: succeeded.
 - macOS build: succeeded.
-- XCTest: 35 tests passed.
+- XCTest: 35 tests passed with zero failures.
 - Runtime quality: not accepted; SwiftUI reported background publication during tests.
+- Build quality: not accepted; the asset catalog reported an unassigned 1024 px app-icon child and AppIntents metadata extraction was skipped because the target has no AppIntents dependency.
 - Coverage quality: helper happy paths dominate; lifecycle, identity, close, recovery, bookmark, and command-routing failures are not behaviorally protected.
 
 ## Critical Findings
@@ -187,19 +188,19 @@ Until a planned replacement task explicitly removes a prototype file, the protot
 
 | Scenario | Owning stage | Automated proof | Manual proof | Current state |
 |---|---:|---|---|---|
-| Active editor owns exactly one document's storage | 1 | `DocumentSessionTests.testEachSessionOwnsDistinctTextStorage` and `EditorHostTests.testHostUsesCurrentSessionStorage` | Type in a document, replace it, and confirm old text cannot appear or change | pending |
+| Active editor owns exactly one document's storage | 1 | `DocumentSessionTests.testEachSessionOwnsDistinctTextStorage` and `EditorHostTests.testHostUsesTextKit2AndSessionStorage` | Type in a document, replace it, and confirm old text cannot appear or change | pending |
 | Two concurrent future opens for one URL produce one document | deferred tabs | `DocumentRegistryTests.testConcurrentOpenDeduplicatesCanonicalURL` | Double-open one file and observe one tab | pending |
-| Save-and-Close waits and remains open on save failure | 3 | `DocumentDecisionCoordinatorTests.testSaveFailureDoesNotResolveClose` | Induce a write failure and confirm text remains open and dirty | pending |
-| Recovery work is isolated per document identity | 3 | `RecoveryCoordinatorTests.testSchedulingOneDocumentDoesNotCancelAnother` | Covered again when multi-document returns | pending |
-| Clean file restoration reads disk rather than empty recovery text | 3 | `SessionRepositoryTests.testCleanFileRecordRestoresFromDisk` | Relaunch a clean file-backed document and compare its contents | pending |
-| Dirty restoration retains base hash and enters conflict flow | 3 | `SessionRepositoryTests.testDirtyRecordRestoresConflictMetadata` | Edit, terminate, change disk externally, relaunch, and resolve conflict | pending |
-| Termination persists the latest keystroke | 3 | `RecoveryCoordinatorTests.testFlushAllAwaitsLatestSnapshot` | Type a unique suffix, force-quit immediately, and relaunch | pending |
-| Security-scoped access survives sandboxed relaunch | 3 | `BookmarkStoreTests.testPersistedBookmarkResolvesAfterReload` | Open outside container, quit, relaunch, and save successfully | pending |
-| Each editor command fires once and remains undoable | 2 | one focused test per `EditorCommand`, plus `EditorCommandRouterTests.testActionRoutesOnce` | Run the full shortcut matrix and undo every transformation | pending |
-| Information metrics update without a SwiftUI text copy | 4 | `DocumentMetricsTests` and architecture invariant review | Type continuously and inspect correct counts without UI stalls | pending |
-| Settings changes avoid global defaults notifications | 4 | `SettingsStoreTests.testMutationPublishesTypedStateOnly` | Change each setting and observe only its intended UI effect | pending |
+| Save-and-Close waits and remains open on save failure | 3 | `DocumentDecisionCoordinatorTests.testFailedSaveCancelsCloseAndKeepsDocumentEdited` | Induce a write failure and confirm text remains open and edited | pending |
+| Recovery work is isolated per document identity | 3 | `RecoveryCoordinatorTests.testDebounceTasksAreIndependentByDocumentID` | Covered again when multi-document returns | pending |
+| Clean file restoration reads disk rather than empty recovery text | 3 | `RecoveryCoordinatorTests.testCleanFileBackedLaunchReopensDiskInsteadOfRecoveryText` | Relaunch a clean file-backed document and compare its contents | pending |
+| Dirty restoration retains base metadata and enters conflict flow | 3 | `SessionRepositoryTests.testRecoveryRoundTripsEveryField` and `DocumentDecisionCoordinatorTests.testConflictSupportsOverwriteReloadSaveAsAndCancel` | Edit, terminate, change disk externally, relaunch, and resolve conflict | pending |
+| Graceful termination persists the latest keystroke | 3 | `RecoveryCoordinatorTests.testExplicitFlushCancelsPendingTaskAndWritesLatestText` and `ApplicationLifecycleTests.testTerminationReturnsLaterAndRepliesTrueAfterFlush` | Type a unique suffix, Quit immediately, and relaunch | pending |
+| Security-scoped access survives sandboxed relaunch | 3 | `BookmarkStoreTests.testReferenceLookupUsesPersistedPathHintWithoutDirectAccess` | Open outside the container, quit, relaunch, and save successfully | pending |
+| Each editor command fires once and remains undoable | 2 | focused router tests plus `ScratchTextViewCommandTests.testEveryTextChangingCommandUndoesInOneOperation` and `AppCommandsTests.testResponderActionReachesFocusedScratchTextViewExactlyOnce` | Run the full shortcut matrix and undo every transformation | pending |
+| Information metrics update without a SwiftUI text copy | 4 | `DocumentMetricsTests` plus `MetricsCoordinatorTests.testCoordinatorDiscardsDifferentIdentityOrGenerationResult` | Type continuously and inspect correct counts without UI stalls | pending |
+| Settings changes avoid global defaults notifications | 4 | `SettingsStoreTests.testSettingsChangesPublishOneTypedSnapshotWithoutNotificationCenter` | Change each setting and observe only its intended UI effect | pending |
 | Future sidebar resizing uses native split view | deferred workspace | `WorkspaceSplitViewTests.testResizePersistsOnlyOnCommit` | Drag repeatedly with no shaking or pointer drift | pending |
-| Future hotkey registration has one owner and visible failures | deferred Zen | `HotkeyManagerTests.testRegistrationFailureIsPublished` | Rebind to a conflicting shortcut and observe actionable error | pending |
+| Future hotkey registration has one owner and visible failures | deferred Zen | `HotkeyManagerTests.testRegistrationFailureIsPublished` | Rebind to a conflicting shortcut and observe an actionable error | pending |
 | Future highlighting discards stale generations | deferred highlighting | `HighlightPipelineTests.testStaleGenerationIsDiscarded` | Paste a large document while typing and observe responsive correct styling | pending |
 ```
 
