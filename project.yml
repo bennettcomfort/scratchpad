@@ -16,7 +16,9 @@ targets:
   Scratchpad:
     type: application
     platform: macOS
-    sources: [Scratchpad]
+    sources:
+      - path: Scratchpad/RecoveryBaseline
+      - path: Scratchpad/Assets.xcassets
     settings:
       CODE_SIGN_ENTITLEMENTS: Scratchpad/App/Scratchpad.entitlements
       INFOPLIST_FILE: Scratchpad/App/Info.plist
@@ -24,7 +26,9 @@ targets:
   ScratchpadTests:
     type: bundle.unit-test
     platform: macOS
-    sources: [ScratchpadTests]
+    sources:
+      - ScratchpadTests/SmokeTests.swift
+      - ScratchpadTests/RecoveryContainmentTests.swift
     settings:
       GENERATE_INFOPLIST_FILE: YES
     dependencies:

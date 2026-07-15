@@ -16,7 +16,7 @@
 - Work only on the current stage and task in `TRACKER.md`.
 - Run a failing test or capture the specified failing baseline before implementation.
 - Use the exact interfaces and paths in the current task; do not preserve broken prototype APIs.
-- Build with zero warnings using `xcodegen && xcodebuild -scheme Scratchpad -destination 'platform=macOS' build`.
+- Build with zero project warnings using `xcodegen && xcodebuild -scheme Scratchpad -destination 'platform=macOS' build`. As defined by `SPEC.md`, project warnings include source, concurrency, asset, and project-configuration warnings. A diagnostic emitted solely by the installed Xcode toolchain must be investigated and recorded, but must not be hidden with warning suppression or misreported as a project warning.
 - Test using `xcodebuild -scheme Scratchpad -destination 'platform=macOS' test`.
 - Commit each verified task independently with a conventional commit.
 - Do not advance a stage without fresh tracker evidence and explicit user approval.
@@ -234,6 +234,10 @@ Expected: one documentation-only commit; no application, test, project, entitlem
 - Create: `Scratchpad/RecoveryBaseline/ContainmentApp.swift`
 - Create: `ScratchpadTests/RecoveryContainmentTests.swift`
 - Modify: `project.yml`
+- Modify: `Scratchpad/Assets.xcassets/AppIcon.appiconset/Contents.json`
+- Delete: `Scratchpad/Assets.xcassets/AppIcon.appiconset/icon_1024x1024.png`
+- Modify: `AGENTS.md`
+- Modify: `IMPLEMENTATION_PLAN.md`
 - Modify: `TRACKER.md`
 
 **Interfaces:**
@@ -405,6 +409,10 @@ Expected: no output and exit status 0, proving the prototype implementation rema
 
 - [ ] **Step 8: Build, test, and manually launch**
 
+Before building, remove the invalid standalone `1024x1024` 1x entry and its
+unassigned `icon_1024x1024.png` child from `AppIcon.appiconset`. The valid
+`512x512` 2x slot remains the required 1024-pixel representation.
+
 Run:
 
 ```sh
@@ -421,7 +429,7 @@ Expected: warning-free build; 3 tests pass; the app shows one native window cont
 Set Task 0.2 to `verified` in `TRACKER.md` with the failing test, passing test, source-boundary checks, build, test, and manual launch evidence, then run:
 
 ```sh
-git add project.yml Scratchpad/RecoveryBaseline ScratchpadTests/RecoveryContainmentTests.swift TRACKER.md
+git add AGENTS.md IMPLEMENTATION_PLAN.md project.yml Scratchpad/RecoveryBaseline Scratchpad/Assets.xcassets/AppIcon.appiconset ScratchpadTests/RecoveryContainmentTests.swift TRACKER.md
 git commit -m "refactor: contain prototype source target"
 ```
 

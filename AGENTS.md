@@ -6,7 +6,7 @@ Rules for every coding agent in this repository. Read this file before acting.
 
 > **Recovery Stage 0 — Baseline and containment**
 >
-> **Implementation lock: OFF.** All planning gates are approved. The current implementation task is 0.1; do not begin Task 0.2 or a later stage.
+> **Implementation lock: OFF.** All planning gates are approved. The current implementation task is 0.3; do not begin Task 1.1 or a later stage.
 
 Work only on the current stage and current task recorded in `TRACKER.md`. Never prepare, scaffold, or begin a later stage without the user's explicit approval.
 
