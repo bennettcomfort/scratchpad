@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 0 — Baseline and containment  
 > **Current phase:** Planning  
-> **Current task:** Gate 4B — approve Stage 1 implementation plan
+> **Current task:** Gate 4C — approve Stage 2 implementation plan
 > **Implementation lock:** ON
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -15,9 +15,9 @@ Only these task states are valid: `pending`, `in progress`, `blocked`, and `veri
 | 1 | Replace `SPEC.md` | verified | Approved; commit `a4abbe1` |
 | 2 | Create `ARCHITECTURE.md`; mark prior canon and review historical | verified | Approved; commit `273aee6` |
 | 3 | Replace `AGENTS.md`; create `TRACKER.md` | verified | Approved; commit `82aee23` |
-| 4A | Stage 0 implementation plan | verified | Approved by user on 2026-07-14 |
-| 4B | Stage 1 implementation plan | in progress | Drafting |
-| 4C | Stage 2 implementation plan | pending | — |
+| 4A | Stage 0 implementation plan | verified | Approved; commit `41986d1` |
+| 4B | Stage 1 implementation plan | verified | Approved by user on 2026-07-14 |
+| 4C | Stage 2 implementation plan | in progress | Drafting |
 | 4D | Stage 3 implementation plan | pending | — |
 | 4E | Stages 4–5 implementation plan | pending | — |
 | 5 | Cross-document consistency and implementation unlock | pending | — |
@@ -33,6 +33,16 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 0.1 | Preserve prototype baseline and regression contract | pending | Awaiting Gate 4A approval and implementation unlock |
 | 0.2 | Enforce the recovery source boundary | pending | Awaiting Gate 4A approval and implementation unlock |
 | 0.3 | Enforce warning, dependency, entitlement, and CI policy | pending | Awaiting Gate 4A approval and implementation unlock |
+
+### Stage 1 Task Ledger
+
+| Task | Deliverable | State | Evidence |
+|---|---|---|---|
+| 1.1 | Define document values and snapshot boundaries | pending | Awaiting Gate 4B approval and implementation unlock |
+| 1.2 | Implement single-owner `DocumentSession` | pending | Awaiting Gate 4B approval and implementation unlock |
+| 1.3 | Attach document storage to TextKit 2 exactly once | pending | Awaiting Gate 4B approval and implementation unlock |
+| 1.4 | Synchronize native edits, selection, scroll, and undo | pending | Awaiting Gate 4B approval and implementation unlock |
+| 1.5 | Replace containment shell with the single editor | pending | Awaiting Gate 4B approval and implementation unlock |
 
 | Stage | Outcome | State | Approval gate |
 |---|---|---|---|
@@ -85,7 +95,8 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Product contract | User approval; `git diff --check` | verified | `a4abbe1` |
 | 2026-07-14 | Architecture contract | User approval; `git diff --check` | verified | `273aee6` |
 | 2026-07-14 | Gate 3 documents | Authority, stage-pointer, vocabulary, and whitespace review | verified | `82aee23` |
-| 2026-07-14 | Gate 4A plan | Invariant comparison, prototype diff, placeholder scan, and whitespace review | verified | Uncommitted gate draft |
+| 2026-07-14 | Gate 4A plan | Invariant comparison, prototype diff, placeholder scan, and whitespace review | verified | `41986d1` |
+| 2026-07-14 | Gate 4B plan | SDK API check, type/test-count review, invariant comparison, and whitespace review | verified | Uncommitted gate draft |
 
 ## Current Manual Acceptance Matrix
 
