@@ -271,16 +271,27 @@ enum EditorCommand: Sendable {
     case insertLineBefore
 }
 
-struct TextEdit: Equatable, Sendable {
-    let replacementRange: NSRange
+struct TextMutation: Equatable, Sendable {
+    let range: NSRange
     let replacementText: String
+}
+
+struct TextEdit: Equatable, Sendable {
+    let mutations: [TextMutation]
     let resultingSelection: NSRange
+}
+
+enum EditorCommandOutcome: Equatable, Sendable {
+    case selection(NSRange)
+    case edit(TextEdit)
 }
 ```
 
+`EditorCommandOutcome.selection` handles `selectLine` without creating a fake text edit. Text-changing commands return one or more non-overlapping `TextMutation` values in ascending range order. Multiple narrow mutations let indentation and line joining preserve attributes on unchanged characters.
+
 `ScratchTextView` exposes responder actions for these commands. Application menu commands send actions through the first-responder chain. There is no editor-wide `NSEvent.addLocalMonitorForEvents` hook.
 
-Applying a `TextEdit` must use the text system's edit validation, form one undo group, restore the resulting selection, and produce one change notification. Undo integration tests—not assumptions about `NSTextStorage`—select the final AppKit mutation API.
+Applying a `TextEdit` validates all ranges together, applies mutations from highest location to lowest inside one undo group, restores the resulting selection, and produces one change notification. Undo integration tests—not assumptions about `NSTextStorage`—select the final AppKit mutation API.
 
 Native commands not listed above pass through untouched.
 

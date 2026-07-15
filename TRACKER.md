@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 0 — Baseline and containment  
 > **Current phase:** Planning  
-> **Current task:** Gate 4C — approve Stage 2 implementation plan
+> **Current task:** Gate 4D — approve Stage 3 implementation plan
 > **Implementation lock:** ON
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -16,9 +16,9 @@ Only these task states are valid: `pending`, `in progress`, `blocked`, and `veri
 | 2 | Create `ARCHITECTURE.md`; mark prior canon and review historical | verified | Approved; commit `273aee6` |
 | 3 | Replace `AGENTS.md`; create `TRACKER.md` | verified | Approved; commit `82aee23` |
 | 4A | Stage 0 implementation plan | verified | Approved; commit `41986d1` |
-| 4B | Stage 1 implementation plan | verified | Approved by user on 2026-07-14 |
-| 4C | Stage 2 implementation plan | in progress | Drafting |
-| 4D | Stage 3 implementation plan | pending | — |
+| 4B | Stage 1 implementation plan | verified | Approved; commit `92c8863` |
+| 4C | Stage 2 implementation plan | verified | Approved by user on 2026-07-14 |
+| 4D | Stage 3 implementation plan | in progress | Drafting |
 | 4E | Stages 4–5 implementation plan | pending | — |
 | 5 | Cross-document consistency and implementation unlock | pending | — |
 
@@ -43,6 +43,15 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 1.3 | Attach document storage to TextKit 2 exactly once | pending | Awaiting Gate 4B approval and implementation unlock |
 | 1.4 | Synchronize native edits, selection, scroll, and undo | pending | Awaiting Gate 4B approval and implementation unlock |
 | 1.5 | Replace containment shell with the single editor | pending | Awaiting Gate 4B approval and implementation unlock |
+
+### Stage 2 Task Ledger
+
+| Task | Deliverable | State | Evidence |
+|---|---|---|---|
+| 2.1 | Define command values and UTF-16 line geometry | pending | Awaiting Gate 4C approval and implementation unlock |
+| 2.2 | Implement and prove pure command transformations | pending | Awaiting Gate 4C approval and implementation unlock |
+| 2.3 | Apply commands through one undoable AppKit transaction | pending | Awaiting Gate 4C approval and implementation unlock |
+| 2.4 | Route fixed shortcuts through the first responder | pending | Awaiting Gate 4C approval and implementation unlock |
 
 | Stage | Outcome | State | Approval gate |
 |---|---|---|---|
@@ -80,10 +89,11 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2026-07-14 | Use a native Noto-inspired document title and visible information bar | `SPEC.md`, `ARCHITECTURE.md` |
 | 2026-07-14 | Display approximate prompt tokens as `~ceil(UTF-8 byte count / 4)`, with empty text equal to `0` | `SPEC.md`, `ARCHITECTURE.md` |
 | 2026-07-14 | Require user approval after every planning section and implementation stage | Design, `AGENTS.md`, `TRACKER.md` |
+| 2026-07-14 | Represent editor commands as selection-only outcomes or ordered narrow mutations so Select Line creates no fake edit and multi-line commands preserve unrelated attributes | `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` |
 
 ## Blockers
 
-None. Gate 3 is awaiting the required user approval, not blocked.
+None. Gate 4C is awaiting the required user approval, not blocked.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -96,7 +106,8 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Architecture contract | User approval; `git diff --check` | verified | `273aee6` |
 | 2026-07-14 | Gate 3 documents | Authority, stage-pointer, vocabulary, and whitespace review | verified | `82aee23` |
 | 2026-07-14 | Gate 4A plan | Invariant comparison, prototype diff, placeholder scan, and whitespace review | verified | `41986d1` |
-| 2026-07-14 | Gate 4B plan | SDK API check, type/test-count review, invariant comparison, and whitespace review | verified | Uncommitted gate draft |
+| 2026-07-14 | Gate 4B plan | SDK API check, type/test-count review, invariant comparison, and whitespace review | verified | `92c8863` |
+| 2026-07-14 | Gate 4C plan | Responder API check, command-contract correction, transformation review, test-count review, and whitespace review | verified | Uncommitted gate draft |
 
 ## Current Manual Acceptance Matrix
 

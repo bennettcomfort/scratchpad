@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` (recommended) or `executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Plan status:** Gates 4A–4B approved. The implementation lock in `AGENTS.md` remains ON until Gates 4C–4E and the final consistency gate are approved.
+> **Plan status:** Gates 4A–4C approved. The implementation lock in `AGENTS.md` remains ON until Gates 4D–4E and the final consistency gate are approved.
 
 **Goal:** Replace the unsafe prototype in place with a boringly reliable, single-document native macOS prompt and Markdown editor.
 
@@ -42,7 +42,8 @@ H14. No print(); use os.Logger with subsystem com.scratchpad.app.
 
 - Gate 4A: Recovery Stage 0 — Baseline and containment. Detailed below.
 - Gate 4B: Recovery Stage 1 — Document and editor core. Detailed below.
-- Gates 4C–4E: Stages 2–5. Intentionally absent until each section is drafted and approved.
+- Gate 4C: Recovery Stage 2 — Sublime-style command system. Detailed below.
+- Gates 4D–4E: Stages 3–5. Intentionally absent until each section is drafted and approved.
 - Gate 5: Cross-document consistency review and implementation unlock.
 
 ---
@@ -1822,3 +1823,1120 @@ After Tasks 1.1–1.5 are `verified`, stop. Do not start custom keybindings. Pre
 | Manual gate | all eight Stage 1 checks recorded as passing |
 
 The user must explicitly approve Stage 1 before `AGENTS.md` and `TRACKER.md` advance to Recovery Stage 2.
+
+---
+
+# Gate 4C — Recovery Stage 2: Sublime-Style Command System
+
+## Stage Goal
+
+Implement the ten fixed Sublime-style macOS commands as pure UTF-16 transformations, apply them through AppKit's validated text-edit path, and expose them through native responder-chain menu actions. Every text command must fire once, preserve a valid selection, create one undo operation, and do nothing when the editor is not first responder.
+
+Stage 2 adds no event monitor, custom shortcut preferences, keybinding file, command palette, Zen command, or global hotkey.
+
+## Stage 2 File Map
+
+**Create**
+
+- `Scratchpad/Editor/EditorCommand.swift` — command, context, mutation, edit, and outcome values.
+- `Scratchpad/Editor/LineTable.swift` — pure CRLF/LF-aware UTF-16 line geometry.
+- `Scratchpad/Editor/EditorCommandRouter.swift` — pure command transformations.
+- `Scratchpad/App/AppCommands.swift` — fixed menu items and keyboard shortcuts.
+- `ScratchpadTests/Editor/LineTableTests.swift`
+- `ScratchpadTests/Editor/EditorCommandRouterTests.swift`
+- `ScratchpadTests/Editor/ScratchTextViewCommandTests.swift`
+- `ScratchpadTests/App/AppCommandsTests.swift`
+
+**Modify**
+
+- `Scratchpad/Editor/ScratchTextView.swift` — responder actions and validated mutation application.
+- `Scratchpad/Editor/EditorHost.swift` — provide document line-ending command context.
+- `Scratchpad/App/ScratchpadApp.swift` — install `AppCommands`.
+- `project.yml` — extend only the explicit Stage 2 allowlists.
+- `TRACKER.md` — record task and approval evidence.
+
+## Corrected Command Result Contract
+
+Stage 2 uses the corrected architecture contract:
+
+```swift
+struct TextMutation: Equatable, Sendable {
+    let range: NSRange
+    let replacementText: String
+}
+
+struct TextEdit: Equatable, Sendable {
+    let mutations: [TextMutation]
+    let resultingSelection: NSRange
+}
+
+enum EditorCommandOutcome: Equatable, Sendable {
+    case selection(NSRange)
+    case edit(TextEdit)
+}
+```
+
+`selectLine` is selection-only and cannot dirty the document. Multi-line indent, outdent, and join use narrow non-overlapping mutations, preserving attributes on unchanged characters. Mutations are stored in ascending range order and applied in reverse order.
+
+### Task 2.1: Define Command Values and UTF-16 Line Geometry
+
+**Files:** Create `Scratchpad/Editor/EditorCommand.swift`, `Scratchpad/Editor/LineTable.swift`, and `ScratchpadTests/Editor/LineTableTests.swift`; modify `project.yml` and `TRACKER.md`.
+
+**Interfaces:** Produces `EditorCommand`, `EditorCommandContext`, `TextMutation`, `TextEdit`, `EditorCommandOutcome`, `LineRecord`, and `LineTable` for Task 2.2.
+
+- [ ] **Step 1: Add and write the failing line-table tests**
+
+```swift
+import Foundation
+import XCTest
+@testable import Scratchpad
+
+final class LineTableTests: XCTestCase {
+    func testParsesLFAndTrailingEmptyLine() {
+        let table = LineTable("one\ntwo\n")
+        XCTAssertEqual(table.lines.count, 3)
+        XCTAssertEqual(table.lines[0].content, NSRange(location: 0, length: 3))
+        XCTAssertEqual(table.lines[0].terminator, NSRange(location: 3, length: 1))
+        XCTAssertEqual(table.lines[2].full, NSRange(location: 8, length: 0))
+    }
+
+    func testTreatsCRLFAsOneTerminator() {
+        let table = LineTable("one\r\ntwo")
+        XCTAssertEqual(table.lines.count, 2)
+        XCTAssertEqual(table.lines[0].terminator, NSRange(location: 3, length: 2))
+        XCTAssertEqual(table.lines[1].content, NSRange(location: 5, length: 3))
+    }
+
+    func testSelectionEndingAtNextLineStartDoesNotSelectNextLine() {
+        let table = LineTable("one\ntwo\nthree")
+        XCTAssertEqual(
+            table.lineIndices(intersecting: NSRange(location: 0, length: 4)),
+            0 ... 0
+        )
+        XCTAssertEqual(
+            table.lineIndices(intersecting: NSRange(location: 1, length: 5)),
+            0 ... 1
+        )
+    }
+}
+```
+
+Add the test path to `ScratchpadTests.sources`, then run:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -only-testing:ScratchpadTests/LineTableTests test
+```
+
+Expected: compilation fails because `LineTable` does not exist.
+
+- [ ] **Step 2: Create `Scratchpad/Editor/EditorCommand.swift`**
+
+```swift
+import Foundation
+
+enum EditorCommand: Sendable {
+    case duplicateLine
+    case deleteLine
+    case moveLinesUp
+    case moveLinesDown
+    case selectLine
+    case joinLines
+    case indent
+    case outdent
+    case insertLineAfter
+    case insertLineBefore
+}
+
+struct EditorCommandContext: Equatable, Sendable {
+    let lineEnding: LineEnding
+    let indentationUnit: String
+    let tabWidth: Int
+    let keepsIndentation: Bool
+
+    static func defaults(lineEnding: LineEnding) -> Self {
+        Self(
+            lineEnding: lineEnding,
+            indentationUnit: "\t",
+            tabWidth: 4,
+            keepsIndentation: true
+        )
+    }
+
+    var newline: String {
+        lineEnding == .crlf ? "\r\n" : "\n"
+    }
+}
+
+struct TextMutation: Equatable, Sendable {
+    let range: NSRange
+    let replacementText: String
+}
+
+struct TextEdit: Equatable, Sendable {
+    let mutations: [TextMutation]
+    let resultingSelection: NSRange
+}
+
+enum EditorCommandOutcome: Equatable, Sendable {
+    case selection(NSRange)
+    case edit(TextEdit)
+}
+```
+
+- [ ] **Step 3: Create `Scratchpad/Editor/LineTable.swift`**
+
+```swift
+import Foundation
+
+struct LineRecord: Equatable, Sendable {
+    let content: NSRange
+    let terminator: NSRange
+
+    var full: NSRange {
+        NSRange(
+            location: content.location,
+            length: content.length + terminator.length
+        )
+    }
+}
+
+struct LineTable: Sendable {
+    let source: String
+    let lines: [LineRecord]
+    private let utf16Length: Int
+
+    init(_ source: String) {
+        self.source = source
+        let text = source as NSString
+        self.utf16Length = text.length
+        var records: [LineRecord] = []
+        var lineStart = 0
+        var cursor = 0
+
+        while cursor < text.length {
+            let unit = text.character(at: cursor)
+            guard unit == 10 || unit == 13 else {
+                cursor += 1
+                continue
+            }
+            let terminatorLength = unit == 13
+                && cursor + 1 < text.length
+                && text.character(at: cursor + 1) == 10 ? 2 : 1
+            records.append(LineRecord(
+                content: NSRange(location: lineStart, length: cursor - lineStart),
+                terminator: NSRange(location: cursor, length: terminatorLength)
+            ))
+            cursor += terminatorLength
+            lineStart = cursor
+        }
+
+        records.append(LineRecord(
+            content: NSRange(location: lineStart, length: text.length - lineStart),
+            terminator: NSRange(location: text.length, length: 0)
+        ))
+        self.lines = records
+    }
+
+    func clamped(_ range: NSRange) -> NSRange {
+        let location = min(max(0, range.location), utf16Length)
+        let length = min(max(0, range.length), utf16Length - location)
+        return NSRange(location: location, length: length)
+    }
+
+    func lineIndex(containing location: Int) -> Int {
+        let safeLocation = min(max(0, location), utf16Length)
+        for (index, line) in lines.enumerated() {
+            if safeLocation < NSMaxRange(line.full)
+                || line.full.length == 0 && safeLocation == line.full.location {
+                return index
+            }
+        }
+        return max(0, lines.count - 1)
+    }
+
+    func lineIndices(intersecting range: NSRange) -> ClosedRange<Int> {
+        let selection = clamped(range)
+        let first = lineIndex(containing: selection.location)
+        let endProbe = selection.length == 0
+            ? selection.location
+            : NSMaxRange(selection) - 1
+        return first ... lineIndex(containing: endProbe)
+    }
+
+    func substring(_ range: NSRange) -> String {
+        (source as NSString).substring(with: range)
+    }
+
+    func leadingIndentation(at index: Int) -> String {
+        let content = substring(lines[index].content) as NSString
+        var length = 0
+        while length < content.length {
+            let unit = content.character(at: length)
+            guard unit == 9 || unit == 32 else { break }
+            length += 1
+        }
+        return content.substring(with: NSRange(location: 0, length: length))
+    }
+}
+```
+
+- [ ] **Step 4: Add both editor sources and run verification**
+
+Add the two source paths to `Scratchpad.sources`, then run:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -only-testing:ScratchpadTests/LineTableTests test
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' build
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' test
+```
+
+Expected: 3 focused tests and all 21 tests pass with zero warnings.
+
+- [ ] **Step 5: Record and commit**
+
+```sh
+git add project.yml Scratchpad/Editor/EditorCommand.swift Scratchpad/Editor/LineTable.swift ScratchpadTests/Editor/LineTableTests.swift TRACKER.md
+git commit -m "feat: define editor command geometry"
+```
+
+### Task 2.2: Implement and Prove Pure Command Transformations
+
+**Files:** Create `Scratchpad/Editor/EditorCommandRouter.swift` and `ScratchpadTests/Editor/EditorCommandRouterTests.swift`; modify `project.yml` and `TRACKER.md`.
+
+**Interfaces:** Consumes Task 2.1 values. Produces `EditorCommandRouter.outcome(for:text:selection:context:) -> EditorCommandOutcome?`. Returning `nil` means a valid no-op, such as moving the first line up.
+
+- [ ] **Step 1: Write the failing table of all ten commands**
+
+Create tests with this shared helper:
+
+```swift
+import Foundation
+import XCTest
+@testable import Scratchpad
+
+final class EditorCommandRouterTests: XCTestCase {
+    private let lf = EditorCommandContext.defaults(lineEnding: .lf)
+
+    private func result(
+        _ command: EditorCommand,
+        text: String,
+        selection: NSRange,
+        context: EditorCommandContext? = nil
+    ) throws -> (String, NSRange) {
+        guard let outcome = EditorCommandRouter.outcome(
+            for: command,
+            text: text,
+            selection: selection,
+            context: context ?? lf
+        ) else { throw RouterTestError.noOutcome }
+        let value: (String, NSRange)
+        switch outcome {
+        case .selection(let range):
+            value = (text, range)
+        case .edit(let edit):
+            let transformed = NSMutableString(string: text)
+            for mutation in edit.mutations.reversed() {
+                transformed.replaceCharacters(in: mutation.range, with: mutation.replacementText)
+            }
+            value = (transformed as String, edit.resultingSelection)
+        }
+        XCTAssertGreaterThanOrEqual(value.1.location, 0)
+        XCTAssertGreaterThanOrEqual(value.1.length, 0)
+        XCTAssertLessThanOrEqual(NSMaxRange(value.1), value.0.utf16.count)
+        return value
+    }
+
+    func testDuplicateLineAndSelection() throws {
+        XCTAssertEqual(
+            try result(.duplicateLine, text: "one\ntwo", selection: NSRange(location: 1, length: 0)).0,
+            "one\none\ntwo"
+        )
+        XCTAssertEqual(
+            try result(.duplicateLine, text: "abc", selection: NSRange(location: 1, length: 1)).0,
+            "abbc"
+        )
+    }
+
+    func testDeleteLineIncludingFinalLineSeparator() throws {
+        XCTAssertEqual(
+            try result(.deleteLine, text: "one\ntwo\nthree", selection: NSRange(location: 5, length: 0)).0,
+            "one\nthree"
+        )
+        XCTAssertEqual(
+            try result(.deleteLine, text: "one\ntwo", selection: NSRange(location: 5, length: 0)).0,
+            "one"
+        )
+    }
+
+    func testMoveLinesUp() throws {
+        let value = try result(.moveLinesUp, text: "one\ntwo\nthree", selection: NSRange(location: 5, length: 0))
+        XCTAssertEqual(value.0, "two\none\nthree")
+        XCTAssertEqual(value.1, NSRange(location: 1, length: 0))
+    }
+
+    func testMoveLinesDown() throws {
+        let value = try result(.moveLinesDown, text: "one\ntwo\nthree", selection: NSRange(location: 5, length: 0))
+        XCTAssertEqual(value.0, "one\nthree\ntwo")
+        XCTAssertEqual(value.1, NSRange(location: 11, length: 0))
+    }
+
+    func testSelectLineDoesNotChangeText() throws {
+        let value = try result(.selectLine, text: "one\ntwo", selection: NSRange(location: 5, length: 0))
+        XCTAssertEqual(value.0, "one\ntwo")
+        XCTAssertEqual(value.1, NSRange(location: 4, length: 3))
+    }
+
+    func testJoinLinesRemovesNewlineAndLeadingIndentation() throws {
+        let value = try result(.joinLines, text: "one\n  two", selection: NSRange(location: 1, length: 0))
+        XCTAssertEqual(value.0, "one two")
+        XCTAssertEqual(value.1, NSRange(location: 4, length: 0))
+    }
+
+    func testIndentUsesNarrowInsertions() throws {
+        guard let outcome = EditorCommandRouter.outcome(
+            for: .indent,
+            text: "a\nb",
+            selection: NSRange(location: 0, length: 3),
+            context: lf
+        ), case .edit(let edit) = outcome else { throw RouterTestError.noOutcome }
+        XCTAssertEqual(edit.mutations.map(\.range), [
+            NSRange(location: 0, length: 0),
+            NSRange(location: 2, length: 0)
+        ])
+        XCTAssertEqual(try result(.indent, text: "a\nb", selection: NSRange(location: 0, length: 3)).0, "\ta\n\tb")
+    }
+
+    func testOutdentRemovesOneTabOrUpToTabWidthSpaces() throws {
+        XCTAssertEqual(
+            try result(.outdent, text: "\ta\n    b", selection: NSRange(location: 0, length: 8)).0,
+            "a\nb"
+        )
+    }
+
+    func testInsertLineAfterCarriesIndentation() throws {
+        let value = try result(.insertLineAfter, text: "  one", selection: NSRange(location: 3, length: 0))
+        XCTAssertEqual(value.0, "  one\n  ")
+        XCTAssertEqual(value.1, NSRange(location: 8, length: 0))
+    }
+
+    func testInsertLineBeforeCarriesIndentation() throws {
+        let value = try result(.insertLineBefore, text: "  one", selection: NSRange(location: 3, length: 0))
+        XCTAssertEqual(value.0, "  \n  one")
+        XCTAssertEqual(value.1, NSRange(location: 2, length: 0))
+    }
+
+    func testCRLFCommandsPreserveCRLF() throws {
+        let crlf = EditorCommandContext.defaults(lineEnding: .crlf)
+        XCTAssertEqual(
+            try result(.insertLineAfter, text: "one", selection: NSRange(location: 1, length: 0), context: crlf).0,
+            "one\r\n"
+        )
+    }
+}
+
+private enum RouterTestError: Error { case noOutcome }
+```
+
+Add the test path, then run:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -only-testing:ScratchpadTests/EditorCommandRouterTests test
+```
+
+Expected: compilation fails because the router does not exist.
+
+- [ ] **Step 2: Create `Scratchpad/Editor/EditorCommandRouter.swift`**
+
+Implement the following complete command dispatch and helpers; each handler returns mutations in ascending range order:
+
+```swift
+import Foundation
+
+enum EditorCommandRouter {
+    static func outcome(
+        for command: EditorCommand,
+        text: String,
+        selection: NSRange,
+        context: EditorCommandContext
+    ) -> EditorCommandOutcome? {
+        let table = LineTable(text)
+        let safeSelection = table.clamped(selection)
+        switch command {
+        case .duplicateLine: return duplicate(table, safeSelection, context)
+        case .deleteLine: return delete(table, safeSelection)
+        case .moveLinesUp: return move(table, safeSelection, context, direction: -1)
+        case .moveLinesDown: return move(table, safeSelection, context, direction: 1)
+        case .selectLine:
+            let indices = table.lineIndices(intersecting: safeSelection)
+            return .selection(covering(indices, in: table))
+        case .joinLines: return join(table, safeSelection)
+        case .indent: return indent(table, safeSelection, context)
+        case .outdent: return outdent(table, safeSelection, context)
+        case .insertLineAfter: return insertLine(table, safeSelection, context, before: false)
+        case .insertLineBefore: return insertLine(table, safeSelection, context, before: true)
+        }
+    }
+
+    private static func duplicate(
+        _ table: LineTable,
+        _ selection: NSRange,
+        _ context: EditorCommandContext
+    ) -> EditorCommandOutcome? {
+        if selection.length > 0 {
+            let selected = table.substring(selection)
+            return edit(
+                [TextMutation(
+                    range: NSRange(location: NSMaxRange(selection), length: 0),
+                    replacementText: selected
+                )],
+                NSRange(location: selection.location + selection.length, length: selection.length)
+            )
+        }
+        let index = table.lineIndex(containing: selection.location)
+        let line = table.lines[index]
+        let column = selection.location - line.content.location
+        if line.terminator.length > 0 {
+            let original = table.substring(line.full)
+            return edit(
+                [TextMutation(
+                    range: NSRange(location: NSMaxRange(line.full), length: 0),
+                    replacementText: original
+                )],
+                NSRange(location: selection.location + line.full.length, length: 0)
+            )
+        }
+        let content = table.substring(line.content)
+        let insertionLocation = NSMaxRange(line.content)
+        let replacement = context.newline + content
+        let location = insertionLocation
+            + context.newline.utf16.count + min(column, line.content.length)
+        return edit(
+            [TextMutation(
+                range: NSRange(location: insertionLocation, length: 0),
+                replacementText: replacement
+            )],
+            NSRange(location: location, length: 0)
+        )
+    }
+
+    private static func delete(
+        _ table: LineTable,
+        _ selection: NSRange
+    ) -> EditorCommandOutcome? {
+        let indices = table.lineIndices(intersecting: selection)
+        var range = covering(indices, in: table)
+        if range.length == 0 { return nil }
+        let last = table.lines[indices.upperBound]
+        if indices.upperBound == table.lines.count - 1,
+           last.terminator.length == 0,
+           indices.lowerBound > 0 {
+            let previousTerminator = table.lines[indices.lowerBound - 1].terminator
+            range = NSRange(
+                location: previousTerminator.location,
+                length: NSMaxRange(range) - previousTerminator.location
+            )
+        }
+        return edit(
+            [TextMutation(range: range, replacementText: "")],
+            NSRange(location: range.location, length: 0)
+        )
+    }
+
+    private static func move(
+        _ table: LineTable,
+        _ selection: NSRange,
+        _ context: EditorCommandContext,
+        direction: Int
+    ) -> EditorCommandOutcome? {
+        let selected = table.lineIndices(intersecting: selection)
+        let neighbor = direction < 0 ? selected.lowerBound - 1 : selected.upperBound + 1
+        guard table.lines.indices.contains(neighbor) else { return nil }
+        let affected = direction < 0
+            ? neighbor ... selected.upperBound
+            : selected.lowerBound ... neighbor
+        var contents = affected.map { table.substring(table.lines[$0].content) }
+        if direction < 0 {
+            let first = contents.removeFirst()
+            contents.append(first)
+        } else {
+            let last = contents.removeLast()
+            contents.insert(last, at: 0)
+        }
+        let affectedRange = covering(affected, in: table)
+        let hasTrailingTerminator = table.lines[affected.upperBound].terminator.length > 0
+        let replacement = contents.joined(separator: context.newline)
+            + (hasTrailingTerminator ? context.newline : "")
+        let neighborWidth = table.lines[neighbor].content.length + context.newline.utf16.count
+        let shiftedLocation = selection.location + (direction < 0 ? -neighborWidth : neighborWidth)
+        return edit(
+            [TextMutation(range: affectedRange, replacementText: replacement)],
+            NSRange(location: max(0, shiftedLocation), length: selection.length)
+        )
+    }
+
+    private static func join(
+        _ table: LineTable,
+        _ selection: NSRange
+    ) -> EditorCommandOutcome? {
+        var indices = table.lineIndices(intersecting: selection)
+        if indices.lowerBound == indices.upperBound {
+            guard indices.upperBound + 1 < table.lines.count else { return nil }
+            indices = indices.lowerBound ... indices.upperBound + 1
+        }
+        var mutations: [TextMutation] = []
+        for index in indices.lowerBound ..< indices.upperBound {
+            let current = table.lines[index]
+            let next = table.lines[index + 1]
+            let indentation = table.leadingIndentation(at: index + 1).utf16.count
+            mutations.append(TextMutation(
+                range: NSRange(
+                    location: current.content.location + current.content.length,
+                    length: current.terminator.length + indentation
+                ),
+                replacementText: " "
+            ))
+            _ = next
+        }
+        let caret = table.lines[indices.lowerBound].content.location
+            + table.lines[indices.lowerBound].content.length + 1
+        return edit(mutations, NSRange(location: caret, length: 0))
+    }
+
+    private static func indent(
+        _ table: LineTable,
+        _ selection: NSRange,
+        _ context: EditorCommandContext
+    ) -> EditorCommandOutcome? {
+        guard !context.indentationUnit.isEmpty else { return nil }
+        let indices = table.lineIndices(intersecting: selection)
+        let width = context.indentationUnit.utf16.count
+        let mutations = indices.map {
+            TextMutation(
+                range: NSRange(location: table.lines[$0].content.location, length: 0),
+                replacementText: context.indentationUnit
+            )
+        }
+        let start = mapInsertionPosition(selection.location, mutations: mutations, width: width)
+        let end = mapInsertionPosition(NSMaxRange(selection), mutations: mutations, width: width)
+        return edit(mutations, NSRange(location: start, length: max(0, end - start)))
+    }
+
+    private static func outdent(
+        _ table: LineTable,
+        _ selection: NSRange,
+        _ context: EditorCommandContext
+    ) -> EditorCommandOutcome? {
+        let text = table.source as NSString
+        let indices = table.lineIndices(intersecting: selection)
+        var mutations: [TextMutation] = []
+        for index in indices {
+            let start = table.lines[index].content.location
+            guard table.lines[index].content.length > 0 else { continue }
+            var length = 0
+            if text.character(at: start) == 9 {
+                length = 1
+            } else {
+                while length < min(context.tabWidth, table.lines[index].content.length),
+                      text.character(at: start + length) == 32 {
+                    length += 1
+                }
+            }
+            if length > 0 {
+                mutations.append(TextMutation(
+                    range: NSRange(location: start, length: length),
+                    replacementText: ""
+                ))
+            }
+        }
+        guard !mutations.isEmpty else { return nil }
+        let start = mapRemovalPosition(selection.location, mutations: mutations)
+        let end = mapRemovalPosition(NSMaxRange(selection), mutations: mutations)
+        return edit(mutations, NSRange(location: start, length: max(0, end - start)))
+    }
+
+    private static func insertLine(
+        _ table: LineTable,
+        _ selection: NSRange,
+        _ context: EditorCommandContext,
+        before: Bool
+    ) -> EditorCommandOutcome? {
+        let index = table.lineIndex(containing: selection.location)
+        let line = table.lines[index]
+        let indentation = context.keepsIndentation ? table.leadingIndentation(at: index) : ""
+        if before {
+            return edit(
+                [TextMutation(range: NSRange(location: line.full.location, length: 0), replacementText: indentation + context.newline)],
+                NSRange(location: line.full.location + indentation.utf16.count, length: 0)
+            )
+        }
+        if line.terminator.length > 0 {
+            return edit(
+                [TextMutation(range: NSRange(location: NSMaxRange(line.full), length: 0), replacementText: indentation + context.newline)],
+                NSRange(location: NSMaxRange(line.full) + indentation.utf16.count, length: 0)
+            )
+        }
+        return edit(
+            [TextMutation(range: NSRange(location: NSMaxRange(line.content), length: 0), replacementText: context.newline + indentation)],
+            NSRange(location: NSMaxRange(line.content) + context.newline.utf16.count + indentation.utf16.count, length: 0)
+        )
+    }
+
+    private static func covering(
+        _ indices: ClosedRange<Int>,
+        in table: LineTable
+    ) -> NSRange {
+        let start = table.lines[indices.lowerBound].full.location
+        let end = NSMaxRange(table.lines[indices.upperBound].full)
+        return NSRange(location: start, length: end - start)
+    }
+
+    private static func edit(
+        _ mutations: [TextMutation],
+        _ selection: NSRange
+    ) -> EditorCommandOutcome {
+        .edit(TextEdit(mutations: mutations, resultingSelection: selection))
+    }
+
+    private static func mapInsertionPosition(
+        _ position: Int,
+        mutations: [TextMutation],
+        width: Int
+    ) -> Int {
+        position + mutations.filter { $0.range.location <= position }.count * width
+    }
+
+    private static func mapRemovalPosition(
+        _ position: Int,
+        mutations: [TextMutation]
+    ) -> Int {
+        position - mutations.reduce(0) { total, mutation in
+            total + min(max(0, position - mutation.range.location), mutation.range.length)
+        }
+    }
+}
+```
+
+- [ ] **Step 3: Run focused and full verification**
+
+Add the router source and test paths, then run:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -only-testing:ScratchpadTests/EditorCommandRouterTests test
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' build
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' test
+```
+
+Expected: 11 router tests and all 32 tests pass with zero warnings.
+
+- [ ] **Step 4: Record and commit**
+
+```sh
+git add project.yml Scratchpad/Editor/EditorCommandRouter.swift ScratchpadTests/Editor/EditorCommandRouterTests.swift TRACKER.md
+git commit -m "feat: implement Sublime text transformations"
+```
+
+### Task 2.3: Apply Commands Through One Undoable AppKit Transaction
+
+**Files:** Modify `Scratchpad/Editor/ScratchTextView.swift` and `Scratchpad/Editor/EditorHost.swift`; create `ScratchpadTests/Editor/ScratchTextViewCommandTests.swift`; modify `project.yml` and `TRACKER.md`.
+
+**Interfaces:** Consumes `EditorCommandOutcome`. Produces ten Objective-C responder actions and `apply(_:)`, which validates all mutations together, applies them in reverse range order, calls `didChangeText()` once, and restores selection.
+
+- [ ] **Step 1: Write four failing AppKit integration tests**
+
+Create `ScratchpadTests/Editor/ScratchTextViewCommandTests.swift`:
+
+```swift
+import AppKit
+import XCTest
+@testable import Scratchpad
+
+@MainActor
+final class ScratchTextViewCommandTests: XCTestCase {
+    private func assembly(
+        text: String,
+        saveState: DocumentSaveState = .untitled,
+        onEdit: @escaping @MainActor (DocumentSession) -> Void = { _ in }
+    ) throws -> (DocumentSession, NSWindow, ScratchTextView) {
+        let document = DocumentSession(text: text, saveState: saveState)
+        let coordinator = EditorCoordinator(document: document, onEdit: onEdit)
+        let scrollView = EditorHost.makeScrollView(document: document, coordinator: coordinator)
+        guard let textView = scrollView.documentView as? ScratchTextView else {
+            throw ScratchCommandTestError.missingTextView
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = scrollView
+        window.makeFirstResponder(textView)
+        return (document, window, textView)
+    }
+
+    func testDuplicateActionFiresOnceAndUndoesAsOneOperation() throws {
+        var editCount = 0
+        let (document, _, textView) = try assembly(text: "one") { _ in editCount += 1 }
+        textView.setSelectedRange(NSRange(location: 1, length: 0))
+
+        textView.scratchpadDuplicateLine(nil)
+
+        XCTAssertEqual(document.storage.string, "one\none")
+        XCTAssertEqual(document.generation, 1)
+        XCTAssertEqual(editCount, 1)
+        guard let undoManager = textView.undoManager else {
+            XCTFail("window-backed editor requires undo manager")
+            return
+        }
+        undoManager.undo()
+        XCTAssertEqual(document.storage.string, "one")
+    }
+
+    func testMultiLineIndentPreservesAttributesAndUndoesOnce() throws {
+        let attribute = NSAttributedString.Key("ScratchpadCommandTest")
+        let (document, _, textView) = try assembly(text: "a\nb")
+        document.storage.addAttribute(
+            attribute,
+            value: true,
+            range: NSRange(location: 0, length: document.storage.length)
+        )
+        textView.setSelectedRange(NSRange(location: 0, length: 3))
+
+        textView.scratchpadIndent(nil)
+
+        XCTAssertEqual(document.storage.string, "\ta\n\tb")
+        XCTAssertNotNil(document.storage.attribute(attribute, at: 1, effectiveRange: nil))
+        XCTAssertNotNil(document.storage.attribute(attribute, at: 4, effectiveRange: nil))
+        guard let undoManager = textView.undoManager else {
+            XCTFail("window-backed editor requires undo manager")
+            return
+        }
+        undoManager.undo()
+        XCTAssertEqual(document.storage.string, "a\nb")
+        XCTAssertFalse(undoManager.canUndo)
+    }
+
+    func testSelectLineChangesSelectionWithoutDirtyingDocument() throws {
+        let (document, _, textView) = try assembly(text: "one\ntwo", saveState: .clean)
+        textView.setSelectedRange(NSRange(location: 5, length: 0))
+
+        textView.scratchpadSelectLine(nil)
+
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 3))
+        XCTAssertEqual(document.storage.string, "one\ntwo")
+        XCTAssertEqual(document.generation, 0)
+        XCTAssertEqual(document.saveState, .clean)
+        XCTAssertFalse(textView.undoManager?.canUndo ?? false)
+    }
+
+    func testEveryTextChangingCommandUndoesInOneOperation() throws {
+        let cases: [(String, NSRange, @MainActor (ScratchTextView) -> Void)] = [
+            ("one", NSRange(location: 1, length: 0), { $0.scratchpadDuplicateLine(nil) }),
+            ("one\ntwo", NSRange(location: 1, length: 0), { $0.scratchpadDeleteLine(nil) }),
+            ("one\ntwo", NSRange(location: 5, length: 0), { $0.scratchpadMoveLinesUp(nil) }),
+            ("one\ntwo", NSRange(location: 1, length: 0), { $0.scratchpadMoveLinesDown(nil) }),
+            ("one\ntwo", NSRange(location: 1, length: 0), { $0.scratchpadJoinLines(nil) }),
+            ("one\ntwo", NSRange(location: 0, length: 7), { $0.scratchpadIndent(nil) }),
+            ("\tone", NSRange(location: 1, length: 0), { $0.scratchpadOutdent(nil) }),
+            ("  one", NSRange(location: 3, length: 0), { $0.scratchpadInsertLineAfter(nil) }),
+            ("  one", NSRange(location: 3, length: 0), { $0.scratchpadInsertLineBefore(nil) })
+        ]
+
+        for (text, selection, invoke) in cases {
+            let (document, _, textView) = try assembly(text: text)
+            textView.setSelectedRange(selection)
+            invoke(textView)
+            XCTAssertNotEqual(document.storage.string, text)
+            guard let undoManager = textView.undoManager else {
+                XCTFail("window-backed editor requires undo manager")
+                return
+            }
+            undoManager.undo()
+            XCTAssertEqual(document.storage.string, text)
+            XCTAssertFalse(undoManager.canUndo)
+        }
+    }
+}
+
+private enum ScratchCommandTestError: Error { case missingTextView }
+```
+
+The tests invoke actual responder actions and retain their windows for the lifetime of each assertion.
+
+Run:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -only-testing:ScratchpadTests/ScratchTextViewCommandTests test
+```
+
+Expected: compilation fails because the actions do not exist.
+
+- [ ] **Step 2: Replace `Scratchpad/Editor/ScratchTextView.swift` with responder actions**
+
+```swift
+import AppKit
+
+@MainActor
+final class ScratchTextView: NSTextView {
+    var commandContext = EditorCommandContext.defaults(lineEnding: .lf)
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let window { window.makeFirstResponder(self) }
+    }
+
+    @objc func scratchpadDuplicateLine(_ sender: Any?) { perform(.duplicateLine) }
+    @objc func scratchpadDeleteLine(_ sender: Any?) { perform(.deleteLine) }
+    @objc func scratchpadMoveLinesUp(_ sender: Any?) { perform(.moveLinesUp) }
+    @objc func scratchpadMoveLinesDown(_ sender: Any?) { perform(.moveLinesDown) }
+    @objc func scratchpadSelectLine(_ sender: Any?) { perform(.selectLine) }
+    @objc func scratchpadJoinLines(_ sender: Any?) { perform(.joinLines) }
+    @objc func scratchpadIndent(_ sender: Any?) { perform(.indent) }
+    @objc func scratchpadOutdent(_ sender: Any?) { perform(.outdent) }
+    @objc func scratchpadInsertLineAfter(_ sender: Any?) { perform(.insertLineAfter) }
+    @objc func scratchpadInsertLineBefore(_ sender: Any?) { perform(.insertLineBefore) }
+
+    private func perform(_ command: EditorCommand) {
+        guard let outcome = EditorCommandRouter.outcome(
+            for: command,
+            text: string,
+            selection: selectedRange(),
+            context: commandContext
+        ) else { return }
+        switch outcome {
+        case .selection(let selection):
+            setSelectedRange(selection)
+        case .edit(let edit):
+            apply(edit)
+        }
+    }
+
+    private func apply(_ edit: TextEdit) {
+        let ranges = edit.mutations.map { NSValue(range: $0.range) }
+        let replacements = edit.mutations.map(\.replacementText)
+        guard shouldChangeText(
+            inRanges: ranges,
+            replacementStrings: replacements
+        ) else { return }
+
+        breakUndoCoalescing()
+        undoManager?.beginUndoGrouping()
+        defer { undoManager?.endUndoGrouping() }
+        for mutation in edit.mutations.reversed() {
+            replaceCharacters(in: mutation.range, with: mutation.replacementText)
+        }
+        setSelectedRange(edit.resultingSelection)
+        didChangeText()
+    }
+}
+```
+
+- [ ] **Step 3: Set command context during host construction and update**
+
+In `makeScrollView`, set:
+
+```swift
+textView.commandContext = .defaults(lineEnding: document.lineEnding)
+```
+
+In `updateNSView`, after identity assertions, set the same value. Stage 4 replaces this default context with values from `SettingsStore`.
+
+- [ ] **Step 4: Run focused and full verification**
+
+Add the test path, then run:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -only-testing:ScratchpadTests/ScratchTextViewCommandTests test
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' build
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' test
+```
+
+Expected: 4 focused tests and all 36 tests pass; each text action produces one notification and one undo group, and every text-changing command is restored by one Undo.
+
+- [ ] **Step 5: Record and commit**
+
+```sh
+git add project.yml Scratchpad/Editor/ScratchTextView.swift Scratchpad/Editor/EditorHost.swift ScratchpadTests/Editor/ScratchTextViewCommandTests.swift TRACKER.md
+git commit -m "feat: apply editor commands through AppKit"
+```
+
+### Task 2.4: Route Fixed Shortcuts Through the First Responder
+
+**Files:** Create `Scratchpad/App/AppCommands.swift` and `ScratchpadTests/App/AppCommandsTests.swift`; modify `Scratchpad/App/ScratchpadApp.swift`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Produces native menu commands whose action target is always `nil`, forcing AppKit to begin at the key window's first responder. No command calls a document or storage object directly.
+
+- [ ] **Step 1: Write failing responder-chain tests**
+
+Create `ScratchpadTests/App/AppCommandsTests.swift`:
+
+```swift
+import AppKit
+import XCTest
+@testable import Scratchpad
+
+@MainActor
+final class AppCommandsTests: XCTestCase {
+    private func assembly() throws -> (DocumentSession, NSWindow, ScratchTextView) {
+        let document = DocumentSession(text: "one")
+        let coordinator = EditorCoordinator(document: document, onEdit: { _ in })
+        let scrollView = EditorHost.makeScrollView(document: document, coordinator: coordinator)
+        guard let textView = scrollView.documentView as? ScratchTextView else {
+            throw AppCommandsTestError.missingTextView
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = scrollView
+        window.makeKeyAndOrderFront(nil)
+        return (document, window, textView)
+    }
+
+    func testResponderActionReachesFocusedScratchTextViewExactlyOnce() throws {
+        let _ = AppCommands()
+        let (document, window, textView) = try assembly()
+        defer { window.close() }
+        textView.setSelectedRange(NSRange(location: 1, length: 0))
+        XCTAssertTrue(window.makeFirstResponder(textView))
+
+        let handled = NSApp.sendAction(
+            #selector(ScratchTextView.scratchpadDuplicateLine(_:)),
+            to: nil,
+            from: nil
+        )
+
+        XCTAssertTrue(handled)
+        XCTAssertEqual(document.storage.string, "one\none")
+        XCTAssertEqual(document.generation, 1)
+    }
+
+    func testResponderActionDoesNotEditWithNonEditorFirstResponder() throws {
+        let _ = AppCommands()
+        let (document, window, _) = try assembly()
+        defer { window.close() }
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 120, height: 24))
+        window.contentView?.addSubview(field)
+        XCTAssertTrue(window.makeFirstResponder(field))
+
+        let handled = NSApp.sendAction(
+            #selector(ScratchTextView.scratchpadDuplicateLine(_:)),
+            to: nil,
+            from: nil
+        )
+
+        XCTAssertFalse(handled)
+        XCTAssertEqual(document.storage.string, "one")
+        XCTAssertEqual(document.generation, 0)
+    }
+}
+
+private enum AppCommandsTestError: Error { case missingTextView }
+```
+
+Run:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -only-testing:ScratchpadTests/AppCommandsTests test
+```
+
+Expected: compilation fails because `AppCommands` does not exist.
+
+- [ ] **Step 2: Create `Scratchpad/App/AppCommands.swift`**
+
+```swift
+import AppKit
+import SwiftUI
+
+struct AppCommands: Commands {
+    var body: some Commands {
+        CommandMenu("Selection") {
+            command("Duplicate Line or Selection", #selector(ScratchTextView.scratchpadDuplicateLine(_:)), "d", [.command, .shift])
+            command("Delete Line", #selector(ScratchTextView.scratchpadDeleteLine(_:)), "k", [.control, .shift])
+            command("Move Lines Up", #selector(ScratchTextView.scratchpadMoveLinesUp(_:)), .upArrow, [.control, .command])
+            command("Move Lines Down", #selector(ScratchTextView.scratchpadMoveLinesDown(_:)), .downArrow, [.control, .command])
+            command("Select Line", #selector(ScratchTextView.scratchpadSelectLine(_:)), "l", .command)
+            command("Join Lines", #selector(ScratchTextView.scratchpadJoinLines(_:)), "j", .command)
+            command("Indent", #selector(ScratchTextView.scratchpadIndent(_:)), "]", .command)
+            command("Outdent", #selector(ScratchTextView.scratchpadOutdent(_:)), "[", .command)
+            command("Insert Line After", #selector(ScratchTextView.scratchpadInsertLineAfter(_:)), .return, .command)
+            command("Insert Line Before", #selector(ScratchTextView.scratchpadInsertLineBefore(_:)), .return, [.command, .shift])
+        }
+    }
+
+    private func command(
+        _ title: String,
+        _ action: Selector,
+        _ key: KeyEquivalent,
+        _ modifiers: EventModifiers
+    ) -> some View {
+        Button(title) {
+            NSApp.sendAction(action, to: nil, from: nil)
+        }
+        .keyboardShortcut(key, modifiers: modifiers)
+    }
+}
+```
+
+- [ ] **Step 3: Install commands in `ScratchpadApp`**
+
+Add:
+
+```swift
+.commands { AppCommands() }
+```
+
+to the `Window` scene after `.windowResizability(.contentMinSize)`.
+
+- [ ] **Step 4: Add allowlist paths and run automated verification**
+
+Add `AppCommands.swift` and `AppCommandsTests.swift` to their explicit source lists. Run focused tests, build, full tests, and:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -only-testing:ScratchpadTests/AppCommandsTests test
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' build
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' test
+rg 'addLocalMonitorForEvents|addGlobalMonitorForEvents|keyDown\(' Scratchpad/App Scratchpad/Editor
+```
+
+Expected: 2 focused tests; all 38 tests pass; warning-free build; scan finds no event-monitor or general key interception and exits 1.
+
+- [ ] **Step 5: Run the manual shortcut and undo matrix**
+
+For every shortcut in `SPEC.md`, record: initial text/selection, one invocation, resulting text/selection, one Undo, and restored original. Also verify `⌘Delete`, Option-arrow movement, Option-delete, clipboard, marked-text input, `⌘F`, and Services remain native. Focus a button or menu before invoking each custom menu action and confirm it cannot edit the document.
+
+- [ ] **Step 6: Record and commit**
+
+```sh
+git add project.yml Scratchpad/App/AppCommands.swift Scratchpad/App/ScratchpadApp.swift ScratchpadTests/App/AppCommandsTests.swift TRACKER.md
+git commit -m "feat: route fixed shortcuts through responders"
+```
+
+## Stage 2 Approval Gate
+
+After Tasks 2.1–2.4 are `verified`, stop before recovery or file work. Present fresh evidence for:
+
+| Acceptance check | Required result |
+|---|---|
+| Command coverage | all ten fixed commands have pure transformation tests |
+| Line correctness | LF, CRLF, final lines, empty lines, multi-line selections, and boundary selections pass |
+| Selection-only behavior | Select Line changes no text, generation, dirty state, or undo stack |
+| Attribute safety | multi-line prefix/join operations touch only their narrow mutation ranges |
+| AppKit transaction | all ranges validated together, reverse-applied, one `didChangeText`, one undo group |
+| Responder routing | focused editor handles once; non-editor focus handles zero times |
+| Native compatibility | native movement, deletion, clipboard, marked text, find, and Services remain intact |
+| Monitor prohibition | no local/global monitor or general `keyDown` interception exists |
+| Automated gate | warning-free build and 38 passing tests |
+| Manual gate | every shortcut result and one-step Undo recorded as passing |
+
+The user must explicitly approve Stage 2 before `AGENTS.md` and `TRACKER.md` advance to Recovery Stage 3.
