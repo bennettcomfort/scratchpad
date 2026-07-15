@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` (recommended) or `executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Plan status:** Gates 4A–4D approved. The implementation lock in `AGENTS.md` remains ON until Gate 4E and the final consistency gate are approved.
+> **Plan status:** Gates 4A–4D approved; Gate 4E is drafted below and awaits approval. The implementation lock in `AGENTS.md` remains ON until Gate 4E and the final consistency gate are approved.
 
 **Goal:** Replace the unsafe prototype in place with a boringly reliable, single-document native macOS prompt and Markdown editor.
 
@@ -44,7 +44,7 @@ H14. No print(); use os.Logger with subsystem com.scratchpad.app.
 - Gate 4B: Recovery Stage 1 — Document and editor core. Detailed below.
 - Gate 4C: Recovery Stage 2 — Sublime-style command system. Detailed below.
 - Gate 4D: Recovery Stage 3 — data-safe persistence and lifecycle. Detailed below.
-- Gate 4E: Recovery Stages 4–5. Drafting begins after Gate 4D approval.
+- Gate 4E: Recovery Stages 4–5 — native presentation and release hardening. Drafted below; awaiting approval.
 - Gate 5: Cross-document consistency review and implementation unlock.
 
 ---
@@ -654,6 +654,7 @@ final class DocumentSession {
     private(set) var fileReference: ExternalFileReference?
     private(set) var displayName: String
     private(set) var saveState: DocumentSaveState
+    private(set) var hasUnsavedChanges: Bool
     private(set) var generation: Int
     private(set) var lastSavedHash: String?
     private(set) var lastKnownDiskMTime: Date?
@@ -824,6 +825,7 @@ struct DocumentSnapshot: Sendable {
     let text: String
     let fileReference: ExternalFileReference?
     let saveState: DocumentSaveState
+    let hasUnsavedChanges: Bool
     let selection: TextSelection
     let scrollOffsetY: Double
     let lineEnding: LineEnding
@@ -902,11 +904,13 @@ final class DocumentSessionTests: XCTestCase {
         untitled.noteUserEdit()
         XCTAssertEqual(untitled.generation, 1)
         XCTAssertEqual(untitled.saveState, .edited)
+        XCTAssertTrue(untitled.hasUnsavedChanges)
 
         let conflicted = DocumentSession(text: "draft", saveState: .conflicted)
         conflicted.noteUserEdit()
         XCTAssertEqual(conflicted.generation, 1)
         XCTAssertEqual(conflicted.saveState, .conflicted)
+        XCTAssertTrue(conflicted.hasUnsavedChanges)
     }
 
     func testWholeReplacementIsSanctionedAndClampsSelection() {
@@ -931,6 +935,7 @@ final class DocumentSessionTests: XCTestCase {
             text: "snapshot",
             displayName: "Prompt",
             saveState: .edited,
+            hasUnsavedChanges: true,
             generation: 7,
             lineEnding: .crlf,
             selection: TextSelection(location: 2, length: 3),
@@ -943,6 +948,7 @@ final class DocumentSessionTests: XCTestCase {
         XCTAssertEqual(snapshot.documentID, id)
         XCTAssertEqual(snapshot.text, "snapshot")
         XCTAssertEqual(snapshot.generation, 7)
+        XCTAssertTrue(snapshot.hasUnsavedChanges)
         XCTAssertEqual(snapshot.selection, TextSelection(location: 2, length: 3))
         XCTAssertEqual(snapshot.scrollOffsetY, 44)
         XCTAssertEqual(snapshot.lineEnding, .crlf)
@@ -976,6 +982,7 @@ final class DocumentSession {
     private(set) var fileReference: ExternalFileReference?
     private(set) var displayName: String
     private(set) var saveState: DocumentSaveState
+    private(set) var hasUnsavedChanges: Bool
     private(set) var generation: Int
     private(set) var lastSavedHash: String?
     private(set) var lastKnownDiskMTime: Date?
@@ -990,6 +997,7 @@ final class DocumentSession {
         fileReference: ExternalFileReference? = nil,
         displayName: String = "Untitled",
         saveState: DocumentSaveState = .untitled,
+        hasUnsavedChanges: Bool = false,
         generation: Int = 0,
         lastSavedHash: String? = nil,
         lastKnownDiskMTime: Date? = nil,
@@ -1002,6 +1010,7 @@ final class DocumentSession {
         self.fileReference = fileReference
         self.displayName = displayName
         self.saveState = saveState
+        self.hasUnsavedChanges = hasUnsavedChanges
         self.generation = generation
         self.lastSavedHash = lastSavedHash
         self.lastKnownDiskMTime = lastKnownDiskMTime
@@ -1033,10 +1042,12 @@ final class DocumentSession {
             fileReference = nil
             displayName = "Untitled"
             saveState = .untitled
+            hasUnsavedChanges = false
             lastSavedHash = nil
             lastKnownDiskMTime = nil
         case .fileOpen, .confirmedDiskReload:
             saveState = .clean
+            hasUnsavedChanges = false
         case .sessionRestore:
             break
         }
@@ -1044,6 +1055,7 @@ final class DocumentSession {
 
     func noteUserEdit() {
         generation += 1
+        hasUnsavedChanges = true
         if saveState == .untitled || saveState == .clean {
             saveState = .edited
         }
@@ -1064,6 +1076,7 @@ final class DocumentSession {
             text: storage.string,
             fileReference: fileReference,
             saveState: saveState,
+            hasUnsavedChanges: hasUnsavedChanges,
             selection: selection,
             scrollOffsetY: scrollOffsetY,
             lineEnding: lineEnding,
@@ -3036,7 +3049,7 @@ The `async` requirements make actor isolation explicit at every call site. Test 
 
 ### Task 3.1: Establish Atomic Persistence and Internal Paths
 
-**Files:** Create `Scratchpad/Persistence/ApplicationSupportPaths.swift`, `Scratchpad/Persistence/AtomicFileWriter.swift`, and `ScratchpadTests/Persistence/AtomicFileWriterTests.swift`; modify `project.yml` and `TRACKER.md`.
+**Files:** Create `Scratchpad/Persistence/ApplicationSupportPaths.swift`, `Scratchpad/Persistence/AtomicFileWriter.swift`, `Scratchpad/Utilities/ContentHash.swift`, and `ScratchpadTests/Persistence/AtomicFileWriterTests.swift`; modify `project.yml` and `TRACKER.md`.
 
 **Interfaces:** Produces `ApplicationSupportPaths`, `AtomicFileWriting`, `AtomicFileWriter`, `AtomicFileWriterError`, and `ContentHash` for every later Stage 3 task.
 
@@ -3117,7 +3130,7 @@ enum ContentHash {
 Run the focused test command again, then run `git diff --check`. Expected: 8 tests pass and the diff has no whitespace errors.
 
 ```sh
-git add Scratchpad/Persistence/ApplicationSupportPaths.swift Scratchpad/Persistence/AtomicFileWriter.swift ScratchpadTests/Persistence/AtomicFileWriterTests.swift project.yml TRACKER.md
+git add Scratchpad/Persistence/ApplicationSupportPaths.swift Scratchpad/Persistence/AtomicFileWriter.swift Scratchpad/Utilities/ContentHash.swift ScratchpadTests/Persistence/AtomicFileWriterTests.swift project.yml TRACKER.md
 git commit -m "feat: add atomic persistence foundation"
 ```
 
@@ -3365,7 +3378,7 @@ func testDebounceTasksAreIndependentByDocumentID()
 func testRepeatedEditWritesOnlyFreshestSnapshotAfterTwoSeconds()
 func testExplicitFlushCancelsPendingTaskAndWritesLatestText()
 func testSessionFlushRecordsSelectionScrollAndCleanFlag()
-func testDirtyOrUntitledLaunchPrefersRecoveryText()
+func testUnsavedOrNonemptyUntitledLaunchPrefersRecoveryText()
 func testCleanFileBackedLaunchReopensDiskInsteadOfRecoveryText()
 func testUnreadableSessionPreservesOrphanRecoveryForNextLaunch()
 ```
@@ -3405,7 +3418,7 @@ final class RecoveryCoordinator {
 
 Store pending tasks in `[UUID: Task<Void, Never>]`. A task captures only the UUID; when the clock completes on the main actor, use `documentProvider` to look up the still-current document and call `recoverySnapshot()` then. `flushRecovery` cancels the pending task, takes a fresh snapshot synchronously, and awaits repository persistence. Do not clear the pending marker until success or explicit cancellation.
 
-Launch resolution is pure: a dirty or untitled session with matching recovery selects `.recovery`; a clean file-backed session resolves its `fileReferenceID` through `BookmarkAccessing.reference(for:)` and selects `.file`; missing/corrupt session selects `.empty` while leaving every orphan recovery file untouched. ApplicationModel applies recovered text only with `replaceEntireContents(_:)`. Immediately after restoration and before the editor accepts input, flush a session record with `didCloseCleanly = false`.
+Launch resolution is pure: a session with `hasUnsavedChanges == true`, or a nonempty untitled session, selects matching `.recovery`; a file-backed session with `hasUnsavedChanges == false` resolves its `fileReferenceID` through `BookmarkAccessing.reference(for:)` and selects `.file`; missing/corrupt session selects `.empty` while leaving every orphan recovery file untouched. ApplicationModel applies recovered text only with `replaceEntireContents(_:)`. Immediately after restoration and before the editor accepts input, flush a session record with `didCloseCleanly = false`.
 
 - [ ] **Step 3: Prove recovery freshness and commit**
 
@@ -3418,7 +3431,7 @@ git commit -m "feat: restore and flush latest recovery state"
 
 ### Task 3.6: Serialize Decisions and Destructive Document Operations
 
-**Files:** Create `Scratchpad/App/DocumentDecisionCoordinator.swift`, `Scratchpad/App/FilePanelProvider.swift`, and `ScratchpadTests/App/DocumentDecisionCoordinatorTests.swift`; modify `Scratchpad/App/ApplicationModel.swift`, `Scratchpad/Document/DocumentSession.swift`, `Scratchpad/App/ScratchpadApp.swift`, `Scratchpad/App/AppCommands.swift`, `project.yml`, and `TRACKER.md`.
+**Files:** Create `Scratchpad/App/DocumentDecisionCoordinator.swift`, `Scratchpad/App/FilePanelProvider.swift`, `Scratchpad/Utilities/Log.swift`, and `ScratchpadTests/App/DocumentDecisionCoordinatorTests.swift`; modify `Scratchpad/App/ApplicationModel.swift`, `Scratchpad/Document/DocumentSession.swift`, `Scratchpad/App/ScratchpadApp.swift`, `Scratchpad/App/AppCommands.swift`, `project.yml`, and `TRACKER.md`.
 
 **Interfaces:** Consumes `FileServicing`, `RecoveryCoordinator`, and the exact decision/error values in `ARCHITECTURE.md`. Produces awaited New/Open/Save/Save As/Close operations and one decision presentation source.
 
@@ -3445,6 +3458,8 @@ Use a controllable `FileServicing` fake. In the close test, suspend `save`; asse
 
 Use the `ErrorBanner`, `BannerAction`, `PendingReplacement`, `ConflictContext`, `DocumentDecision`, `DocumentDecisionResolution`, and `DocumentDecisionCoordinator` declarations verbatim from `ARCHITECTURE.md`. `request` stores one checked continuation; a second request while pending returns `.cancel`. `resolvePending` clears state before resuming the continuation exactly once.
 
+Create `AppLog` with `os.Logger(subsystem: "com.scratchpad.app", category:)` instances for `lifecycle`, `persistence`, `bookmarks`, and `files`. Every mapped banner logs the typed public error category; file paths and document text use private interpolation. No service or view calls `print`.
+
 `ApplicationModel` exposes:
 
 ```swift
@@ -3470,6 +3485,8 @@ The live provider wraps `NSOpenPanel.begin` and `NSSavePanel.begin` with checked
 
 Every operation must transition `idle -> one active state -> idle` with `defer`. Save captures `(documentID, generation)`. After success it always adopts the verified disk base; it marks clean only if both identity and generation still match. When identity matches but generation advanced, it remains edited and immediately schedules recovery. Save failure returns `false`, leaves the document open, and maps the typed error to a non-modal banner.
 
+Save/Discard/Cancel and recovery decisions use `DocumentSession.hasUnsavedChanges`, never `saveState` alone. Entering `readOnly` preserves the existing flag. Entering `deleted` sets it true and schedules recovery because the editor may now contain the only remaining copy. A verified matching-generation save sets it false; an intervening edit leaves it true.
+
 New flushes the current recovery before requesting a destructive decision. Open presents its panel first; after a URL is selected and bookmarked, it flushes current recovery before requesting replacement. Clean or empty Close awaits session metadata flush before permitting the window to close. Cancel returns operation state to idle and restores editor focus without changing storage or persistence.
 
 After a matching-generation save becomes clean, await deletion of only that document's superseded recovery record. If generation advanced during the save, do not delete recovery; schedule a fresh snapshot immediately. A recovery-deletion failure keeps the document open, reports a banner, and prevents close/quit from claiming clean completion.
@@ -3483,7 +3500,7 @@ After the explicit `.overwrite` or `.recreate` resolution, ApplicationModel call
 Run the focused tests and full suite. Expected: 10 new tests pass; cumulative suite count is 87.
 
 ```sh
-git add Scratchpad/App/DocumentDecisionCoordinator.swift Scratchpad/App/FilePanelProvider.swift Scratchpad/App/ApplicationModel.swift Scratchpad/Document/DocumentSession.swift Scratchpad/App/ScratchpadApp.swift Scratchpad/App/AppCommands.swift ScratchpadTests/App/DocumentDecisionCoordinatorTests.swift project.yml TRACKER.md
+git add Scratchpad/App/DocumentDecisionCoordinator.swift Scratchpad/App/FilePanelProvider.swift Scratchpad/Utilities/Log.swift Scratchpad/App/ApplicationModel.swift Scratchpad/Document/DocumentSession.swift Scratchpad/App/ScratchpadApp.swift Scratchpad/App/AppCommands.swift ScratchpadTests/App/DocumentDecisionCoordinatorTests.swift project.yml TRACKER.md
 git commit -m "feat: serialize document decisions"
 ```
 
@@ -3621,3 +3638,585 @@ After Tasks 3.1–3.8 are `verified`, stop before visual-shell work. Present fre
 | Manual gate | all 12 signed-sandbox data-loss scenarios are recorded as passing |
 
 The user must explicitly approve Stage 3 before `AGENTS.md` and `TRACKER.md` advance to Recovery Stage 4.
+
+# Gate 4E — Recovery Stages 4–5: Native Presentation and Release Hardening
+
+## Gate Goal
+
+Finish the recovery milestone without restoring deferred workspace complexity. Stage 4 implements the approved Noto-inspired single-window presentation, typed settings, fixed themes, and prompt-oriented metrics. Stage 5 proves accessibility, performance, source policy, crash recovery, and signed release behavior before the milestone is accepted.
+
+Planning approval for Gate 4E does not merge the two implementation approvals: execution must still stop after Stage 4 for the visual/settings gate and after Stage 5 for final milestone acceptance.
+
+## Current Apple API Verification (2026-07-14)
+
+- [`Settings`](https://developer.apple.com/documentation/swiftui/settings) supplies the native macOS Settings scene and menu command; Scratchpad uses one tabbed settings view backed by `SettingsStore`, not direct `@AppStorage` bindings.
+- [`SMAppService.mainApp`](https://developer.apple.com/documentation/servicemanagement/smappservice/mainapp) plus `register()`/`unregister()` is the launch-at-login boundary.
+- [`NSFontManager.orderFrontFontPanel`](https://developer.apple.com/documentation/appkit/nsfontmanager/orderfrontfontpanel(_:)) presents the shared native font panel; a dedicated target receives conversion actions and restores the prior target/action when finished.
+- [`XCTApplicationLaunchMetric`](https://developer.apple.com/documentation/xctest/xctapplicationlaunchmetric) is used instead of deprecated `XCTOSSignpostMetric.applicationLaunch`.
+
+# Recovery Stage 4 — Noto-Inspired Shell, Settings, and Metrics
+
+## Stage 4 File Map
+
+**Create**
+
+- `Scratchpad/Settings/SettingsStore.swift` — typed observable preferences and defaults registration.
+- `Scratchpad/Settings/LaunchAtLoginService.swift` — `SMAppService.mainApp` boundary.
+- `Scratchpad/Settings/ThemeDefinition.swift` — fixed System, Light, and Dark appearance values.
+- `Scratchpad/Settings/SettingsView.swift` — native General, Editor, and Theme tabs.
+- `Scratchpad/Settings/FontPanelCoordinator.swift` — shared native font-panel target lifetime.
+- `Scratchpad/Document/DocumentMetrics.swift` — pure exact metric definitions.
+- `Scratchpad/Document/MetricsCoordinator.swift` — debounced generation-checked off-main calculation.
+- `Scratchpad/UI/DocumentTitleView.swift` — centered icon/title/edited presentation.
+- `Scratchpad/UI/InformationBarView.swift` — metrics and UTF-8 label.
+- `Scratchpad/UI/ErrorBannerView.swift` — non-modal recoverability actions.
+- `Scratchpad/UI/ThemePreviewView.swift` — non-editable fixed-theme sample.
+- `Scratchpad/UI/WindowChromeConfigurator.swift` — frame, minimum size, title-region window behavior.
+- `ScratchpadTests/Settings/SettingsStoreTests.swift`
+- `ScratchpadTests/Settings/ThemeDefinitionTests.swift`
+- `ScratchpadTests/Settings/FontPanelCoordinatorTests.swift`
+- `ScratchpadTests/Document/DocumentMetricsTests.swift`
+- `ScratchpadTests/Document/MetricsCoordinatorTests.swift`
+- `ScratchpadTests/UI/PresentationModelTests.swift`
+
+**Modify**
+
+- `Scratchpad/Editor/EditorHost.swift` — apply typed editor style without copying text.
+- `Scratchpad/Editor/ScratchTextView.swift` — native wrap, substitution, spelling, indentation, and line-height configuration.
+- `Scratchpad/Editor/EditorCoordinator.swift` — consume settings snapshots and schedule metrics.
+- `Scratchpad/App/MainWindowView.swift` — assemble title region, editor, banner, and information bar.
+- `Scratchpad/App/ApplicationModel.swift` — own accepted metrics and typed settings/banner actions.
+- `Scratchpad/App/ScratchpadApp.swift` — configure one recovery window and native Settings scene.
+- `project.yml` — add only Stage 4 sources/tests.
+- `TRACKER.md` — record task and approval evidence.
+
+### Task 4.1: Implement Typed Settings and Launch at Login
+
+**Files:** Create `Scratchpad/Settings/SettingsStore.swift`, `Scratchpad/Settings/LaunchAtLoginService.swift`, and `ScratchpadTests/Settings/SettingsStoreTests.swift`; modify `project.yml` and `TRACKER.md`.
+
+**Interfaces:** Produces `AppearancePreference`, `FontPreference`, `EditorSettingsSnapshot`, `LaunchAtLoginServicing`, and `SettingsStore` for Tasks 4.2–4.5.
+
+- [ ] **Step 1: Write the failing settings tests**
+
+Create tests named exactly:
+
+```swift
+func testRegistersEverySpecifiedDefault()
+func testPersistsEachSettingInAnInjectedSuite()
+func testTabWidthClampsToOneThroughEight()
+func testUnavailableFontFallsBackToSFMono15WithoutDeletingPreference()
+func testChangingSpacesSettingDoesNotMutateDocumentStorage()
+func testLaunchAtLoginSuccessPersistsActualServiceStatus()
+func testLaunchAtLoginFailureRollsBackToggleAndSurfacesError()
+func testSettingsChangesPublishOneTypedSnapshotWithoutNotificationCenter()
+```
+
+Use a unique volatile `UserDefaults` suite and a fake launch service. Assert defaults are: launch off, SF Mono 15, substitutions off, spelling/correction off, spaces off, tab width 4, keep indentation on, whitespace count off, information bar on, and System appearance.
+
+Run the focused tests. Expected: compilation fails because `SettingsStore` does not exist.
+
+- [ ] **Step 2: Implement the typed store and service boundary**
+
+```swift
+enum AppearancePreference: String, CaseIterable, Codable, Sendable {
+    case system
+    case light
+    case dark
+}
+
+struct FontPreference: Codable, Equatable, Sendable {
+    let postScriptName: String
+    let pointSize: Double
+}
+
+struct EditorSettingsSnapshot: Equatable, Sendable {
+    let font: FontPreference
+    let smartSubstitutionsEnabled: Bool
+    let spellingEnabled: Bool
+    let insertsSpaces: Bool
+    let tabWidth: Int
+    let keepsIndentation: Bool
+    let countsWhitespace: Bool
+    let showsInformationBar: Bool
+    let appearance: AppearancePreference
+}
+
+@MainActor
+protocol LaunchAtLoginServicing: AnyObject {
+    var isEnabled: Bool { get }
+    func setEnabled(_ enabled: Bool) throws
+}
+
+@MainActor
+@Observable
+final class SettingsStore {
+    private(set) var snapshot: EditorSettingsSnapshot
+    private(set) var launchAtLogin: Bool
+    private(set) var errorMessage: String?
+
+    init(defaults: UserDefaults, launchService: any LaunchAtLoginServicing)
+    func setLaunchAtLogin(_ enabled: Bool)
+    func setFont(_ font: FontPreference)
+    func setSmartSubstitutionsEnabled(_ enabled: Bool)
+    func setSpellingEnabled(_ enabled: Bool)
+    func setInsertsSpaces(_ enabled: Bool)
+    func setTabWidth(_ width: Int)
+    func setKeepsIndentation(_ enabled: Bool)
+    func setCountsWhitespace(_ enabled: Bool)
+    func setShowsInformationBar(_ enabled: Bool)
+    func setAppearance(_ appearance: AppearancePreference)
+}
+```
+
+Register defaults once in the initializer. Every setter writes one typed value and rebuilds one snapshot. No view reads `UserDefaults`; no defaults-changed notification is posted. The live launch service reads `SMAppService.mainApp.status`, calls `register()` or `unregister()`, then rereads status. On error, the store reflects actual service status and publishes a concise error.
+
+- [ ] **Step 3: Verify and commit**
+
+Run focused tests and the full suite. Expected: 8 new tests pass; cumulative suite count is 106.
+
+```sh
+git add Scratchpad/Settings/SettingsStore.swift Scratchpad/Settings/LaunchAtLoginService.swift ScratchpadTests/Settings/SettingsStoreTests.swift project.yml TRACKER.md
+git commit -m "feat: add typed editor settings"
+```
+
+### Task 4.2: Define Fixed Themes and Apply Editor Appearance Safely
+
+**Files:** Create `Scratchpad/Settings/ThemeDefinition.swift` and `ScratchpadTests/Settings/ThemeDefinitionTests.swift`; modify `Scratchpad/Editor/EditorHost.swift`, `Scratchpad/Editor/ScratchTextView.swift`, `Scratchpad/Editor/EditorCoordinator.swift`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Consumes `EditorSettingsSnapshot`. Produces `ThemeDefinition`, `ResolvedEditorStyle`, and idempotent `ScratchTextView.apply(style:)`.
+
+- [ ] **Step 1: Write the failing theme/editor-style tests**
+
+Create tests named exactly:
+
+```swift
+func testSystemThemeResolvesFromEffectiveAppearance()
+func testLightThemeUsesApprovedNotoPalette()
+func testDarkThemeUsesApprovedCharcoalPalette()
+func testEveryThemeMeetsTextSelectionAndMutedTextContrastChecks()
+func testMissingFontResolvesToSFMono15()
+func testApplyingStyleDoesNotChangeTextGenerationOrUndoStack()
+func testEditorStyleConfiguresWrapLineHeightAndNativeTextOptions()
+```
+
+The palette tests compare device-RGB components to the values below with tolerance `0.005`. The editor test starts with attributed text and an undo action, applies a style, and asserts identical string, generation, selection, and undo action name.
+
+- [ ] **Step 2: Implement the fixed palette and editor-style transaction**
+
+```swift
+struct ThemeDefinition: Equatable {
+    let editorBackground: NSColor
+    let editorForeground: NSColor
+    let caret: NSColor
+    let selection: NSColor
+    let titleRegion: NSColor
+    let separator: NSColor
+    let informationBar: NSColor
+    let mutedText: NSColor
+    let banner: NSColor
+}
+```
+
+Use these fixed device-RGB values:
+
+| Role | Light | Dark |
+|---|---|---|
+| Editor background | `#FBFBFC` | `#2B2B2B` |
+| Editor foreground/caret | `#171717` | `#E7E7E7` |
+| Title region | `#F8F7FA` | `#2B2B2B` |
+| Separator | `#D8D8DC` | `#414141` |
+| Information bar | `#F4F4F5` | `#252525` |
+| Muted text | `#6F6F73` | `#A2A2A2` |
+| Banner | `#FFF3CD` | `#4A3D20` |
+
+Selection uses the resolved system selected-text background and selected-text foreground pair. Palette tests calculate sRGB relative luminance and require at least 7:1 for editor text, 4.5:1 for muted text, and 4.5:1 for selected text. System resolves on effective-appearance changes; Light and Dark never follow system changes.
+
+`apply(style:)` sets `font`, foreground/background, insertion point, selected-text attributes, `textContainerInset = NSSize(width: 24, height: 20)`, horizontal resize off, vertical resize on, width tracking on, and a paragraph style with `lineHeightMultiple = 1.45`. It configures native quote/dash substitution, continuous spelling, automatic spelling correction, tab width, and wrap. It does not call `replaceCharacters`, `didChangeText`, or `noteUserEdit` and does not register undo.
+
+- [ ] **Step 3: Verify and commit**
+
+Run focused tests and full suite. Expected: 7 new tests pass; cumulative suite count is 113.
+
+```sh
+git add Scratchpad/Settings/ThemeDefinition.swift Scratchpad/Editor/EditorHost.swift Scratchpad/Editor/ScratchTextView.swift Scratchpad/Editor/EditorCoordinator.swift ScratchpadTests/Settings/ThemeDefinitionTests.swift project.yml TRACKER.md
+git commit -m "feat: apply fixed native editor themes"
+```
+
+### Task 4.3: Calculate Prompt Metrics Off the Main Actor
+
+**Files:** Create `Scratchpad/Document/DocumentMetrics.swift`, `Scratchpad/Document/MetricsCoordinator.swift`, `ScratchpadTests/Document/DocumentMetricsTests.swift`, and `ScratchpadTests/Document/MetricsCoordinatorTests.swift`; modify `Scratchpad/Editor/EditorCoordinator.swift`, `Scratchpad/App/ApplicationModel.swift`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Produces `DocumentMetrics`, `DocumentMetricsCalculator`, and `MetricsCoordinator`; consumes immutable document snapshots and `countsWhitespace`.
+
+- [ ] **Step 1: Write the failing exact-definition tests**
+
+Create tests named exactly:
+
+```swift
+func testEmptyDocumentReportsZeroCharactersWordsTokensAndOneLine()
+func testCharactersUseExtendedGraphemeClusters()
+func testWhitespaceToggleChangesOnlyCharacterCount()
+func testWordsAreNonemptyUnicodeWhitespaceSeparatedRuns()
+func testLinesEqualNewlineCountPlusOne()
+func testTokenEstimateUsesCeilingUTF8BytesDividedByFour()
+func testEstimateFlagIsAlwaysTrueAndPresentationRequiresTilde()
+func testCoordinatorDiscardsDifferentIdentityOrGenerationResult()
+```
+
+Use `"e\u{301} 👩‍💻\nhello\tworld"` to prove grapheme and Unicode behavior. Test token byte counts 0, 1, 4, and 5, expecting 0, 1, 1, and 2.
+
+- [ ] **Step 2: Implement pure metrics and generation delivery**
+
+```swift
+struct DocumentMetrics: Equatable, Sendable {
+    let characters: Int
+    let words: Int
+    let lines: Int
+    let estimatedTokens: Int
+    let isEstimate: Bool
+}
+
+enum DocumentMetricsCalculator {
+    static func calculate(text: String, countsWhitespace: Bool) -> DocumentMetrics
+}
+
+@MainActor
+final class MetricsCoordinator {
+    init(delay: Duration = .milliseconds(75))
+    func schedule(
+        documentID: UUID,
+        generation: Int,
+        text: String,
+        countsWhitespace: Bool,
+        deliver: @escaping @MainActor (UUID, Int, DocumentMetrics) -> Void
+    )
+    func cancel()
+}
+```
+
+Character counting iterates Swift `Character` values; excluded whitespace requires all Unicode scalars in the character to have `properties.isWhitespace`. Words are nonempty runs separated by the same predicate. Lines start at one and increment for each `"\n"`. Tokens are zero for empty data, otherwise `utf8Count / 4 + (utf8Count % 4 == 0 ? 0 : 1)` so the ceiling cannot overflow; `isEstimate` is always true. The coordinator captures immutable values, waits 75 ms, computes in `Task.detached(priority: .utility)`, and delivers only after ApplicationModel confirms document ID and generation. It retains metrics, never text.
+
+- [ ] **Step 3: Verify and commit**
+
+Run focused tests and full suite. Expected: 8 new tests pass; cumulative suite count is 121.
+
+```sh
+git add Scratchpad/Document/DocumentMetrics.swift Scratchpad/Document/MetricsCoordinator.swift Scratchpad/Editor/EditorCoordinator.swift Scratchpad/App/ApplicationModel.swift ScratchpadTests/Document/DocumentMetricsTests.swift ScratchpadTests/Document/MetricsCoordinatorTests.swift project.yml TRACKER.md
+git commit -m "feat: add prompt document metrics"
+```
+
+### Task 4.4: Build the Noto-Inspired Main Window
+
+**Files:** Create `Scratchpad/UI/DocumentTitleView.swift`, `Scratchpad/UI/InformationBarView.swift`, `Scratchpad/UI/ErrorBannerView.swift`, `Scratchpad/UI/WindowChromeConfigurator.swift`, and `ScratchpadTests/UI/PresentationModelTests.swift`; modify `Scratchpad/App/MainWindowView.swift`, `Scratchpad/App/ScratchpadApp.swift`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Consumes current document metadata, accepted metrics, banner, theme, and settings. Produces the complete single-window hierarchy and testable `DocumentTitlePresentation`/`InformationBarPresentation` values.
+
+- [ ] **Step 1: Write the failing presentation tests**
+
+Create tests named exactly:
+
+```swift
+func testTitlePresentsUntitledFilenameAndEditedSuffixExactly()
+func testInformationBarFormatsRequiredMetricsAndUTF8Label()
+func testTokenHelpTextStatesEstimateVariesByModel()
+func testInformationBarVisibilityChangesOnlyTheBottomTwentyEightPoints()
+func testWindowUsesRequiredDefaultMinimumAndRestoredFrame()
+func testWindowHierarchyContainsNoDeferredChrome()
+```
+
+Assert title strings `Untitled`, `Untitled — Edited`, `prompt.md`, and `prompt.md — Edited`. The suffix is driven by `hasUnsavedChanges`, including deleted content, rather than inferred from the display-state enum. Assert the sample bar renders `72 characters · 14 words · 8 lines · ~21 tokens` and `Unicode (UTF-8)`.
+
+- [ ] **Step 2: Assemble the window without a toolbar or movable divider**
+
+Use one vertical hierarchy in this exact order:
+
+```text
+44 pt title region: native traffic lights + centered document icon/title
+editor: fills all remaining flexible height
+error banner: inserted only when present
+1 px separator
+28 pt information bar: inserted only when enabled
+```
+
+Configure the scene with `.windowStyle(.hiddenTitleBar)`, `.windowBackgroundDragBehavior(.enabled)`, and `.defaultSize(width: 820, height: 640)`. `WindowChromeConfigurator` applies `contentMinSize = NSSize(width: 480, height: 320)`, restores the session frame only when it intersects a current screen, and otherwise centers the default frame. The title region—not editor text—occupies the traffic-light area.
+
+`DocumentTitleView` uses a monochrome document icon and semibold centered title. It exposes save state through title text and accessibility value. `InformationBarView` uses 11-point system text, requires the `~`, provides help text `Estimated token count. Exact counts vary by model.`, and keeps the encoding label trailing. `ErrorBannerView` exposes only the actions in its typed banner. No toolbar, tab, sidebar, divider, line counter, syntax layer, HUD, welcome screen, or floating button exists.
+
+- [ ] **Step 3: Verify and commit**
+
+Run focused tests and full suite. Expected: 6 new tests pass; cumulative suite count is 127.
+
+```sh
+git add Scratchpad/UI Scratchpad/App/MainWindowView.swift Scratchpad/App/ScratchpadApp.swift ScratchpadTests/UI/PresentationModelTests.swift project.yml TRACKER.md
+git commit -m "feat: build minimal native editor window"
+```
+
+### Task 4.5: Build Native General, Editor, and Theme Settings
+
+**Files:** Create `Scratchpad/Settings/SettingsView.swift`, `Scratchpad/Settings/FontPanelCoordinator.swift`, `Scratchpad/UI/ThemePreviewView.swift`, and `ScratchpadTests/Settings/FontPanelCoordinatorTests.swift`; modify `Scratchpad/App/ScratchpadApp.swift`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Consumes `SettingsStore`, `ApplicationSupportPaths`, and fixed themes. Produces one native `Settings` scene and font chooser lifetime.
+
+- [ ] **Step 1: Write the failing settings-integration tests**
+
+Create tests named exactly:
+
+```swift
+func testFontPanelConvertsAndPersistsSelectedFont()
+func testFontPanelRestoresPreviousTargetAndActionOnClose()
+func testGeneralPresentationContainsOnlyLaunchAndRecoveryFolderActions()
+func testEditorPresentationMatchesAllEightSpecifiedControlsAndRanges()
+func testThemePresentationContainsOnlySystemLightAndDark()
+func testThemePreviewNeverMutatesEditorOrSettings()
+```
+
+Use a fake font manager for target/action assertions and presentation values for control inventory. Assert no HUD, theme color well, recovery toggle, custom shortcut editor, or plugin control exists.
+
+- [ ] **Step 2: Implement the native settings scene**
+
+Add exactly one:
+
+```swift
+Settings {
+    SettingsView(
+        settings: applicationModel.settings,
+        recoveryFolder: applicationSupportPaths.recoveryDirectory
+    )
+}
+```
+
+`SettingsView` uses a native `TabView` with General (`gearshape`), Editor (`textformat`), and Theme (`circle.lefthalf.filled`). General contains Launch at Login and Open Recovery Folder. Editor contains Choose Font, smart substitutions, spelling/correction, spaces instead of tabs, tab width 1...8, keep indentation, whitespace counting, and information bar. Theme contains a three-value picker and non-editable preview.
+
+`FontPanelCoordinator` saves the shared font manager's prior weak target and action, sets itself as target for `changeFont:`, sets the current font, and calls `orderFrontFontPanel`. `changeFont:` converts the current font and passes only postscript name and size to `SettingsStore`. Closing Settings or the panel restores the prior target/action. Open Recovery Folder calls `NSWorkspace.shared.open` only in direct response to the button.
+
+- [ ] **Step 3: Run the complete Stage 4 automated gate**
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadStage4 build
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadStage4 test
+git diff --check
+```
+
+Expected: warning-free build, 133 passing tests, and no whitespace errors.
+
+- [ ] **Step 4: Run the Stage 4 visual/settings matrix**
+
+Capture light and dark screenshots at 820 × 640 and narrow screenshots at 480 × 320. Record all rows in `TRACKER.md`:
+
+| Check | Required result |
+|---|---|
+| Window structure | traffic lights occupy title region; title/editor/banner/bar never overlap |
+| Noto visual match | restrained centered title, generous editor padding, quiet status surface |
+| Explicit absence | no tabs, sidebar, toolbar controls, line numbers, syntax colors, HUD, or welcome screen |
+| Light/Dark/System | fixed appearances remain fixed; System follows effective appearance |
+| Editor readability | text, caret, selection, muted metrics, and banner remain legible |
+| Metrics | exact definitions, mandatory token `~`, help text, and update under 150 ms |
+| Editor settings | each control updates future behavior without rewriting text or undo |
+| Font panel | native panel changes editor and preview font, then releases target ownership |
+| General settings | Launch at Login reports actual status; recovery folder opens correctly |
+| Window frame | default, minimum, restored, and off-screen fallback behavior pass |
+
+- [ ] **Step 5: Commit Stage 4 completion**
+
+```sh
+git add Scratchpad/Settings/SettingsView.swift Scratchpad/Settings/FontPanelCoordinator.swift Scratchpad/UI/ThemePreviewView.swift Scratchpad/App/ScratchpadApp.swift ScratchpadTests/Settings/FontPanelCoordinatorTests.swift project.yml TRACKER.md
+git commit -m "feat: complete native editor settings"
+```
+
+## Stage 4 Approval Gate
+
+After Tasks 4.1–4.5 are `verified`, stop before hardening. Present the warning-free build, 133-test result, ten-row manual matrix, and light/dark/narrow screenshots. The user must explicitly approve Stage 4 before Stage 5 begins.
+
+# Recovery Stage 5 — Accessibility, Performance, and Release Proof
+
+## Stage 5 File Map
+
+**Create**
+
+- `Scratchpad/Utilities/PerformanceProbe.swift` — named signposts for launch, metrics, and recovery.
+- `ScratchpadTests/Policy/ReleasePolicyTests.swift` — final invariant/source/build-policy audit.
+- `ScratchpadTests/Performance/PerformanceBudgetTests.swift` — deterministic logic budgets.
+- `ScratchpadUITests/AccessibilityUITests.swift` — labels, focus, keyboard, and decision accessibility.
+- `ScratchpadUITests/PerformanceUITests.swift` — launch and hitch measurements.
+- `Scripts/verify_recovery_release.sh` — one reproducible final verification command.
+
+**Modify**
+
+- `Scratchpad/App/ScratchpadApp.swift` — launch-ready signpost and isolated UI-test paths in DEBUG only.
+- `Scratchpad/Document/MetricsCoordinator.swift` — metrics signpost.
+- `Scratchpad/Persistence/RecoveryCoordinator.swift` — recovery signpost.
+- `project.yml` — UI test target and final source/test allowlists.
+- `.github/workflows/ci.yml` — run the release verification script without deployment overrides.
+- `TRACKER.md` — final automated, manual, and dogfood evidence.
+
+### Task 5.1: Prove Accessibility and Keyboard-Only Operation
+
+**Files:** Create `ScratchpadUITests/AccessibilityUITests.swift`; modify `Scratchpad/UI/DocumentTitleView.swift`, `Scratchpad/UI/InformationBarView.swift`, `Scratchpad/UI/ErrorBannerView.swift`, `Scratchpad/Settings/SettingsView.swift`, `Scratchpad/App/MainWindowView.swift`, `Scratchpad/Editor/EditorHost.swift`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Launches the real app with DEBUG-only isolated Application Support and defaults roots. The Release build contains no UI-test branch.
+
+- [ ] **Step 1: Add the failing UI accessibility tests**
+
+Create tests named exactly:
+
+```swift
+func testLaunchPlacesKeyboardFocusInEditor()
+func testTitleReportsFilenameAndEditedState()
+func testInformationBarExposesMetricsEncodingAndTokenHelp()
+func testBannerActionsHaveUniqueLabelsAndKeyboardFocus()
+func testDecisionSheetHasCorrectDefaultAndCancelButtons()
+func testSettingsTabsAndControlsHaveUniqueLabels()
+func testFullKeyboardAccessReachesEveryInteractiveControl()
+func testNativeFindAndServicesRemainReachable()
+```
+
+Launch with a temporary root passed through `SCRATCHPAD_UI_TEST_ROOT`; the app honors it only under `#if DEBUG`. Expected initial run: tests fail on missing identifiers or focus behavior, not because they touch the user's real recovery state.
+
+- [ ] **Step 2: Fix semantics without duplicating visible text state**
+
+Use stable identifiers `editor`, `document-title`, `information-bar`, `error-banner`, `decision-sheet`, and `settings-<tab/control>`. Add accessibility labels/values/help to existing views; do not create hidden duplicate text. On launch and after Cancel, request first responder through `EditorHost`. Keep native `NSTextView` as the editable accessibility element.
+
+- [ ] **Step 3: Verify and commit**
+
+Run the UI test target. Expected: 8 UI tests pass; cumulative test count is 141.
+
+```sh
+git add ScratchpadUITests/AccessibilityUITests.swift Scratchpad/UI/DocumentTitleView.swift Scratchpad/UI/InformationBarView.swift Scratchpad/UI/ErrorBannerView.swift Scratchpad/Settings/SettingsView.swift Scratchpad/App/MainWindowView.swift Scratchpad/Editor/EditorHost.swift project.yml TRACKER.md
+git commit -m "test: prove editor accessibility"
+```
+
+### Task 5.2: Measure the Published Performance Budgets
+
+**Files:** Create `Scratchpad/Utilities/PerformanceProbe.swift`, `ScratchpadTests/Performance/PerformanceBudgetTests.swift`, and `ScratchpadUITests/PerformanceUITests.swift`; modify `Scratchpad/App/ScratchpadApp.swift`, `Scratchpad/Document/MetricsCoordinator.swift`, `Scratchpad/Persistence/RecoveryCoordinator.swift`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Produces signposts `launchToEditorReady`, `metricsCalculation`, and `recoveryWrite`; no probe owns state or changes scheduling.
+
+- [ ] **Step 1: Add performance measurements**
+
+Create tests named exactly:
+
+```swift
+func testTwoMegabyteMetricsCalculationCompletesWithin150Milliseconds()
+func testRecoveryVirtualClockFiresBetweenTwoAndTwoPointFiveSeconds()
+func testOneMegabyteRestoredLaunchUsesApplicationLaunchMetric()
+func testTwoMegabyteTypingRecordsNoHitchesAtTargetRefreshRate()
+```
+
+The unit tests use `ContinuousClock` in a Release-built test bundle and five iterations after one warm-up. The UI tests use `XCTApplicationLaunchMetric` and `XCTHitchMetric`; each stores its `.xcresult` path in tracker evidence. Never replace an absolute product budget with only a relative XCTest baseline.
+
+- [ ] **Step 2: Add zero-behavior signposts and meet failures narrowly**
+
+```swift
+enum PerformanceProbe {
+    static let subsystem = "com.scratchpad.app"
+    static func begin(_ name: StaticString) -> OSSignpostID
+    static func end(_ name: StaticString, id: OSSignpostID)
+}
+```
+
+Launch begins before model restoration and ends only after restored storage is attached and the editor becomes first responder. Metrics surround only pure calculation. Recovery surrounds encoding plus atomic repository write. If a budget fails, optimize only the measured path while preserving generation, atomicity, and recovery invariants.
+
+- [ ] **Step 3: Verify and commit**
+
+Expected: 4 new performance tests pass; cumulative count is 145. Record median launch under 400 ms for 1 MB, metrics under 150 ms for 2 MB, recovery at 2.0–2.5 seconds, and no recorded hitches during the 120 Hz typing trace.
+
+```sh
+git add Scratchpad/Utilities/PerformanceProbe.swift Scratchpad/App/ScratchpadApp.swift Scratchpad/Document/MetricsCoordinator.swift Scratchpad/Persistence/RecoveryCoordinator.swift ScratchpadTests/Performance/PerformanceBudgetTests.swift ScratchpadUITests/PerformanceUITests.swift project.yml TRACKER.md
+git commit -m "test: enforce recovery performance budgets"
+```
+
+### Task 5.3: Automate the Final Source and Release Audit
+
+**Files:** Create `ScratchpadTests/Policy/ReleasePolicyTests.swift` and `Scripts/verify_recovery_release.sh`; modify `.github/workflows/ci.yml`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Produces the single final command `Scripts/verify_recovery_release.sh`; consumes no application APIs.
+
+- [ ] **Step 1: Add failing final policy tests**
+
+Create tests named exactly:
+
+```swift
+func testActiveSourcesContainNoHardInvariantViolations()
+func testGeneratedTargetContainsNoDeferredFeatureSource()
+func testReleaseEntitlementsAreSandboxedAndNetworkFree()
+func testDependencyGraphContainsNoRuntimePackageProducts()
+```
+
+The invariant scan rejects `.layoutManager`, `try!`, force-unwrap syntax outside assertions, `print(`, direct external URL construction from `pathHint`, `NotificationCenter` defaults propagation, and text-bearing SwiftUI state. The allowlist contains only generated and test fixtures that prove the scanner itself.
+
+- [ ] **Step 2: Create the reproducible release script**
+
+The script uses `set -euo pipefail` and runs exactly:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -configuration Release -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadRelease build
+xcodebuild -scheme Scratchpad -configuration Release -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadRelease test
+codesign --verify --deep --strict /tmp/ScratchpadRelease/Build/Products/Release/Scratchpad.app
+codesign -d --entitlements :- /tmp/ScratchpadRelease/Build/Products/Release/Scratchpad.app
+git diff --check
+```
+
+CI invokes this script directly and does not override deployment target, concurrency mode, entitlements, warnings-as-errors, or source allowlists.
+
+- [ ] **Step 3: Verify and commit**
+
+Expected: 4 new policy tests pass; cumulative count is 149; Release build and signature verification pass.
+
+```sh
+git add ScratchpadTests/Policy/ReleasePolicyTests.swift Scripts/verify_recovery_release.sh .github/workflows/ci.yml project.yml TRACKER.md
+git commit -m "chore: automate recovery release audit"
+```
+
+### Task 5.4: Complete the Dogfood and Failure-Injection Gate
+
+**Files:** Modify `TRACKER.md` only after each result is observed. Do not change application code during evidence collection; any failure opens a new fix commit and reruns the affected automated and manual matrices.
+
+- [ ] **Step 1: Run the final command from a clean worktree**
+
+Run `Scripts/verify_recovery_release.sh`. Expected: Release build, 149 tests, signature, entitlements, and whitespace checks pass with zero warnings.
+
+- [ ] **Step 2: Run three fresh dogfood cycles**
+
+Each cycle must contain at least 15 minutes of real prompt/Markdown editing and all of: New, Open, Save, Save As, custom Sublime commands, Undo, settings change, app deactivate/reactivate, Close, and relaunch. At least one cycle uses a 1 MB file and one uses a 2 MB file. Record start/end time, build commit, and any anomaly.
+
+- [ ] **Step 3: Run the destructive failure matrix**
+
+Record fresh evidence for:
+
+| Injection | Required result |
+|---|---|
+| `kill -9` after final edit before debounce | last completed recovery remains; explicit limitation is recorded, no original is corrupted |
+| `kill -9` after debounce | newest debounced text restores silently |
+| Quit during suspended save | app remains pending; success replies once, failure cancels |
+| Atomic replace failure | destination bytes remain unchanged; temp only is removed |
+| Recovery/quarantine failure | app remains open and original recovery input remains |
+| Bookmark revocation | text remains open; reselect/Save As path appears; no path fallback |
+| External edit/delete | clean reload, dirty conflict, delete state match contract |
+| Generation changes during save/metrics | newer text stays edited; stale metrics are discarded |
+| Window at minimum size | editor, title, banner, and bar remain usable without shaking |
+| Light/Dark plus Increase Contrast | text, selection, focus, errors, and metrics remain legible |
+
+- [ ] **Step 4: Record milestone evidence and commit tracker**
+
+```sh
+git add TRACKER.md
+git commit -m "test: record recovery milestone acceptance"
+```
+
+## Stage 5 and Recovery Milestone Approval Gate
+
+Stop with the app still single-document. Present:
+
+- clean `Scripts/verify_recovery_release.sh` output;
+- 149 passing tests and zero warnings;
+- signed sandbox entitlement evidence;
+- accessibility and performance `.xcresult` paths;
+- Stage 4 screenshots;
+- three dogfood-cycle records;
+- destructive failure matrix;
+- known limitations, including the two-second recovery window before a completed snapshot; and
+- a deferred-feature inventory proving tabs, sidebar/workspace, Quick Open, highlighting, Zen Mode, global hotkey, custom themes, and shortcut rebinding remain absent.
+
+The user must explicitly accept Stage 5 before the recovery milestone is complete. Deferred features receive new specifications and plans; they are not appended to this implementation plan.

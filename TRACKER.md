@@ -18,8 +18,8 @@ Only these task states are valid: `pending`, `in progress`, `blocked`, and `veri
 | 4A | Stage 0 implementation plan | verified | Approved; commit `41986d1` |
 | 4B | Stage 1 implementation plan | verified | Approved; commit `92c8863` |
 | 4C | Stage 2 implementation plan | verified | Approved; commit `faa86de` |
-| 4D | Stage 3 implementation plan | verified | Approved by user on 2026-07-14 |
-| 4E | Stages 4–5 implementation plan | in progress | Drafting |
+| 4D | Stage 3 implementation plan | verified | Approved; commit `05781a2` |
+| 4E | Stages 4–5 implementation plan | in progress | Draft complete; awaiting user approval |
 | 5 | Cross-document consistency and implementation unlock | pending | — |
 
 ## Recovery Roadmap
@@ -66,6 +66,25 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 3.7 | Monitor external changes without document-identity races | pending | Awaiting Gate 4D approval and implementation unlock |
 | 3.8 | Await window close and application termination | pending | Awaiting Gate 4D approval and implementation unlock |
 
+### Stage 4 Task Ledger
+
+| Task | Deliverable | State | Evidence |
+|---|---|---|---|
+| 4.1 | Implement typed settings and Launch at Login | pending | Awaiting Gate 4E approval and implementation unlock |
+| 4.2 | Define fixed themes and apply editor appearance safely | pending | Awaiting Gate 4E approval and implementation unlock |
+| 4.3 | Calculate prompt metrics off the main actor | pending | Awaiting Gate 4E approval and implementation unlock |
+| 4.4 | Build the Noto-inspired main window | pending | Awaiting Gate 4E approval and implementation unlock |
+| 4.5 | Build native General, Editor, and Theme settings | pending | Awaiting Gate 4E approval and implementation unlock |
+
+### Stage 5 Task Ledger
+
+| Task | Deliverable | State | Evidence |
+|---|---|---|---|
+| 5.1 | Prove accessibility and keyboard-only operation | pending | Awaiting Gate 4E approval and implementation unlock |
+| 5.2 | Measure the published performance budgets | pending | Awaiting Gate 4E approval and implementation unlock |
+| 5.3 | Automate the final source and release audit | pending | Awaiting Gate 4E approval and implementation unlock |
+| 5.4 | Complete dogfood and destructive failure injection | pending | Awaiting Gate 4E approval and implementation unlock |
+
 | Stage | Outcome | State | Approval gate |
 |---|---|---|---|
 | 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | pending | User approves baseline evidence and contained target |
@@ -103,10 +122,11 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2026-07-14 | Display approximate prompt tokens as `~ceil(UTF-8 byte count / 4)`, with empty text equal to `0` | `SPEC.md`, `ARCHITECTURE.md` |
 | 2026-07-14 | Require user approval after every planning section and implementation stage | Design, `AGENTS.md`, `TRACKER.md` |
 | 2026-07-14 | Represent editor commands as selection-only outcomes or ordered narrow mutations so Select Line creates no fake edit and multi-line commands preserve unrelated attributes | `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` |
+| 2026-07-14 | Persist `hasUnsavedChanges` separately from display save state because read-only and deleted files can contain either clean or preservation-required text | `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` |
 
 ## Blockers
 
-None. Gate 4E is being drafted, not blocked.
+None. Gate 4E is awaiting the required user approval, not blocked.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -121,7 +141,8 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Gate 4A plan | Invariant comparison, prototype diff, placeholder scan, and whitespace review | verified | `41986d1` |
 | 2026-07-14 | Gate 4B plan | SDK API check, type/test-count review, invariant comparison, and whitespace review | verified | `92c8863` |
 | 2026-07-14 | Gate 4C plan | Responder API check, command-contract correction, transformation review, test-count review, and whitespace review | verified | `faa86de` |
-| 2026-07-14 | Gate 4D plan | Atomicity, bookmark, save, recovery, operation, external-change, termination, test-count, and whitespace review | verified | Approved; commit pending |
+| 2026-07-14 | Gate 4D plan | Atomicity, bookmark, save, recovery, operation, external-change, termination, test-count, and whitespace review | verified | `05781a2` |
+| 2026-07-14 | Gate 4E plan | Settings, theme, metrics, visual, accessibility, performance, policy, dogfood, test-count, and whitespace review | in progress | Draft awaiting approval |
 
 ## Current Manual Acceptance Matrix
 

@@ -53,6 +53,7 @@ Scratchpad/
     DocumentState.swift
     DocumentSnapshot.swift
     DocumentMetrics.swift
+    MetricsCoordinator.swift
   Editor/
     EditorHost.swift
     ScratchTextView.swift
@@ -62,26 +63,31 @@ Scratchpad/
   Files/
     FileService.swift
     FileModels.swift
+    FileResults.swift
     ExternalChangeMonitor.swift
   Persistence/
     ApplicationSupportPaths.swift
     AtomicFileWriter.swift
     BookmarkStore.swift
-    JSONStore.swift
-    PersistenceModels.swift
+    PersistenceRecords.swift
     SessionRepository.swift
     RecoveryCoordinator.swift
   Settings/
     SettingsStore.swift
     SettingsView.swift
     ThemeDefinition.swift
+    LaunchAtLoginService.swift
+    FontPanelCoordinator.swift
   UI/
     DocumentTitleView.swift
     InformationBarView.swift
     ErrorBannerView.swift
+    ThemePreviewView.swift
+    WindowChromeConfigurator.swift
   Utilities/
-    Hashing.swift
+    ContentHash.swift
     Log.swift
+    PerformanceProbe.swift
 
 ScratchpadTests/
   Document/
@@ -112,6 +118,10 @@ Files are grouped by behavior that changes together. Deferred feature folders ar
 | `ExternalChangeMonitor` | `@MainActor` | One polling task and delivery of typed disk-status changes | File contents or document mutation |
 | `SettingsStore` | `@MainActor @Observable` | Typed scalar preferences | Document text |
 | `DocumentMetricsCalculator` | Pure `Sendable` logic | Character, word, line, token estimate values | AppKit or persistence |
+| `MetricsCoordinator` | `@MainActor` | Debounce, document/generation capture, and accepted metrics | Mutable document text or AppKit layout |
+| `LaunchAtLoginService` | `@MainActor` | `SMAppService.mainApp` registration and status | UserDefaults or view state |
+| `FontPanelCoordinator` | `@MainActor` | Shared font-panel target/action lifetime | Editor text or settings persistence |
+| `WindowChromeConfigurator` | `@MainActor` | Minimum/default/restored frame and title-region window configuration | Document state transitions |
 
 No component may reach around these boundaries because a call is convenient.
 
@@ -161,6 +171,7 @@ final class DocumentSession {
     private(set) var fileReference: ExternalFileReference?
     private(set) var displayName: String
     private(set) var saveState: DocumentSaveState
+    private(set) var hasUnsavedChanges: Bool
     private(set) var generation: Int
     private(set) var lastSavedHash: String?
     private(set) var lastKnownDiskMTime: Date?
@@ -189,7 +200,7 @@ func replaceEntireContents(
 )
 ```
 
-User edits arrive through `EditorCoordinator.textDidChange`. `DocumentSession.noteUserEdit()` increments generation exactly once, transitions untitled or clean state to edited, and requests metrics/recovery work through `ApplicationModel` callbacks.
+User edits arrive through `EditorCoordinator.textDidChange`. `DocumentSession.noteUserEdit()` increments generation exactly once, sets `hasUnsavedChanges = true`, transitions untitled or clean state to edited, and requests metrics/recovery work through `ApplicationModel` callbacks. `hasUnsavedChanges` is separate because `readOnly` and `deleted` can describe either previously clean or edited text; replacement, close, recovery, and title decisions never infer preservation needs from `saveState` alone.
 
 ### 5.3 Sendable snapshots and file results
 
@@ -200,6 +211,7 @@ struct DocumentSnapshot: Sendable {
     let text: String
     let fileReference: ExternalFileReference?
     let saveState: DocumentSaveState
+    let hasUnsavedChanges: Bool
     let selection: TextSelection
     let scrollOffsetY: Double
     let lineEnding: LineEnding
@@ -370,6 +382,7 @@ struct SessionRecord: Codable, Sendable {
     let fileReferenceID: UUID?
     let displayName: String
     let saveState: DocumentSaveState
+    let hasUnsavedChanges: Bool
     let selection: TextSelection
     let scrollOffsetY: Double
     let lineEnding: LineEnding
@@ -635,6 +648,10 @@ Font selection persists a font descriptor archive or stable family/postscript na
 
 High-frequency editor updates consume a snapshot of settings; they do not read `UserDefaults` directly.
 
+`MetricsCoordinator` captures immutable `(documentID, generation, text, countWhitespace)` input on the main actor, computes with `DocumentMetricsCalculator` off-main, and publishes only an exact identity/generation match. It never stores document text.
+
+The recovery window uses a hidden native title bar with a dedicated 44-point title region, native traffic-light controls, and SwiftUI's window-background drag behavior. `WindowChromeConfigurator` applies the 820 × 640 default, 480 × 320 minimum, and the last validated session frame. No toolbar, tab strip, sidebar, line numbers, or syntax layer is present.
+
 ## 15. Concurrency Topology
 
 ```text
@@ -695,7 +712,7 @@ The test host must not start the full production application model as an inciden
 
 | Current area | Recovery action |
 |---|---|
-| `AtomicFileWriter`, `JSONStore`, `ApplicationSupportPaths`, `Hashing`, `Log` | Retain only after new edge-case tests and required corrections |
+| `AtomicFileWriter`, `ApplicationSupportPaths`, `ContentHash`, `PersistenceRecords`, `Log` | Replace or retain only through the new edge-case-tested Stage 3 contracts |
 | `AppModel`, `SessionService`, `ScratchBuffer`, `BufferStore` | Replace with `ApplicationModel`, `DocumentSession`, and recovery services |
 | `EditorTextView`, current `EditorCoordinator` | Replace with identity-safe editor boundary and responder command system |
 | `BookmarkManager`, current `FileService` | Replace with persistent bookmark and actor-based file pipelines |
