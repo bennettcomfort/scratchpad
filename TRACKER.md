@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 1 — Document and editor core
 > **Current phase:** Implementation
-> **Current task:** Task 1.1 — define document values and snapshot boundaries
+> **Current task:** Task 1.2 — implement single-owner `DocumentSession`
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -38,8 +38,8 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 1.1 | Define document values and snapshot boundaries | in progress | Stage 0 explicitly approved by user; approved Stage 1 plan starting |
-| 1.2 | Implement single-owner `DocumentSession` | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 1.1 | Define document values and snapshot boundaries | verified | Expected missing-type compile failure captured; 2/2 focused and 9/9 full tests pass; warning-as-error build succeeds; this task commit |
+| 1.2 | Implement single-owner `DocumentSession` | in progress | Task 1.1 verified; approved Stage 1 plan continuing |
 | 1.3 | Attach document storage to TextKit 2 exactly once | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 1.4 | Synchronize native edits, selection, scroll, and undo | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 1.5 | Replace containment shell with the single editor | pending | Approved plan; awaiting Gate 5 implementation unlock |
@@ -88,7 +88,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | Stage | Outcome | State | Approval gate |
 |---|---|---|---|
 | 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | verified | User approved Stage 0 on 2026-07-14; commits `61be30c`, `f7c765a`, `81d0865` |
-| 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | in progress | Task 1.1 starting; user approval required after Tasks 1.1–1.5 |
+| 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | in progress | Task 1.2 starting; user approval required after Tasks 1.1–1.5 |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | pending | User approves command matrix |
 | 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | pending | User approves forced-termination and data-loss matrix |
 | 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | pending | User approves visual and settings matrix |
@@ -130,7 +130,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 ## Blockers
 
-None. Task 1.1 is in progress, not blocked.
+None. Task 1.2 is in progress, not blocked.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -152,6 +152,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Task 0.2 containment | Focused red/green test; generated-project source scan; prototype diff; clean build; full tests; Computer Use window inspection | verified | Expected `RecoveryStage` compile failure; 2 focused and 3 full tests pass; no prototype project references or implementation diffs; malformed icon warning removed; Xcode AppIntents no-dependency diagnostic remains tool-generated; commit `f7c765a` |
 | 2026-07-14 | Task 0.3 policy | Focused red/green policy tests; clean warning-as-error build; full tests; whitespace check | verified | Two selected tests failed as expected, then 6 focused and all 7 Stage 0 tests passed; build used `-warnings-as-errors`; no project warnings; Xcode AppIntents no-dependency diagnostic remains tool-generated; this policy commit |
 | 2026-07-14 | Stage 0 approval | User approval after the complete containment, policy, manual UI, test, and clean-working-tree matrix | verified | Approved; Stage 1 authorized |
+| 2026-07-14 | Task 1.1 document boundaries | Missing-type compile failure; 2 focused tests; warning-as-error build; 9 full tests; invariant, scope, and whitespace review | verified | This task commit |
 
 ## Current Manual Acceptance Matrix
 

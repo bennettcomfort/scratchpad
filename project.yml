@@ -20,6 +20,9 @@ targets:
     sources:
       - path: Scratchpad/RecoveryBaseline
       - path: Scratchpad/Assets.xcassets
+      - path: Scratchpad/Document/DocumentState.swift
+      - path: Scratchpad/Document/DocumentSnapshot.swift
+      - path: Scratchpad/Files/FileModels.swift
     settings:
       CODE_SIGN_ENTITLEMENTS: Scratchpad/App/Scratchpad.entitlements
       INFOPLIST_FILE: Scratchpad/App/Info.plist
@@ -30,6 +33,7 @@ targets:
     sources:
       - ScratchpadTests/SmokeTests.swift
       - ScratchpadTests/RecoveryContainmentTests.swift
+      - ScratchpadTests/Document/DocumentStateTests.swift
     settings:
       GENERATE_INFOPLIST_FILE: YES
     dependencies:
