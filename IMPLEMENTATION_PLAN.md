@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` (recommended) or `executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Plan status:** Gates 4A–4C approved. The implementation lock in `AGENTS.md` remains ON until Gates 4D–4E and the final consistency gate are approved.
+> **Plan status:** Gates 4A–4D approved. The implementation lock in `AGENTS.md` remains ON until Gate 4E and the final consistency gate are approved.
 
 **Goal:** Replace the unsafe prototype in place with a boringly reliable, single-document native macOS prompt and Markdown editor.
 
@@ -43,7 +43,8 @@ H14. No print(); use os.Logger with subsystem com.scratchpad.app.
 - Gate 4A: Recovery Stage 0 — Baseline and containment. Detailed below.
 - Gate 4B: Recovery Stage 1 — Document and editor core. Detailed below.
 - Gate 4C: Recovery Stage 2 — Sublime-style command system. Detailed below.
-- Gates 4D–4E: Stages 3–5. Intentionally absent until each section is drafted and approved.
+- Gate 4D: Recovery Stage 3 — data-safe persistence and lifecycle. Detailed below.
+- Gate 4E: Recovery Stages 4–5. Drafting begins after Gate 4D approval.
 - Gate 5: Cross-document consistency review and implementation unlock.
 
 ---
@@ -2940,3 +2941,683 @@ After Tasks 2.1–2.4 are `verified`, stop before recovery or file work. Present
 | Manual gate | every shortcut result and one-step Undo recorded as passing |
 
 The user must explicitly approve Stage 2 before `AGENTS.md` and `TRACKER.md` advance to Recovery Stage 3.
+
+# Gate 4D — Recovery Stage 3: Data-Safe Persistence and Lifecycle
+
+## Stage Goal
+
+Make one document safe across open, Save, Save As, recovery, relaunch, external changes, window close, and application termination under the real App Sandbox. Stage 3 is complete only when every destructive transition waits for a verified persistence result and every failure leaves the newest text open or recoverable.
+
+Stage 3 does not add tabs, a sidebar, workspace access, Quick Open, highlighting, Zen Mode, a global hotkey, custom themes, or shortcut rebinding.
+
+## Stage 3 File Map
+
+**Create**
+
+- `Scratchpad/Persistence/ApplicationSupportPaths.swift` — canonical internal directories and URLs.
+- `Scratchpad/Persistence/AtomicFileWriter.swift` — the only primitive that creates, replaces, removes, or quarantines persisted files.
+- `Scratchpad/Persistence/PersistenceRecords.swift` — schema-versioned session, recovery, and bookmark records.
+- `Scratchpad/Persistence/SessionRepository.swift` — sole serialized session/recovery JSON repository.
+- `Scratchpad/Persistence/BookmarkStore.swift` — bookmark persistence, resolution, refresh, and scoped-access accounting.
+- `Scratchpad/Persistence/RecoveryCoordinator.swift` — per-document debounce and explicit recovery/session flushes.
+- `Scratchpad/Files/FileService.swift` — UTF-8 open, inspection, verified atomic Save, and Save As.
+- `Scratchpad/Files/ExternalChangeMonitor.swift` — one identity-checked polling loop.
+- `Scratchpad/Files/FileResults.swift` — immutable file open/save/status values.
+- `Scratchpad/App/DocumentDecisionCoordinator.swift` — one serialized modal decision.
+- `Scratchpad/App/FilePanelProvider.swift` — async native Open/Save panel boundary.
+- `Scratchpad/App/LifecycleCoordinators.swift` — window-close and application-termination handshakes.
+- `ScratchpadTests/Persistence/AtomicFileWriterTests.swift`
+- `ScratchpadTests/Persistence/SessionRepositoryTests.swift`
+- `ScratchpadTests/Persistence/BookmarkStoreTests.swift`
+- `ScratchpadTests/Persistence/RecoveryCoordinatorTests.swift`
+- `ScratchpadTests/Files/FileServiceTests.swift`
+- `ScratchpadTests/Files/ExternalChangeMonitorTests.swift`
+- `ScratchpadTests/App/DocumentDecisionCoordinatorTests.swift`
+- `ScratchpadTests/App/ApplicationLifecycleTests.swift`
+
+**Modify**
+
+- `Scratchpad/Files/FileModels.swift` — extend the Stage 1 external reference with scoped-access values.
+- `Scratchpad/Document/DocumentSession.swift` — apply sanctioned open, restore, save, conflict, deletion, and access transitions.
+- `Scratchpad/App/ApplicationModel.swift` — serialize New/Open/Save/Save As/Close/Quit and map typed errors to banners.
+- `Scratchpad/App/AppDelegate.swift` — delegate termination to the lifecycle coordinator and return `.terminateLater`.
+- `Scratchpad/App/ScratchpadApp.swift` — inject live services and present the single decision sheet.
+- `Scratchpad/App/AppCommands.swift` — connect New/Open/Save/Save As/Close to `ApplicationModel` actions.
+- `Scratchpad/App/Scratchpad.entitlements` — enable App Sandbox, user-selected read/write access, and app-scoped bookmarks only.
+- `project.yml` — extend only the explicit Stage 3 source/test allowlists and entitlements.
+- `TRACKER.md` — record task, automated, manual, and approval evidence.
+
+## Shared Stage 3 Contracts
+
+All Stage 3 implementation uses these signatures. A task may add private helpers but must not rename, weaken, or bypass them.
+
+```swift
+protocol AtomicFileWriting: Sendable {
+    func write(_ data: Data, to destination: URL) async throws
+    func removeIfPresent(_ url: URL) async throws
+    func quarantine(_ source: URL, as destination: URL) async throws
+}
+
+protocol BookmarkAccessing: Sendable {
+    func storeSelection(_ url: URL) async throws -> ExternalFileReference
+    func reference(for bookmarkID: UUID) async throws -> ExternalFileReference?
+    func beginAccess(_ reference: ExternalFileReference) async throws -> ScopedAccessToken
+    func endAccess(_ token: ScopedAccessToken) async
+    func refresh(_ token: ScopedAccessToken) async throws
+    func forget(_ reference: ExternalFileReference) async throws
+}
+
+protocol FileServicing: Sendable {
+    func open(_ reference: ExternalFileReference) async throws -> FileOpenResult
+    func save(_ snapshot: DocumentSnapshot) async throws -> FileSaveResult
+    func saveAs(
+        _ snapshot: DocumentSnapshot,
+        to reference: ExternalFileReference
+    ) async throws -> FileSaveResult
+    func inspect(_ snapshot: DocumentSnapshot) async throws -> ExternalFileStatus
+}
+
+enum DocumentOperationState: Equatable, Sendable {
+    case idle
+    case opening(ExternalFileReference)
+    case saving(UUID)
+    case closing
+    case terminating
+}
+```
+
+The `async` requirements make actor isolation explicit at every call site. Test doubles implement the same protocols; production code never adds a direct-path fallback.
+
+## Current Apple API Verification (2026-07-14)
+
+- [`FileManager.replaceItemAt`](https://developer.apple.com/documentation/foundation/filemanager/replaceitemat(_:withitemat:backupitemname:options:)) requires replacement items on the same volume and is the existing-destination primitive behind `AtomicFileWriter`.
+- [`URL.startAccessingSecurityScopedResource`](https://developer.apple.com/documentation/foundation/url/startaccessingsecurityscopedresource()) requires every successful start to be balanced by a stop; all FileService exit paths test that accounting.
+- [`NSApplication.TerminateReply.terminateLater`](https://developer.apple.com/documentation/appkit/nsapplication/terminatereply/terminatelater) keeps AppKit's termination flow pending until `reply(toApplicationShouldTerminate:)`; `AppDelegate` owns exactly one such reply.
+
+### Task 3.1: Establish Atomic Persistence and Internal Paths
+
+**Files:** Create `Scratchpad/Persistence/ApplicationSupportPaths.swift`, `Scratchpad/Persistence/AtomicFileWriter.swift`, and `ScratchpadTests/Persistence/AtomicFileWriterTests.swift`; modify `project.yml` and `TRACKER.md`.
+
+**Interfaces:** Produces `ApplicationSupportPaths`, `AtomicFileWriting`, `AtomicFileWriter`, `AtomicFileWriterError`, and `ContentHash` for every later Stage 3 task.
+
+- [ ] **Step 1: Write the failing atomicity tests**
+
+Create tests named exactly:
+
+```swift
+func testCreatesEveryCanonicalApplicationSupportDirectory()
+func testNewDestinationMovesFlushedTemporaryFileIntoPlace()
+func testExistingDestinationUsesAtomicReplacement()
+func testReplacementFailureLeavesExistingDestinationUnchanged()
+func testFailureRemovesOnlyTheTemporaryFile()
+func testRemoveIfPresentIsIdempotent()
+func testQuarantineMovesWithinApplicationSupportVolume()
+func testQuarantineFailureLeavesOriginalUntouched()
+```
+
+The failure tests use an injected `AtomicFileSystem` actor that records `writeAndSynchronize`, `replace`, `move`, and `remove` calls and throws before replacement. Assert both the retained destination bytes and that no non-temporary URL is removed.
+
+Run:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -only-testing:ScratchpadTests/AtomicFileWriterTests test
+```
+
+Expected: compilation fails because `ApplicationSupportPaths` and `AtomicFileWriter` do not exist.
+
+- [ ] **Step 2: Implement canonical paths and the single mutation primitive**
+
+Use this public shape:
+
+```swift
+struct ApplicationSupportPaths: Sendable {
+    let root: URL
+
+    var sessionDirectory: URL { root.appending(path: "session", directoryHint: .isDirectory) }
+    var recoveryDirectory: URL { root.appending(path: "recovery", directoryHint: .isDirectory) }
+    var bookmarksDirectory: URL { root.appending(path: "bookmarks", directoryHint: .isDirectory) }
+    var quarantineDirectory: URL { root.appending(path: "quarantine", directoryHint: .isDirectory) }
+    var logsDirectory: URL { root.appending(path: "logs", directoryHint: .isDirectory) }
+    var latestSession: URL { sessionDirectory.appending(path: "latest-session.json") }
+    var bookmarkCollection: URL { bookmarksDirectory.appending(path: "bookmarks.json") }
+
+    func recovery(documentID: UUID) -> URL {
+        recoveryDirectory.appending(path: "document-\(documentID.uuidString.lowercased()).json")
+    }
+
+    func quarantine(originalName: String, at date: Date) -> URL
+    func createDirectories(using fileManager: FileManager) throws
+}
+
+protocol AtomicFileSystem: Actor {
+    func exists(_ url: URL) -> Bool
+    func writeAndSynchronize(_ data: Data, to temporaryURL: URL) throws
+    func replace(_ destination: URL, with temporaryURL: URL) throws
+    func move(_ source: URL, to destination: URL) throws
+    func remove(_ url: URL) throws
+}
+
+actor AtomicFileWriter: AtomicFileWriting {
+    init(fileSystem: any AtomicFileSystem)
+    func write(_ data: Data, to destination: URL) async throws
+    func removeIfPresent(_ url: URL) async throws
+    func quarantine(_ source: URL, as destination: URL) async throws
+}
+
+enum ContentHash {
+    static func sha256(_ data: Data) -> String
+}
+```
+
+`write` creates `.scratchpad-<UUID>.tmp` beside the destination, calls `writeAndSynchronize`, then `replace` when the destination exists or `move` otherwise. Its `catch` removes only that temporary URL and rethrows a typed error. `quarantine` checks that both URLs share the canonical Application Support root before moving. `ContentHash` uses the system `CryptoKit.SHA256`; no package is added.
+
+- [ ] **Step 3: Prove the persistence primitive and commit**
+
+Run the focused test command again, then run `git diff --check`. Expected: 8 tests pass and the diff has no whitespace errors.
+
+```sh
+git add Scratchpad/Persistence/ApplicationSupportPaths.swift Scratchpad/Persistence/AtomicFileWriter.swift ScratchpadTests/Persistence/AtomicFileWriterTests.swift project.yml TRACKER.md
+git commit -m "feat: add atomic persistence foundation"
+```
+
+### Task 3.2: Persist and Quarantine Session and Recovery Records
+
+**Files:** Create `Scratchpad/Persistence/PersistenceRecords.swift`, `Scratchpad/Persistence/SessionRepository.swift`, and `ScratchpadTests/Persistence/SessionRepositoryTests.swift`; modify `project.yml` and `TRACKER.md`.
+
+**Interfaces:** Consumes `ApplicationSupportPaths` and `AtomicFileWriting`. Produces the exact schema-version-1 records from `ARCHITECTURE.md` and `SessionPersisting` for Task 3.5.
+
+- [ ] **Step 1: Write the failing repository tests**
+
+Create tests named exactly:
+
+```swift
+func testSessionRoundTripsEveryField()
+func testRecoveryRoundTripsEveryField()
+func testRecoveryFilesRemainIndependentByDocumentID()
+func testDeletingOneRecoveryDoesNotDeleteAnother()
+func testUndecodableSessionIsQuarantinedAndReturnsNil()
+func testUnsupportedRecoverySchemaIsQuarantinedAndReturnsNil()
+func testQuarantineFailurePreservesOriginalAndThrows()
+```
+
+Use fixed UUIDs and dates. Assert encoded JSON uses sorted keys, `schemaVersion == 1`, and quarantine failure never invokes `removeIfPresent` for the source.
+
+Run the focused tests. Expected: compilation fails because `SessionRepository` does not exist.
+
+- [ ] **Step 2: Implement records and the serialized repository**
+
+Copy the `SessionRecord`, `RecoveryRecord`, `BookmarkRecord`, and `BookmarkCollection` fields verbatim from `ARCHITECTURE.md`. Add:
+
+```swift
+protocol SessionPersisting: Sendable {
+    func loadSession() async throws -> SessionRecord?
+    func writeSession(_ record: SessionRecord) async throws
+    func loadRecovery(documentID: UUID) async throws -> RecoveryRecord?
+    func loadAllRecovery() async throws -> [RecoveryRecord]
+    func writeRecovery(_ record: RecoveryRecord) async throws
+    func deleteRecovery(documentID: UUID) async throws
+}
+
+actor SessionRepository: SessionPersisting {
+    static let schemaVersion = 1
+
+    init(paths: ApplicationSupportPaths, writer: any AtomicFileWriting)
+    func loadSession() async throws -> SessionRecord?
+    func writeSession(_ record: SessionRecord) async throws
+    func loadRecovery(documentID: UUID) async throws -> RecoveryRecord?
+    func loadAllRecovery() async throws -> [RecoveryRecord]
+    func writeRecovery(_ record: RecoveryRecord) async throws
+    func deleteRecovery(documentID: UUID) async throws
+}
+```
+
+Use one `JSONEncoder` with `.sortedKeys` and one decoder. On decoding or schema failure, calculate the timestamped quarantine destination and call `writer.quarantine`; return `nil` only after that succeeds. If quarantine throws, propagate `SessionRepositoryError.quarantineFailed` and leave the source available for manual recovery.
+
+- [ ] **Step 3: Prove quarantine behavior and commit**
+
+Run the focused tests and `git diff --check`. Expected: 7 new tests pass; cumulative suite count is 53.
+
+```sh
+git add Scratchpad/Persistence/PersistenceRecords.swift Scratchpad/Persistence/SessionRepository.swift ScratchpadTests/Persistence/SessionRepositoryTests.swift project.yml TRACKER.md
+git commit -m "feat: persist recoverable document state"
+```
+
+### Task 3.3: Enable the Sandbox and Persistent Security-Scoped Bookmarks
+
+**Files:** Create `Scratchpad/Persistence/BookmarkStore.swift` and `ScratchpadTests/Persistence/BookmarkStoreTests.swift`; modify `Scratchpad/Files/FileModels.swift`, `Scratchpad/App/Scratchpad.entitlements`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Consumes `BookmarkCollection`, `AtomicFileWriting`, and `ApplicationSupportPaths`. Produces `ExternalFileReference`, `ScopedAccessToken`, and `BookmarkAccessing` for `FileService`.
+
+- [ ] **Step 1: Write the failing bookmark tests**
+
+Create tests named exactly:
+
+```swift
+func testStoreSelectionPersistsBookmarkBeforeReturningReference()
+func testBeginAndEndAccessBalanceExactlyOnce()
+func testStaleResolutionRefreshesAndPersistsBookmark()
+func testUnresolvableBookmarkNeverFallsBackToPathHint()
+func testForgetRefusesWhileTokenIsActive()
+func testCorruptBookmarkCollectionIsQuarantined()
+func testReferenceLookupUsesPersistedPathHintWithoutDirectAccess()
+```
+
+Inject a `SecurityScopedBookmarkClient` fake. For the no-fallback test, give `pathHint` a readable temporary file and make resolution fail; assert the result is `BookmarkStoreError.reselectionRequired` and the fake records no direct URL read.
+
+Run the focused tests. Expected: compilation fails because the bookmark types do not exist.
+
+- [ ] **Step 2: Implement bookmark persistence and scoped-access accounting**
+
+```swift
+struct ExternalFileReference: Codable, Equatable, Sendable {
+    let bookmarkID: UUID
+    let pathHint: String
+}
+
+struct ScopedAccessToken: Equatable, Sendable {
+    let id: UUID
+    let url: URL
+}
+
+struct ResolvedBookmark: Sendable {
+    let url: URL
+    let isStale: Bool
+}
+
+protocol SecurityScopedBookmarkClient: Sendable {
+    func create(for url: URL) throws -> Data
+    func resolve(_ data: Data) throws -> ResolvedBookmark
+    func startAccessing(_ url: URL) -> Bool
+    func stopAccessing(_ url: URL)
+}
+
+actor BookmarkStore: BookmarkAccessing {
+    init(
+        paths: ApplicationSupportPaths,
+        writer: any AtomicFileWriting,
+        client: any SecurityScopedBookmarkClient,
+        now: @escaping @Sendable () -> Date
+    )
+}
+```
+
+The live client uses `.withSecurityScope`, resolves with `.withSecurityScope`, refreshes stale data before returning a token, and balances each successful `startAccessingSecurityScopedResource()` with one stop call. The store keeps `[UUID: (referenceID: UUID, url: URL)]` active tokens and refuses to forget a referenced bookmark while any token uses it. A private `ensureLoaded()` runs before every public operation, decodes the collection once, validates schema version 1, and quarantines invalid input before starting empty. `reference(for:)` rebuilds `ExternalFileReference` from the matching record's ID and stored path hint without resolving or opening the path.
+
+Set entitlements to exactly:
+
+```xml
+<key>com.apple.security.app-sandbox</key><true/>
+<key>com.apple.security.files.user-selected.read-write</key><true/>
+<key>com.apple.security.files.bookmarks.app-scope</key><true/>
+```
+
+Do not add network, Downloads, Documents, temporary exception, or broad file entitlements.
+
+- [ ] **Step 3: Prove bookmark behavior and inspect entitlements**
+
+Run the focused tests, then:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadStage3 build
+codesign -d --entitlements :- /tmp/ScratchpadStage3/Build/Products/Debug/Scratchpad.app
+```
+
+Expected: 7 new tests pass; cumulative suite count is 60; the signed app contains the three approved entitlements and no network entitlement.
+
+```sh
+git add Scratchpad/Files/FileModels.swift Scratchpad/Persistence/BookmarkStore.swift ScratchpadTests/Persistence/BookmarkStoreTests.swift Scratchpad/App/Scratchpad.entitlements project.yml TRACKER.md
+git commit -m "feat: persist sandbox file permissions"
+```
+
+### Task 3.4: Open, Inspect, and Atomically Save UTF-8 Files
+
+**Files:** Create `Scratchpad/Files/FileResults.swift`, `Scratchpad/Files/FileService.swift`, and `ScratchpadTests/Files/FileServiceTests.swift`; modify `project.yml` and `TRACKER.md`.
+
+**Interfaces:** Consumes `BookmarkAccessing`, `AtomicFileWriting`, and `DocumentSnapshot`. Produces `FileOpenResult`, `FileSaveResult`, `ExternalFileStatus`, `FileServiceError`, and `FileServicing`.
+
+- [ ] **Step 1: Write the failing file-service tests**
+
+Create tests named exactly:
+
+```swift
+func testOpenRejectsInvalidUTF8WithoutAdoptingFile()
+func testOpenNormalizesCRLFAndRetainsCRLFMetadata()
+func testOpenUsesLFForAnEmptyFile()
+func testInspectDistinguishesUnchangedChangedMissingAndReadOnly()
+func testSaveRejectsHashOrMTimeMismatchBeforeWriting()
+func testSavePreservesStoredCRLFConvention()
+func testSaveAsWritesSelectedDestinationWithoutPathFallback()
+func testSaveVerificationFailureThrowsAfterRereadMismatch()
+func testEveryExitPathEndsScopedAccessExactlyOnce()
+func testSuccessfulSaveReturnsVerifiedHashMTimeAndReference()
+```
+
+The conflict test varies hash and modification time independently and expects a conflict for either mismatch. The verification test makes the read-back bytes differ from the requested bytes. Assert no successful `FileSaveResult` is returned.
+
+Run the focused tests. Expected: compilation fails because `FileService` and its result types do not exist.
+
+- [ ] **Step 2: Implement immutable file results and the service pipeline**
+
+```swift
+struct FileOpenResult: Equatable, Sendable {
+    let reference: ExternalFileReference
+    let text: String
+    let displayName: String
+    let lineEnding: LineEnding
+    let contentHash: String
+    let modificationDate: Date
+}
+
+struct FileSaveResult: Equatable, Sendable {
+    let documentID: UUID
+    let initiatingGeneration: Int
+    let reference: ExternalFileReference
+    let displayName: String
+    let lineEnding: LineEnding
+    let contentHash: String
+    let modificationDate: Date
+}
+
+enum ExternalFileStatus: Equatable, Sendable {
+    case unchanged
+    case changed(contentHash: String, modificationDate: Date)
+    case missing
+    case readOnly
+    case accessRequiresReselection
+}
+```
+
+The exact pipeline is:
+
+1. Begin scoped access. Execute the operation in `do/catch`; await `endAccess` before returning on success and before rethrowing on failure. Never end access in an unstructured `Task`.
+2. For open, read bytes once, reject non-UTF-8, detect CRLF if any CRLF sequence exists, normalize CRLF and standalone CR to LF for `NSTextStorage`, and return disk-byte SHA-256 plus mtime.
+3. For save, require the snapshot's reference, read current bytes and metadata, and throw `.conflict` before writing if either hash or mtime differs from the snapshot base.
+4. Encode normalized editor text as UTF-8, converting LF to the stored convention.
+5. Call only `AtomicFileWriting.write`.
+6. Re-read bytes and metadata; require exact byte equality and matching SHA-256.
+7. Return an immutable result without touching `DocumentSession`.
+
+`saveAs` skips old-base comparison because the save panel already confirms destination replacement, but it performs the same atomic write and read-back verification. Missing, read-only, and reselection errors remain distinct typed cases.
+
+- [ ] **Step 3: Prove file safety and commit**
+
+Run focused tests and the full suite. Expected: 10 new tests pass; cumulative suite count is 70.
+
+```sh
+git add Scratchpad/Files/FileResults.swift Scratchpad/Files/FileService.swift ScratchpadTests/Files/FileServiceTests.swift project.yml TRACKER.md
+git commit -m "feat: add verified sandbox file service"
+```
+
+### Task 3.5: Debounce Recovery per Document and Restore the Correct Source
+
+**Files:** Create `Scratchpad/Persistence/RecoveryCoordinator.swift` and `ScratchpadTests/Persistence/RecoveryCoordinatorTests.swift`; modify `Scratchpad/Document/DocumentSession.swift`, `Scratchpad/App/ApplicationModel.swift`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Consumes `SessionPersisting`, `DocumentSession.recoverySnapshot()`, and `DocumentSession.sessionRecord(...)`. Produces `RecoveryCoordinator`, `RestoreSource`, and launch restoration.
+
+- [ ] **Step 1: Write the failing recovery tests**
+
+Create tests named exactly:
+
+```swift
+func testDebounceTasksAreIndependentByDocumentID()
+func testRepeatedEditWritesOnlyFreshestSnapshotAfterTwoSeconds()
+func testExplicitFlushCancelsPendingTaskAndWritesLatestText()
+func testSessionFlushRecordsSelectionScrollAndCleanFlag()
+func testDirtyOrUntitledLaunchPrefersRecoveryText()
+func testCleanFileBackedLaunchReopensDiskInsteadOfRecoveryText()
+func testUnreadableSessionPreservesOrphanRecoveryForNextLaunch()
+```
+
+Use an injected `RecoveryClock` whose test implementation advances virtual time; no test sleeps in wall-clock time. For the fresh-snapshot test, schedule at generation 1, edit to generation 2, advance two seconds, and assert only generation-2 text was persisted.
+
+- [ ] **Step 2: Implement scheduling and restore-source selection**
+
+```swift
+protocol RecoveryClock: Sendable {
+    func sleep(for duration: Duration) async throws
+}
+
+enum RestoreSource: Equatable, Sendable {
+    case recovery(RecoveryRecord)
+    case file(SessionRecord, ExternalFileReference)
+    case empty
+}
+
+@MainActor
+final class RecoveryCoordinator {
+    init(
+        repository: any SessionPersisting,
+        clock: any RecoveryClock,
+        documentProvider: @escaping @MainActor @Sendable (UUID) -> DocumentSession?
+    )
+    func scheduleRecovery(for document: DocumentSession)
+    func flushRecovery(for document: DocumentSession) async throws
+    func flushSession(
+        for document: DocumentSession,
+        windowFrame: CGRect,
+        didCloseCleanly: Bool
+    ) async throws
+    func cancelRecovery(documentID: UUID)
+}
+```
+
+Store pending tasks in `[UUID: Task<Void, Never>]`. A task captures only the UUID; when the clock completes on the main actor, use `documentProvider` to look up the still-current document and call `recoverySnapshot()` then. `flushRecovery` cancels the pending task, takes a fresh snapshot synchronously, and awaits repository persistence. Do not clear the pending marker until success or explicit cancellation.
+
+Launch resolution is pure: a dirty or untitled session with matching recovery selects `.recovery`; a clean file-backed session resolves its `fileReferenceID` through `BookmarkAccessing.reference(for:)` and selects `.file`; missing/corrupt session selects `.empty` while leaving every orphan recovery file untouched. ApplicationModel applies recovered text only with `replaceEntireContents(_:)`. Immediately after restoration and before the editor accepts input, flush a session record with `didCloseCleanly = false`.
+
+- [ ] **Step 3: Prove recovery freshness and commit**
+
+Run the focused tests and full suite. Expected: 7 new tests pass; cumulative suite count is 77.
+
+```sh
+git add Scratchpad/Persistence/RecoveryCoordinator.swift Scratchpad/Document/DocumentSession.swift Scratchpad/App/ApplicationModel.swift ScratchpadTests/Persistence/RecoveryCoordinatorTests.swift project.yml TRACKER.md
+git commit -m "feat: restore and flush latest recovery state"
+```
+
+### Task 3.6: Serialize Decisions and Destructive Document Operations
+
+**Files:** Create `Scratchpad/App/DocumentDecisionCoordinator.swift`, `Scratchpad/App/FilePanelProvider.swift`, and `ScratchpadTests/App/DocumentDecisionCoordinatorTests.swift`; modify `Scratchpad/App/ApplicationModel.swift`, `Scratchpad/Document/DocumentSession.swift`, `Scratchpad/App/ScratchpadApp.swift`, `Scratchpad/App/AppCommands.swift`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Consumes `FileServicing`, `RecoveryCoordinator`, and the exact decision/error values in `ARCHITECTURE.md`. Produces awaited New/Open/Save/Save As/Close operations and one decision presentation source.
+
+- [ ] **Step 1: Write the failing operation tests**
+
+Create tests named exactly:
+
+```swift
+func testCoordinatorAllowsOnlyOnePendingDecision()
+func testCancelLeavesDocumentAndRecoveryUnchanged()
+func testSaveAndCloseWaitsForVerifiedSaveResult()
+func testFailedSaveCancelsCloseAndKeepsDocumentEdited()
+func testDiscardDeletesRecoveryBeforeReplacingDocument()
+func testGenerationChangeDuringSaveRemainsEditedAndReschedulesRecovery()
+func testConflictSupportsOverwriteReloadSaveAsAndCancel()
+func testDuplicateOpenForSameReferenceDoesNotCreateSecondOperation()
+func testOpenPanelAllowsOnlyMdMarkdownMdownAndTxt()
+func testCancelledOpenOrSavePanelChangesNothing()
+```
+
+Use a controllable `FileServicing` fake. In the close test, suspend `save`; assert the close callback has not run, then resume with a verified result and assert close runs exactly once. In the failure test, resume with an error and assert close count remains zero.
+
+- [ ] **Step 2: Implement the one-decision/one-operation state machine**
+
+Use the `ErrorBanner`, `BannerAction`, `PendingReplacement`, `ConflictContext`, `DocumentDecision`, `DocumentDecisionResolution`, and `DocumentDecisionCoordinator` declarations verbatim from `ARCHITECTURE.md`. `request` stores one checked continuation; a second request while pending returns `.cancel`. `resolvePending` clears state before resuming the continuation exactly once.
+
+`ApplicationModel` exposes:
+
+```swift
+@MainActor func requestNewDocument() async
+@MainActor func requestOpen() async
+@MainActor func save() async -> Bool
+@MainActor func saveAs() async -> Bool
+@MainActor func requestClose() async -> Bool
+@MainActor func requestTermination() async -> Bool
+```
+
+The injected panel boundary is:
+
+```swift
+@MainActor
+protocol FilePanelProviding: AnyObject {
+    func selectFileToOpen() async -> URL?
+    func selectSaveDestination(suggestedName: String) async -> URL?
+}
+```
+
+The live provider wraps `NSOpenPanel.begin` and `NSSavePanel.begin` with checked continuations. Open allows exactly `.md`, `.markdown`, `.mdown`, and `.txt`, one selection, files only. A cancelled panel returns `nil` and mutates no operation, bookmark, document, or recovery state. A selected URL is converted through `BookmarkAccessing.storeSelection` before it can enter application state. `BookmarkStore.storeSelection` reuses the existing bookmark ID for the same standardized file URL, so simultaneous or repeated selection cannot defeat duplicate-open serialization by manufacturing a new identity.
+
+Every operation must transition `idle -> one active state -> idle` with `defer`. Save captures `(documentID, generation)`. After success it always adopts the verified disk base; it marks clean only if both identity and generation still match. When identity matches but generation advanced, it remains edited and immediately schedules recovery. Save failure returns `false`, leaves the document open, and maps the typed error to a non-modal banner.
+
+New flushes the current recovery before requesting a destructive decision. Open presents its panel first; after a URL is selected and bookmarked, it flushes current recovery before requesting replacement. Clean or empty Close awaits session metadata flush before permitting the window to close. Cancel returns operation state to idle and restores editor focus without changing storage or persistence.
+
+After a matching-generation save becomes clean, await deletion of only that document's superseded recovery record. If generation advanced during the save, do not delete recovery; schedule a fresh snapshot immediately. A recovery-deletion failure keeps the document open, reports a banner, and prevents close/quit from claiming clean completion.
+
+Discard awaits recovery deletion before replacement/close. Reload first flushes recovery, then opens disk and calls sanctioned whole-text replacement. Overwrite bypasses only the stale-base comparison and still performs atomic write plus verification. Deleted-file recreation requires `.recreate`; it is never automatic.
+
+After the explicit `.overwrite` or `.recreate` resolution, ApplicationModel calls `FileService.saveAs(snapshot, to: snapshot.fileReference)`; this reuses the service's verified replace pipeline without presenting a Save panel. No other path may use `saveAs` without a URL returned by the native panel.
+
+- [ ] **Step 3: Prove destructive-operation ordering and commit**
+
+Run the focused tests and full suite. Expected: 10 new tests pass; cumulative suite count is 87.
+
+```sh
+git add Scratchpad/App/DocumentDecisionCoordinator.swift Scratchpad/App/FilePanelProvider.swift Scratchpad/App/ApplicationModel.swift Scratchpad/Document/DocumentSession.swift Scratchpad/App/ScratchpadApp.swift Scratchpad/App/AppCommands.swift ScratchpadTests/App/DocumentDecisionCoordinatorTests.swift project.yml TRACKER.md
+git commit -m "feat: serialize document decisions"
+```
+
+### Task 3.7: Monitor External Changes Without Racing Document Identity
+
+**Files:** Create `Scratchpad/Files/ExternalChangeMonitor.swift` and `ScratchpadTests/Files/ExternalChangeMonitorTests.swift`; modify `Scratchpad/App/ApplicationModel.swift`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Consumes `FileServicing.inspect`, immutable snapshots, and ApplicationModel's serialized operation entry point. Produces one cancellable one-second monitor.
+
+- [ ] **Step 1: Write the failing monitor tests**
+
+Create tests named exactly:
+
+```swift
+func testMonitorInspectsOncePerVirtualSecond()
+func testReplacingDocumentDiscardsOldIdentityResult()
+func testCleanChangedFileReloadsThroughWholeTextReplacement()
+func testEditedChangedFileEntersConflictWithoutReplacingText()
+func testMissingAndDeniedStatusesMapToDeletedAndReadOnlyStates()
+```
+
+Use a virtual clock and suspended inspect result. Replace the document before resuming the old result and assert no property of the replacement changes.
+
+- [ ] **Step 2: Implement the identity-checked monitor**
+
+```swift
+@MainActor
+final class ExternalChangeMonitor {
+    init(fileService: any FileServicing, clock: any RecoveryClock)
+    func start(document: DocumentSession, deliver: @escaping @MainActor (UUID, Int, ExternalFileStatus) async -> Void)
+    func stop()
+}
+```
+
+`start` first calls `stop`, captures document ID, generation, and snapshot, sleeps one second, then inspects. Delivery occurs only if the task is not cancelled. ApplicationModel rechecks current document ID before serializing the result with any open/save/close operation. Clean changed content reloads through `replaceEntireContents`; edited content becomes conflicted without changing storage; missing becomes deleted; denied access becomes read-only/reselection-required. Save-time staleness checks remain active independently.
+
+- [ ] **Step 3: Prove monitor isolation and commit**
+
+Run focused tests and the full suite. Expected: 5 new tests pass; cumulative suite count is 92.
+
+```sh
+git add Scratchpad/Files/ExternalChangeMonitor.swift Scratchpad/App/ApplicationModel.swift ScratchpadTests/Files/ExternalChangeMonitorTests.swift project.yml TRACKER.md
+git commit -m "feat: monitor external document changes"
+```
+
+### Task 3.8: Await Window Close and Application Termination
+
+**Files:** Create `Scratchpad/App/LifecycleCoordinators.swift` and `ScratchpadTests/App/ApplicationLifecycleTests.swift`; modify `Scratchpad/App/AppDelegate.swift`, `Scratchpad/App/ScratchpadApp.swift`, `project.yml`, and `TRACKER.md`.
+
+**Interfaces:** Consumes `ApplicationModel.requestClose()` and `requestTermination()`. Produces a window-close retry guard and exactly one `.terminateLater` task.
+
+- [ ] **Step 1: Write the failing lifecycle tests**
+
+Create tests named exactly:
+
+```swift
+func testWindowCloseReturnsFalseUntilAsyncDecisionSucceeds()
+func testWindowCloseFailureNeverClosesWindow()
+func testTerminationReturnsLaterAndRepliesTrueAfterFlush()
+func testTerminationFailureRepliesFalseAndKeepsAppOpen()
+func testRepeatedTerminationRequestsJoinOneTask()
+func testResignActiveFlushUsesDidCloseCleanlyFalse()
+```
+
+Inject closures for document decisions, flushes, window closure, and termination reply. Assert call order, not only final state:
+
+```text
+decision -> recovery flush -> session(false) -> session(true) -> reply(true)
+```
+
+On any failure, expected order ends with `reply(false)` and contains no clean-session write after the failed step.
+
+- [ ] **Step 2: Implement the lifecycle handshakes**
+
+`WindowCloseCoordinator.windowShouldClose()` returns `false`, starts one task, awaits `requestClose`, and on success invokes a guarded second close that bypasses interception exactly once.
+
+`AppDelegate.applicationShouldTerminate(_:)` returns `.terminateCancel` if no ApplicationModel is attached. Otherwise it returns `.terminateLater`; if a termination task already exists it returns `.terminateLater` without creating another. The one task awaits `requestTermination()` and calls `sender.reply(toApplicationShouldTerminate:)` exactly once with the result, then clears itself. `applicationDidResignActive` starts a non-clean recovery/session flush; failure is retained as a pending banner for next activation.
+
+The final `didCloseCleanly = true` session write occurs only after decision resolution, recovery flush, and the non-clean session write have all succeeded. Close, quit, New, and Open all reuse `DocumentDecisionCoordinator`; no view owns save-and-close branching.
+
+- [ ] **Step 3: Run the complete automated Stage 3 gate**
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadStage3 build
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' test
+git diff --check
+```
+
+Expected: warning-free build, 98 passing tests, and no whitespace errors.
+
+- [ ] **Step 4: Run the signed-sandbox manual data-loss matrix**
+
+Record evidence for every row in `TRACKER.md`:
+
+| Scenario | Required result |
+|---|---|
+| Untitled crash/relaunch | latest debounced text restores silently with selection and scroll |
+| File-backed edited crash/relaunch | recovery text restores, remains edited, and retains file association |
+| Clean relaunch after external edit | current disk contents reopen; stale recovery text is not substituted |
+| Save then immediate Close | window closes only after verified write; reopened bytes match |
+| Failed Save then Close/Quit | operation cancels; text stays open, edited, and recoverable |
+| Edit while Save is suspended | disk receives captured snapshot; newer editor text remains edited and gets recovery |
+| External edit while clean/dirty | clean reloads; dirty enters conflict without text replacement |
+| Delete or revoke access | state becomes deleted/read-only; no automatic recreation or path fallback |
+| Overwrite/Reload/Save As/Cancel | each conflict action follows the specified data-preservation behavior |
+| Bookmark relaunch | a user-selected file reopens after relaunch under the sandbox |
+| Repeated Quit | one decision, one flush sequence, one termination reply |
+| Corrupt JSON | file is quarantined; failure to quarantine leaves original untouched |
+
+- [ ] **Step 5: Commit Stage 3 lifecycle completion**
+
+```sh
+git add Scratchpad/App/LifecycleCoordinators.swift Scratchpad/App/AppDelegate.swift Scratchpad/App/ScratchpadApp.swift ScratchpadTests/App/ApplicationLifecycleTests.swift project.yml TRACKER.md
+git commit -m "feat: make close and quit data safe"
+```
+
+## Stage 3 Approval Gate
+
+After Tasks 3.1–3.8 are `verified`, stop before visual-shell work. Present fresh evidence for:
+
+| Acceptance check | Required result |
+|---|---|
+| Atomic persistence | create and replace are same-directory atomic operations; failure preserves destination |
+| Quarantine | corrupt state moves to quarantine; quarantine failure preserves original |
+| Sandbox | only the three approved file entitlements exist; no path fallback or network entitlement |
+| Scoped access | every successful begin has exactly one end on success and failure paths |
+| Save verification | staleness is checked before write and bytes/hash/mtime are verified after write |
+| Recovery freshness | per-document debounce and explicit flush persist the latest generation |
+| Restoration source | dirty/untitled restores recovery; clean file-backed restores disk |
+| Operation ordering | Save/Discard/Cancel gates New, Open, Close, and Quit with awaited results |
+| External changes | clean reloads; dirty conflicts; missing and denied access remain explicit states |
+| Termination | one `.terminateLater` task replies exactly once and cancels quit on failure |
+| Automated gate | warning-free build and 98 passing tests |
+| Manual gate | all 12 signed-sandbox data-loss scenarios are recorded as passing |
+
+The user must explicitly approve Stage 3 before `AGENTS.md` and `TRACKER.md` advance to Recovery Stage 4.

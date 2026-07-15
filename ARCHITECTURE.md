@@ -46,6 +46,7 @@ Scratchpad/
     ApplicationModel.swift
     AppCommands.swift
     DocumentDecisionCoordinator.swift
+    FilePanelProvider.swift
     MainWindowView.swift
   Document/
     DocumentSession.swift
@@ -99,6 +100,7 @@ Files are grouped by behavior that changes together. Deferred feature folders ar
 |---|---|---|---|
 | `ApplicationModel` | `@MainActor @Observable` | Current document, settings, banner, app-level operations | Document text or file I/O |
 | `DocumentDecisionCoordinator` | `@MainActor` | Save/Discard/Cancel and conflict decision serialization | Text storage or disk I/O |
+| `FilePanelProvider` | `@MainActor` | Async native Open/Save panel presentation and URL selection | Bookmark persistence or document mutation |
 | `DocumentSession` | `@MainActor @Observable` | `NSTextStorage`, identity, save metadata, generation, selection, scroll | Persistence scheduling or panels |
 | `EditorHost` | `@MainActor` | AppKit view construction and style updates | Document switching or text copies |
 | `ScratchTextView` | `@MainActor` | Responder actions and applying one editor transaction | Application state or persistence |
@@ -205,15 +207,20 @@ struct DocumentSnapshot: Sendable {
     let lastKnownDiskMTime: Date?
 }
 
-struct FileOpenResult: Sendable {
+struct FileOpenResult: Equatable, Sendable {
     let reference: ExternalFileReference
     let text: String
+    let displayName: String
     let contentHash: String
     let modificationDate: Date
     let lineEnding: LineEnding
 }
 
-struct FileSaveResult: Sendable {
+struct FileSaveResult: Equatable, Sendable {
+    let documentID: UUID
+    let initiatingGeneration: Int
+    let reference: ExternalFileReference
+    let displayName: String
     let contentHash: String
     let modificationDate: Date
     let lineEnding: LineEnding
@@ -464,17 +471,22 @@ struct ScopedAccessToken: Sendable {
 
 ```swift
 actor BookmarkStore {
-    func storeSelection(_ url: URL) throws -> ExternalFileReference
-    func beginAccess(_ reference: ExternalFileReference) throws -> ScopedAccessToken
-    func endAccess(_ token: ScopedAccessToken)
-    func refresh(_ token: ScopedAccessToken) throws
-    func forget(_ reference: ExternalFileReference) throws
+    func storeSelection(_ url: URL) async throws -> ExternalFileReference
+    func reference(for bookmarkID: UUID) async throws -> ExternalFileReference?
+    func beginAccess(_ reference: ExternalFileReference) async throws -> ScopedAccessToken
+    func endAccess(_ token: ScopedAccessToken) async
+    func refresh(_ token: ScopedAccessToken) async throws
+    func forget(_ reference: ExternalFileReference) async throws
 }
 ```
 
 The store persists bookmark data atomically and tracks active tokens. `FileService` obtains a token before every external read or write and ends it with `defer`. A stale bookmark is refreshed and persisted. An unresolvable bookmark produces a typed reselect-required error; direct path fallback is forbidden under the sandbox.
 
 Open-panel and Save-panel selections are converted into `ExternalFileReference` values before application state adopts them.
+
+`FilePanelProvider` wraps `NSOpenPanel.begin` and `NSSavePanel.begin` with checked continuations. Open accepts exactly `.md`, `.markdown`, `.mdown`, and `.txt`, allows one file, and allows no directory selection. Panel cancellation returns `nil` and changes no bookmark, operation, document, or recovery state. `BookmarkStore.storeSelection` reuses the existing bookmark ID for the same standardized file URL.
+
+Clean-session restoration resolves `SessionRecord.fileReferenceID` through `BookmarkStore.reference(for:)`. The path hint comes from the persisted `BookmarkRecord`; it is display and diagnostic metadata only and is never converted into a direct-access URL.
 
 ## 12. File Service and State Transitions
 
