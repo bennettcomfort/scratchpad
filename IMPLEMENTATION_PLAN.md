@@ -3298,7 +3298,7 @@ git commit -m "feat: persist sandbox file permissions"
 
 ### Task 3.4: Open, Inspect, and Atomically Save UTF-8 Files
 
-**Files:** Create `Scratchpad/Files/FileResults.swift`, `Scratchpad/Files/FileService.swift`, and `ScratchpadTests/Files/FileServiceTests.swift`; modify `Scratchpad/Persistence/AtomicFileWriter.swift`, `ScratchpadTests/Persistence/AtomicFileWriterTests.swift`, `project.yml`, `AGENTS.md`, and `TRACKER.md`.
+**Files:** Create `Scratchpad/Files/FileResults.swift`, `Scratchpad/Files/FileService.swift`, and `ScratchpadTests/Files/FileServiceTests.swift`; modify `Scratchpad/Persistence/AtomicFileWriter.swift`, `ScratchpadTests/Persistence/AtomicFileWriterTests.swift`, `ScratchpadTests/App/AppCommandsTests.swift`, `project.yml`, `AGENTS.md`, and `TRACKER.md`.
 
 **Interfaces:** Consumes `BookmarkAccessing`, `AtomicFileWriting`, and `DocumentSnapshot`. Produces `FileOpenResult`, `FileSaveResult`, `ExternalFileStatus`, `FileServiceError`, and `FileServicing`.
 
@@ -3322,6 +3322,9 @@ func testLiveFileSystemReadsBytesModificationDateAndWritability()
 func testLiveFileSystemMapsMissingAndNonRegularFiles()
 func testConditionalWriteRejectsChangedLiveFileWithoutReplacing()
 func testConditionalWriteReplacesUnchangedLiveFileAndReturnsVerifiedVersion()
+func testConditionalNonWrittenResultRemovesGeneratedTemporaryFile()
+func testConditionalReadFailurePreservesTypedErrorAndRemovesGeneratedTemporaryFile()
+func testSaveMapsUnknownConditionalWriterErrorToWriteFailure()
 ```
 
 The conflict test varies hash and modification time independently and expects a conflict for either mismatch. The late-mutation test lets FileService preflight succeed, then makes the injected conditional writer return the newer version; assert `.conflict`, no successful `FileSaveResult`, and no unconditional write. The verification test makes the read-back bytes differ from the requested bytes.
@@ -3387,12 +3390,20 @@ The exact pipeline is:
 
 `saveAs` skips old-base comparison because the save panel already confirms destination replacement, calls the existing unconditional `AtomicFileWriting.write`, and performs the same read-back verification. Missing, read-only, reselection, generic access, conflict, write, read, and verification failures remain distinct typed cases.
 
-- [ ] **Step 3: Prove file safety and commit**
+- [ ] **Step 3: Capture the window-fixture lifecycle failure**
 
-Run the AtomicFileWriter and FileService focused suites, then repeat `testSaveRejectsMutationAfterPreflightBeforeReplacement` five times. Run the full suite and warning-as-error build. Expected: 15 Task 3.4 tests pass; the cumulative suite count is 93; the diff is clean. The signed-app manual external-edit scenario remains at the Stage 3 integration gate after user-visible Save wiring exists.
+The existing repeated full-suite evidence is RED: three runs crash in `_NSWindowTransformAnimation`, while three runs excluding `AppCommandsTests` pass 92/92. A narrower hidden-window experiment also crashes both focused cases during XCTest autorelease-pool teardown. Record both failures before rewriting the fixture.
+
+- [ ] **Step 4: Replace the window fixture with direct responders**
+
+Change `assembly()` to return only `(DocumentSession, ScratchTextView)`. Remove `NSWindow` construction, content assignment, presentation, first-responder assignment, visibility assertions, and close calls. In the editor case, call `textView.tryToPerform(...)` directly. In the non-editor case, construct a standalone `NSTextField` and call `field.tryToPerform(...)` directly. Do not change production app entry, editor code, command code, selector, or assertions about document text and generation. Run `AppCommandsTests`. Expected: both existing command assertions pass with no window lifecycle.
+
+- [ ] **Step 5: Prove file safety and commit**
+
+Run the AtomicFileWriter and FileService focused suites, then repeat `testSaveRejectsMutationAfterPreflightBeforeReplacement` five times. Run the full suite three consecutive times and run the warning-as-error build. Expected: 18 Task 3.4 tests pass; each cumulative suite run passes all 96 tests without a host crash; the diff is clean. The signed-app manual external-edit scenario remains at the Stage 3 integration gate after user-visible Save wiring exists.
 
 ```sh
-git add AGENTS.md Scratchpad/Persistence/AtomicFileWriter.swift ScratchpadTests/Persistence/AtomicFileWriterTests.swift Scratchpad/Files/FileResults.swift Scratchpad/Files/FileService.swift ScratchpadTests/Files/FileServiceTests.swift project.yml TRACKER.md
+git add AGENTS.md ScratchpadTests/App/AppCommandsTests.swift Scratchpad/Persistence/AtomicFileWriter.swift ScratchpadTests/Persistence/AtomicFileWriterTests.swift Scratchpad/Files/FileResults.swift Scratchpad/Files/FileService.swift ScratchpadTests/Files/FileServiceTests.swift project.yml TRACKER.md
 git commit -m "feat: add verified sandbox file service"
 ```
 

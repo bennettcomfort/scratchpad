@@ -1,21 +1,57 @@
 import Foundation
 
+struct AtomicFileVersion: Equatable, Sendable {
+    let contentHash: String
+    let modificationDate: Date
+}
+
+enum ConditionalWriteResult: Equatable, Sendable {
+    case written(AtomicFileVersion)
+    case conflict(AtomicFileVersion)
+    case missing
+    case readOnly
+}
+
 protocol AtomicFileWriting: Sendable {
     func write(_ data: Data, to destination: URL) async throws
+    func write(
+        _ data: Data,
+        to destination: URL,
+        ifUnchangedFrom expected: AtomicFileVersion
+    ) async throws -> ConditionalWriteResult
     func removeIfPresent(_ url: URL) async throws
     func quarantine(_ source: URL, as destination: URL) async throws
+}
+
+extension AtomicFileWriting {
+    func write(
+        _ data: Data,
+        to destination: URL,
+        ifUnchangedFrom expected: AtomicFileVersion
+    ) async throws -> ConditionalWriteResult {
+        throw AtomicFileWriterError.conditionalWriteUnavailable(destination: destination)
+    }
 }
 
 protocol AtomicFileSystem: Actor {
     func exists(_ url: URL) -> Bool
     func writeAndSynchronize(_ data: Data, to temporaryURL: URL) throws
     func replace(_ destination: URL, with temporaryURL: URL) throws
+    func replaceIfUnchanged(
+        _ data: Data,
+        destination: URL,
+        temporaryURL: URL,
+        expected: AtomicFileVersion
+    ) throws -> ConditionalWriteResult
     func move(_ source: URL, to destination: URL) throws
     func remove(_ url: URL) throws
 }
 
 enum AtomicFileWriterError: Error, Equatable, Sendable {
     case writeFailed(destination: URL)
+    case readFailed(destination: URL)
+    case conditionalWriteUnavailable(destination: URL)
+    case verificationFailed(destination: URL)
     case removeFailed(url: URL)
     case invalidQuarantineLocation(source: URL, destination: URL)
     case quarantineFailed(source: URL, destination: URL)
@@ -52,6 +88,40 @@ actor AtomicFileWriter: AtomicFileWriting {
             } else {
                 try await fileSystem.move(temporaryURL, to: destination)
             }
+        } catch {
+            try? await fileSystem.remove(temporaryURL)
+            throw AtomicFileWriterError.writeFailed(destination: destination)
+        }
+    }
+
+    func write(
+        _ data: Data,
+        to destination: URL,
+        ifUnchangedFrom expected: AtomicFileVersion
+    ) async throws -> ConditionalWriteResult {
+        let transactionKey = transactionKey(for: destination)
+        await acquire(transactionKey)
+        defer { release(transactionKey) }
+
+        let temporaryURL = destination.deletingLastPathComponent().appending(
+            path: ".scratchpad-\(UUID().uuidString).tmp"
+        )
+
+        do {
+            let result = try await fileSystem.replaceIfUnchanged(
+                data,
+                destination: destination,
+                temporaryURL: temporaryURL,
+                expected: expected
+            )
+            if case .written = result {
+                return result
+            }
+            try? await fileSystem.remove(temporaryURL)
+            return result
+        } catch let error as AtomicFileWriterError {
+            try? await fileSystem.remove(temporaryURL)
+            throw error
         } catch {
             try? await fileSystem.remove(temporaryURL)
             throw AtomicFileWriterError.writeFailed(destination: destination)
@@ -165,6 +235,113 @@ actor LiveAtomicFileSystem: AtomicFileSystem {
 
     func replace(_ destination: URL, with temporaryURL: URL) throws {
         _ = try fileManager.replaceItemAt(destination, withItemAt: temporaryURL)
+    }
+
+    func replaceIfUnchanged(
+        _ data: Data,
+        destination: URL,
+        temporaryURL: URL,
+        expected: AtomicFileVersion
+    ) throws -> ConditionalWriteResult {
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?
+        var coordinatedResult: Result<ConditionalWriteResult, Error>?
+
+        coordinator.coordinate(
+            writingItemAt: destination,
+            options: .forReplacing,
+            error: &coordinationError
+        ) { coordinatedURL in
+            do {
+                let uncachedURL = URL(fileURLWithPath: coordinatedURL.path)
+                guard fileManager.fileExists(atPath: uncachedURL.path) else {
+                    coordinatedResult = .success(.missing)
+                    return
+                }
+                let values: URLResourceValues
+                let currentData: Data
+                do {
+                    values = try uncachedURL.resourceValues(forKeys: [
+                        .contentModificationDateKey,
+                        .isRegularFileKey,
+                        .isWritableKey
+                    ])
+                    currentData = try Data(contentsOf: uncachedURL, options: .mappedIfSafe)
+                } catch {
+                    throw conditionalReadError(error, destination: destination)
+                }
+                guard values.isRegularFile == true,
+                      let modificationDate = values.contentModificationDate else {
+                    throw AtomicFileWriterError.readFailed(destination: destination)
+                }
+                guard values.isWritable == true else {
+                    coordinatedResult = .success(.readOnly)
+                    return
+                }
+
+                let currentVersion = AtomicFileVersion(
+                    contentHash: ContentHash.sha256(currentData),
+                    modificationDate: modificationDate
+                )
+                guard currentVersion == expected else {
+                    coordinatedResult = .success(.conflict(currentVersion))
+                    return
+                }
+
+                try writeAndSynchronize(data, to: temporaryURL)
+                try replace(uncachedURL, with: temporaryURL)
+
+                let verificationURL = URL(fileURLWithPath: coordinatedURL.path)
+                let verifiedData: Data
+                let verifiedValues: URLResourceValues
+                do {
+                    verifiedData = try Data(contentsOf: verificationURL, options: .mappedIfSafe)
+                    verifiedValues = try verificationURL.resourceValues(forKeys: [
+                        .contentModificationDateKey
+                    ])
+                } catch {
+                    throw conditionalReadError(error, destination: destination)
+                }
+                guard verifiedData == data,
+                      ContentHash.sha256(verifiedData) == ContentHash.sha256(data),
+                      let verifiedModificationDate = verifiedValues.contentModificationDate else {
+                    throw AtomicFileWriterError.verificationFailed(destination: destination)
+                }
+                coordinatedResult = .success(
+                    .written(
+                        AtomicFileVersion(
+                            contentHash: ContentHash.sha256(verifiedData),
+                            modificationDate: verifiedModificationDate
+                        )
+                    )
+                )
+            } catch {
+                let cocoaError = error as NSError
+                if cocoaError.domain == NSCocoaErrorDomain,
+                   cocoaError.code == CocoaError.fileNoSuchFile.rawValue {
+                    coordinatedResult = .success(.missing)
+                } else {
+                    coordinatedResult = .failure(error)
+                }
+            }
+        }
+
+        if let coordinatedResult {
+            return try coordinatedResult.get()
+        }
+        if coordinationError != nil {
+            throw AtomicFileWriterError.writeFailed(destination: destination)
+        }
+        throw AtomicFileWriterError.writeFailed(destination: destination)
+    }
+
+    private func conditionalReadError(_ error: Error, destination: URL) -> Error {
+        let cocoaError = error as NSError
+        if cocoaError.domain == NSCocoaErrorDomain,
+           cocoaError.code == CocoaError.fileNoSuchFile.rawValue {
+            return error
+        }
+        return AtomicFileWriterError.readFailed(destination: destination)
     }
 
     func move(_ source: URL, to destination: URL) throws {

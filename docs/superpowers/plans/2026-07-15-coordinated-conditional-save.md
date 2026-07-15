@@ -32,6 +32,7 @@
 - Modify: `AGENTS.md`
 - Modify: `TRACKER.md`
 - Update ignored evidence: `.superpowers/sdd/task-3.4-report.md`
+- Modify: `ScratchpadTests/App/AppCommandsTests.swift`
 
 **Interfaces:**
 - Consumes: `BookmarkAccessing`, `ScopedAccessToken`, `DocumentSnapshot`, `ContentHash`, the existing unconditional `AtomicFileWriting.write`, and the existing per-destination transaction lock.
@@ -181,11 +182,28 @@ Run:
 xcodebuild -scheme Scratchpad -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadTask34Conditional -only-testing:ScratchpadTests/FileServiceTests test
 ```
 
-Expected: all 13 FileService tests pass with zero failures. Together with the two new AtomicFileWriter conditional tests, Task 3.4 has 15 focused tests.
+Expected after controller regressions: all 14 FileService tests and all 19 AtomicFileWriter tests pass. Four AtomicFileWriter conditional tests plus 14 FileService tests give Task 3.4 18 focused tests.
 
 Then run the late-race test five times. Expected each run: one typed conflict, zero unconditional writes, zero successful results, and exact one-token end accounting.
 
-- [ ] **Step 10: Run full verification**
+- [ ] **Step 10: Replace the AppCommands window fixture with direct responders**
+
+Use the recorded broad-suite and hidden-window failures as RED evidence: excluding `AppCommandsTests` passes 92/92 three times, while the full suite crashes in `_NSWindowTransformAnimation`; removing only presentation then crashes both focused cases during XCTest autorelease-pool teardown.
+
+Run the single test before production changes:
+
+```sh
+xcodegen
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadTask34HostIsolation -only-testing:ScratchpadTests/AppCommandsTests test
+```
+
+Expected before the rewrite: the window-based fixture does not produce a stable focused GREEN.
+
+Then change `assembly()` to return only `(DocumentSession, ScratchTextView)`. Remove all `NSWindow` construction, ownership, presentation, responder assignment, visibility assertions, and close calls. Call `tryToPerform` directly on `ScratchTextView` in the editor case and on a standalone `NSTextField` in the non-editor case. Do not change production app entry, editor or command code, selector, document assertions, or test ordering.
+
+Run the same focused command again. Expected: both cases pass, including the existing responder-action assertions, with no test-created window.
+
+- [ ] **Step 11: Run full verification**
 
 Run:
 
@@ -193,22 +211,24 @@ Run:
 xcodegen
 xcodebuild -scheme Scratchpad -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadStage3 SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build
 xcodebuild -scheme Scratchpad -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadStage3 test
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadStage3 test
+xcodebuild -scheme Scratchpad -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadStage3 test
 git diff --check
 ```
 
-Expected: warning-as-error build succeeds; 93 cumulative tests pass; no whitespace errors. Scan the scoped diff for H1–H14, direct `pathHint` URL construction, `DocumentSession` mutation, unstructured `Task`, network entitlement, and any user-file mutation outside `AtomicFileWriter`.
+Expected: warning-as-error build succeeds; three consecutive cumulative runs each pass all 96 tests without a host crash; no whitespace errors. Scan the scoped diff for H1–H14, direct `pathHint` URL construction, `DocumentSession` mutation, unstructured `Task`, network entitlement, and any user-file mutation outside `AtomicFileWriter`.
 
-- [ ] **Step 11: Controller review and evidence**
+- [ ] **Step 12: Controller review and evidence**
 
-Update `.superpowers/sdd/task-3.4-report.md` with initial RED, controller RED, conditional-writer RED/GREEN, 15/15 focused results, five race repetitions, 93/93 full results, warning-free build, scope scans, and the explicit `NSFileCoordinator` threat-model limitation.
+Update `.superpowers/sdd/task-3.4-report.md` with initial RED, controller REDs, conditional-writer RED/GREEN, window-fixture diagnosis, 18/18 focused results, five race repetitions, three 96/96 full results, warning-free build, scope scans, and the explicit `NSFileCoordinator` threat-model limitation.
 
 Keep Task 3.4 `in progress` until an independent controller reports no Critical, Important, or Minor findings. The signed-app manual external-edit scenario is recorded for the Stage 3 integration gate after ApplicationModel Save wiring exists.
 
-- [ ] **Step 12: Commit the verified task**
+- [ ] **Step 13: Commit the verified task**
 
 Only after clean controller review, update `AGENTS.md`/`TRACKER.md` to Task 3.5 and commit:
 
 ```sh
-git add AGENTS.md Scratchpad/Persistence/AtomicFileWriter.swift ScratchpadTests/Persistence/AtomicFileWriterTests.swift Scratchpad/Files/FileResults.swift Scratchpad/Files/FileService.swift ScratchpadTests/Files/FileServiceTests.swift project.yml TRACKER.md
+git add AGENTS.md ScratchpadTests/App/AppCommandsTests.swift Scratchpad/Persistence/AtomicFileWriter.swift ScratchpadTests/Persistence/AtomicFileWriterTests.swift Scratchpad/Files/FileResults.swift Scratchpad/Files/FileService.swift ScratchpadTests/Files/FileServiceTests.swift project.yml TRACKER.md
 git commit -m "feat: add verified sandbox file service"
 ```

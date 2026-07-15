@@ -4,33 +4,22 @@ import XCTest
 
 @MainActor
 final class AppCommandsTests: XCTestCase {
-    private func assembly() throws -> (DocumentSession, NSWindow, ScratchTextView) {
+    private func assembly() throws -> (DocumentSession, ScratchTextView) {
         let document = DocumentSession(text: "one")
         let coordinator = EditorCoordinator(document: document, onEdit: { _ in })
         let scrollView = EditorHost.makeScrollView(document: document, coordinator: coordinator)
         guard let textView = scrollView.documentView as? ScratchTextView else {
             throw AppCommandsTestError.missingTextView
         }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
-            styleMask: [.titled],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentView = scrollView
-        window.makeKeyAndOrderFront(nil)
-        return (document, window, textView)
+        return (document, textView)
     }
 
     func testResponderActionReachesFocusedScratchTextViewExactlyOnce() throws {
         let _ = AppCommands()
-        let (document, window, textView) = try assembly()
-        defer { window.close() }
+        let (document, textView) = try assembly()
         textView.setSelectedRange(NSRange(location: 1, length: 0))
-        XCTAssertTrue(window.makeFirstResponder(textView))
 
-        let responder = try XCTUnwrap(window.firstResponder)
-        let handled = responder.tryToPerform(
+        let handled = textView.tryToPerform(
             #selector(ScratchTextView.scratchpadDuplicateLine(_:)),
             with: nil
         )
@@ -42,14 +31,10 @@ final class AppCommandsTests: XCTestCase {
 
     func testResponderActionDoesNotEditWithNonEditorFirstResponder() throws {
         let _ = AppCommands()
-        let (document, window, _) = try assembly()
-        defer { window.close() }
+        let (document, _) = try assembly()
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 120, height: 24))
-        window.contentView?.addSubview(field)
-        XCTAssertTrue(window.makeFirstResponder(field))
 
-        let responder = try XCTUnwrap(window.firstResponder)
-        let handled = responder.tryToPerform(
+        let handled = field.tryToPerform(
             #selector(ScratchTextView.scratchpadDuplicateLine(_:)),
             with: nil
         )

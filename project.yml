@@ -32,6 +32,8 @@ targets:
       - path: Scratchpad/Editor/LineTable.swift
       - path: Scratchpad/Editor/ScratchTextView.swift
       - path: Scratchpad/Files/FileModels.swift
+      - path: Scratchpad/Files/FileResults.swift
+      - path: Scratchpad/Files/FileService.swift
       - path: Scratchpad/Persistence/ApplicationSupportPaths.swift
       - path: Scratchpad/Persistence/AtomicFileWriter.swift
       - path: Scratchpad/Persistence/BookmarkStore.swift
@@ -62,6 +64,7 @@ targets:
       - ScratchpadTests/Persistence/AtomicFileWriterTests.swift
       - ScratchpadTests/Persistence/BookmarkStoreTests.swift
       - ScratchpadTests/Persistence/SessionRepositoryTests.swift
+      - ScratchpadTests/Files/FileServiceTests.swift
     settings:
       GENERATE_INFOPLIST_FILE: YES
     dependencies:

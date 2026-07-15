@@ -87,7 +87,35 @@ TDD additions must first fail against the current check-then-write implementatio
 
 Focused AtomicFileWriter and FileService suites, five repeated race-test iterations, the full warning-free build/test suite, and diff/invariant scans are required before Task 3.4 can be verified. The signed-app manual external-edit scenario remains required at the Stage 3 integration gate after `ApplicationModel` wires the service into user-visible Save.
 
-## 7. Alternatives Considered
+## 7. Hosted XCTest Window-Lifecycle Correction
+
+Task 3.4's full-suite gate uncovered a pre-existing verification-harness defect. Repeated broad suites crashed nondeterministically while AppKit released `_NSWindowTransformAnimation` during Core Animation teardown; the attributed persistence test varied, and each attributed test passed in isolation.
+
+The necessary trigger was isolated to `AppCommandsTests`: three complete suites excluding it passed 92/92, while both cases create and destroy a titled `NSWindow` around a direct responder invocation. The test never sends an application-level action; it calls `tryToPerform` directly on the selected responder, so an `NSWindow` does not participate in the behavior under test.
+
+The correction removes the window fixture entirely. The editor case invokes `tryToPerform` on the assembled `ScratchTextView`; the non-editor case invokes it on a standalone `NSTextField`. Production app entry, editor code, and command code remain unchanged. After controller regressions, three consecutive complete 96-test suite passes are required before Task 3.4 advances.
+
+## 8. Alternatives Considered
+
+### Use windowless direct-responder fixtures — selected
+
+The tests invoke `tryToPerform` directly on the responder, so `NSWindow.firstResponder` is only an unnecessary container. Direct `ScratchTextView` and `NSTextField` fixtures preserve the exact selector-handling behavior while eliminating all test-window ownership and teardown.
+
+### Keep the responder fixture window hidden — rejected after RED
+
+Removing presentation made both visibility assertions GREEN, but the focused two-test suite then crashed deterministically during XCTest autorelease-pool teardown. Merely hiding the `NSWindow` did not remove its faulty ownership lifecycle.
+
+### Suppress production document-scene launch during XCTest — rejected after GREEN
+
+`.defaultLaunchBehavior(.suppressed)` passed the focused no-window regression and eliminated the original `_NSWindowTransformAnimation` crash. However, three complete-suite attempts each ended with 93 of 94 tests passed because the windowless sole-scene host exited normally with code 0 during the longest asynchronous test. Launch suppression therefore does not keep an application-hosted XCTest process alive reliably.
+
+### Dedicated menu-bar-only XCTest host — rejected after GREEN
+
+The dedicated test host passed the no-document-window regression, but three broad runs still crashed in `_NSWindowTransformAnimation`. This proved that the production document window was not the necessary trigger and that changing app entry was unnecessary.
+
+### Runtime `SceneBuilder` branch — rejected after RED
+
+The installed macOS 26 SwiftUI SDK rejects runtime `if`/`else` composition in `SceneBuilder`; the exact approved branch failed compilation. Compile-time availability conditionals are supported, but they cannot select behavior for XCTest.
 
 ### Coordinated conditional replacement — selected
 
@@ -101,7 +129,15 @@ Another check narrows but does not close the race; an external writer can still 
 
 This can preserve multiple versions but creates a more complex multi-replacement failure protocol, visible sidecar artifacts, and additional races during restoration. It is disproportionate for the recovery milestone.
 
-## 8. Documentation Amendments
+### Make the unit-test target unhosted — rejected for this correction
+
+Removing `TEST_HOST` and `BUNDLE_LOADER` changes how the suite loads application symbols and AppKit integration. That is a broader project-configuration migration than the observed lifecycle defect requires.
+
+### Disable window animations in test setup — rejected
+
+The responder tests do not require a visible window at all. Preventing presentation is simpler and removes the irrelevant animation lifecycle instead of configuring it.
+
+## 9. Documentation Amendments
 
 After written-spec approval:
 
@@ -109,3 +145,5 @@ After written-spec approval:
 - `IMPLEMENTATION_PLAN.md` Task 3.4 will add the conditional writer API, race regressions, full scoped-access matrix, and live-filesystem tests;
 - `SPEC.md` will clarify that normal Save performs a final coordinated conflict check; and
 - `AGENTS.md` and `TRACKER.md` will remain on Task 3.4 until implementation, review, and manual evidence pass.
+
+The hosted-test correction additionally amends `IMPLEMENTATION_PLAN.md`; it does not amend product behavior in `SPEC.md` or production structure in `ARCHITECTURE.md`.
