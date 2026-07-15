@@ -4,9 +4,9 @@ Rules for every coding agent in this repository. Read this file before acting.
 
 ## Current Stage
 
-> **Recovery Stage 2 — Sublime-style command system**
+> **Recovery Stage 3 — Data-safe persistence and lifecycle**
 >
-> **Implementation lock: OFF.** Tasks 2.1–2.4 are verified. Stop at the Stage 2 approval gate; do not begin Recovery Stage 3.
+> **Implementation lock: OFF.** Stage 2 was approved by the user. The current implementation task is 3.1; do not begin Task 3.2 or a later task.
 
 Work only on the current stage and current task recorded in `TRACKER.md`. Never prepare, scaffold, or begin a later stage without the user's explicit approval.
 
