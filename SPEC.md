@@ -61,6 +61,7 @@ P7. The window never displays or edits text belonging to another document.
 P8. The application contains no network code or network entitlement.
 P9. The application has zero third-party runtime dependencies.
 P10. A green build without behavioral evidence is not acceptance.
+P11. No editable surface appears until launch restoration and the unclean-session write succeed.
 ```
 
 ## 4. Document Lifecycle
@@ -73,7 +74,9 @@ On launch, Scratchpad performs exactly one of these outcomes:
 2. Reopen the previous clean file-backed document from disk.
 3. If no restorable document exists, create an empty untitled document.
 
-The editor becomes first responder without a welcome screen or file picker.
+The window shows a native loading state while restoration runs. No editable `NSTextView` is constructed until the selected source has been applied and the active session has been written successfully with `didCloseCleanly = false`. A launch failure keeps the editor closed and offers Retry; it never falls back to a fresh editable document.
+
+After the gate opens, the editor becomes first responder without a welcome screen or file picker.
 
 Restoration includes text, document identity, file association, save state, selection, and vertical scroll position. Restored dirty text remains visibly edited.
 
@@ -279,7 +282,7 @@ User-editable colors and custom theme files are deferred.
 
 ## 11. Recovery and Persistence Behavior
 
-Unsaved recovery snapshots are written two seconds after the latest edit. A later edit replaces the pending snapshot for that document with a snapshot of the newest text.
+Unsaved recovery snapshots are written two seconds after the latest edit. A later edit replaces the pending snapshot for that document with a snapshot of the newest text. Writes for one document finish in source order: cancellation of an already-running older write may not let it become the final persisted record or clear a newer pending generation. Different document identities remain independently scheduled.
 
 Recovery is flushed immediately when:
 

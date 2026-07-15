@@ -3409,9 +3409,9 @@ git commit -m "feat: add verified sandbox file service"
 
 ### Task 3.5: Debounce Recovery per Document and Restore the Correct Source
 
-**Files:** Create `Scratchpad/Persistence/RecoveryCoordinator.swift` and `ScratchpadTests/Persistence/RecoveryCoordinatorTests.swift`; modify `Scratchpad/Document/DocumentSession.swift`, `Scratchpad/App/ApplicationModel.swift`, `project.yml`, and `TRACKER.md`.
+**Files:** Create `Scratchpad/Persistence/RecoveryCoordinator.swift`, `Scratchpad/App/ApplicationServices.swift`, and `ScratchpadTests/Persistence/RecoveryCoordinatorTests.swift`; modify `Scratchpad/Document/DocumentSession.swift`, `Scratchpad/App/ApplicationModel.swift`, `Scratchpad/App/ScratchpadApp.swift`, `Scratchpad/App/MainWindowView.swift`, `ScratchpadTests/App/ApplicationModelTests.swift`, `ScratchpadTests/RecoveryProjectPolicyTests.swift`, `project.yml`, and `TRACKER.md`.
 
-**Interfaces:** Consumes `SessionPersisting`, `DocumentSession.recoverySnapshot()`, and `DocumentSession.sessionRecord(...)`. Produces `RecoveryCoordinator`, `RestoreSource`, and launch restoration.
+**Interfaces:** Consumes `SessionPersisting`, `BookmarkAccessing`, `FileServicing`, `AtomicFileWriting`, `DocumentSession.recoverySnapshot()`, and `DocumentSession.sessionRecord(...)`. Produces ordered `RecoveryCoordinator` persistence, `ApplicationServices.live()`, `LaunchState`, `RestoreSource`, and a fail-closed production launch gate.
 
 - [ ] **Step 1: Write the failing recovery tests**
 
@@ -3425,11 +3425,29 @@ func testSessionFlushRecordsSelectionScrollAndCleanFlag()
 func testUnsavedOrNonemptyUntitledLaunchPrefersRecoveryText()
 func testCleanFileBackedLaunchReopensDiskInsteadOfRecoveryText()
 func testUnreadableSessionPreservesOrphanRecoveryForNextLaunch()
+func testRescheduledDebounceWaitsForInFlightWriteAndPersistsNewestGeneration()
+func testExplicitFlushWaitsForInFlightWriteAndFinishesNewest()
+func testRecoveryUsesRecoveryBookmarkWhenSessionBookmarkDiffers()
+func testNonemptyUntitledRecoveryRestoresEditedAndUnsaved()
 ```
 
 Use an injected `RecoveryClock` whose test implementation advances virtual time; no test sleeps in wall-clock time. For the fresh-snapshot test, schedule at generation 1, edit to generation 2, advance two seconds, and assert only generation-2 text was persisted.
 
-- [ ] **Step 2: Implement scheduling and restore-source selection**
+The two race tests use a repository that suspends selected `writeRecovery` calls and ignores task cancellation. Start an older write, schedule or flush newer text while it is suspended, release the old call, and assert the repository observes old then new with the new record final. The bookmark regression gives session and recovery different IDs and asserts the restored `DocumentSession.fileReference` uses the recovery ID. The untitled regression asserts nonempty recovered text is `.edited` with `hasUnsavedChanges == true`.
+
+- [ ] **Step 2: Write the failing production launch-gate tests**
+
+Add tests named exactly:
+
+```swift
+func testLaunchGateRemainsClosedUntilUncleanSessionWriteCompletes()
+func testLaunchFailureKeepsGateClosedAndRetrySucceeds()
+func testProductionLaunchUsesLiveServicesAndConstructsEditorOnlyWhenReady()
+```
+
+The model tests inject a repository whose `writeSession` can suspend or fail. Assert `launchState == .restoring` until the suspended write resumes, then `.ready`; on failure assert `.failed`, increment the retry attempt, allow the repository to succeed, and assert `.ready`. The policy test reads production sources and proves `ScratchpadApp` creates `ApplicationModel.live()`, `MainWindowView` starts `.task(id: model.launchAttempt)`, and `EditorHost` appears only inside the `.ready` switch branch.
+
+- [ ] **Step 3: Implement ordered scheduling and restore-source selection**
 
 ```swift
 protocol RecoveryClock: Sendable {
@@ -3460,16 +3478,20 @@ final class RecoveryCoordinator {
 }
 ```
 
-Store pending tasks in `[UUID: Task<Void, Never>]`. A task captures only the UUID; when the clock completes on the main actor, use `documentProvider` to look up the still-current document and call `recoverySnapshot()` then. `flushRecovery` cancels the pending task, takes a fresh snapshot synchronously, and awaits repository persistence. Do not clear the pending marker until success or explicit cancellation.
+Store pending entries as a unique token plus task. A completion clears only its matching token. Serialize repository calls through a FIFO gate keyed by document ID; after acquiring, canceled debounce waiters exit without writing. A task captures only the UUID; when the clock completes on the main actor, use `documentProvider` to look up the still-current document and call `recoverySnapshot()` then. `flushRecovery` cancels the pending timer, takes a fresh snapshot synchronously, waits behind any in-flight write for that document, and persists last. Do not clear the pending marker until success or explicit cancellation.
 
-Launch resolution is pure: a session with `hasUnsavedChanges == true`, or a nonempty untitled session, selects matching `.recovery`; a file-backed session with `hasUnsavedChanges == false` resolves its `fileReferenceID` through `BookmarkAccessing.reference(for:)` and selects `.file`; missing/corrupt session selects `.empty` while leaving every orphan recovery file untouched. ApplicationModel applies recovered text only with `replaceEntireContents(_:)`. Immediately after restoration and before the editor accepts input, flush a session record with `didCloseCleanly = false`.
+Launch resolution is pure: a session with `hasUnsavedChanges == true`, or a nonempty untitled session, selects matching `.recovery`; a file-backed session with `hasUnsavedChanges == false` resolves its `fileReferenceID` through `BookmarkAccessing.reference(for:)` and selects `.file`; missing/corrupt session selects `.empty` while leaving every orphan recovery file untouched. Recovery's `fileReferenceID` is authoritative when recovery wins. ApplicationModel applies recovered text only with `replaceEntireContents(_:)`; nonempty untitled recovery becomes edited and unsaved.
 
-- [ ] **Step 3: Prove recovery freshness and commit**
+- [ ] **Step 4: Compose live services and gate editor construction**
 
-Run the focused tests and full suite. Expected: 7 new tests pass; cumulative suite count is 77.
+`ApplicationServices.live()` creates canonical Application Support directories, one shared `AtomicFileWriter`, `SessionRepository`, `BookmarkStore`, `FileService`, and `ContinuousRecoveryClock`. `ApplicationModel.live()` begins in `.restoring`; each launch attempt is idempotent, applies one source, writes `didCloseCleanly = false`, and transitions to `.ready` only after success. Failure remains `.failed` with Retry. `ScratchpadApp` uses the live factory. `MainWindowView` starts restoration with `.task(id:)`, shows `ProgressView` or retry UI while closed, and constructs `EditorHost` only for `.ready`.
+
+- [ ] **Step 5: Prove recovery freshness, launch safety, and commit**
+
+Run the 14 Task 3.5 tests, the warning-as-error build, and the full suite. Expected: all 14 focused tests pass and the cumulative suite count is 110. Run invariant, prohibited-scope, wall-clock-sleep, and whitespace scans. Manually launch with a seeded recovery record and with a clean file-backed session; verify the window never flashes an editable empty document and restored content is the first editable content shown.
 
 ```sh
-git add Scratchpad/Persistence/RecoveryCoordinator.swift Scratchpad/Document/DocumentSession.swift Scratchpad/App/ApplicationModel.swift ScratchpadTests/Persistence/RecoveryCoordinatorTests.swift project.yml TRACKER.md
+git add AGENTS.md SPEC.md ARCHITECTURE.md IMPLEMENTATION_PLAN.md TRACKER.md Scratchpad/App/ApplicationServices.swift Scratchpad/App/ApplicationModel.swift Scratchpad/App/ScratchpadApp.swift Scratchpad/App/MainWindowView.swift Scratchpad/Document/DocumentSession.swift Scratchpad/Persistence/RecoveryCoordinator.swift ScratchpadTests/App/ApplicationModelTests.swift ScratchpadTests/Persistence/RecoveryCoordinatorTests.swift ScratchpadTests/RecoveryProjectPolicyTests.swift project.yml
 git commit -m "feat: restore and flush latest recovery state"
 ```
 

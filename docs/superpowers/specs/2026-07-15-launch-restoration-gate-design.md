@@ -1,6 +1,6 @@
 # Launch Restoration Gate Design
 
-**Status:** Approved conceptually; written-spec review pending
+**Status:** Approved
 
 **Date:** 2026-07-15
 

@@ -43,6 +43,7 @@ Scratchpad/
   App/
     ScratchpadApp.swift
     AppDelegate.swift
+    ApplicationServices.swift
     ApplicationModel.swift
     AppCommands.swift
     DocumentDecisionCoordinator.swift
@@ -104,6 +105,7 @@ Files are grouped by behavior that changes together. Deferred feature folders ar
 
 | Component | Isolation | Owns | Does not own |
 |---|---|---|---|
+| `ApplicationServices` | Immutable `Sendable` composition | One live persistence/bookmark/file/clock graph rooted at canonical Application Support | View state or document text |
 | `ApplicationModel` | `@MainActor @Observable` | Current document, settings, banner, app-level operations | Document text or file I/O |
 | `DocumentDecisionCoordinator` | `@MainActor` | Save/Discard/Cancel and conflict decision serialization | Text storage or disk I/O |
 | `FilePanelProvider` | `@MainActor` | Async native Open/Save panel presentation and URL selection | Bookmark persistence or document mutation |
@@ -323,6 +325,8 @@ Native commands not listed above pass through untouched.
 @Observable
 final class ApplicationModel {
     private(set) var document: DocumentSession
+    private(set) var launchState: LaunchState
+    private(set) var launchAttempt: Int
     let settings: SettingsStore
     var banner: ErrorBanner?
     var pendingDecision: DocumentDecision?
@@ -332,6 +336,8 @@ final class ApplicationModel {
 `OpenBuffer`-style unobservable nested reference state does not return. SwiftUI reads observable document metadata and immutable metrics. AppKit renders text directly from storage.
 
 Menus call typed `ApplicationModel` operations. They do not write signaling keys into `UserDefaults`. Settings views bind to `SettingsStore`, which updates memory first and persists its scalar value once.
+
+`ScratchpadApp` creates the model through `ApplicationModel.live()`. `MainWindowView` starts the current attempt with SwiftUI `.task(id: model.launchAttempt)`. It constructs `EditorHost` only for `.ready`; `.restoring` presents an indeterminate native progress view, and `.failed` presents stable copy plus Retry. Retry increments the attempt identifier instead of creating an unstructured task. Duplicate evaluation of the same attempt is idempotent.
 
 ## 8. Edit and Metrics Flow
 
@@ -372,6 +378,8 @@ struct DocumentMetrics: Equatable, Sendable {
 ```
 
 Every JSON root carries `schemaVersion: Int`. Version 1 is the only accepted recovery-milestone schema. An unsupported or undecodable schema is quarantined before startup continues with recoverable alternatives.
+
+`ApplicationServices.live()` is the only production composition root. On the main actor it resolves the canonical Application Support root, creates the required directories, constructs one `LiveAtomicFileSystem` and `AtomicFileWriter`, then shares that writer with `SessionRepository`, `BookmarkStore`, and `FileService`. It also provides `ContinuousRecoveryClock`. Tests inject protocol-backed services and never use live Application Support. A composition failure closes the launch gate; Retry reruns composition.
 
 ### 9.2 Records
 
@@ -452,7 +460,7 @@ If quarantine fails, the original remains untouched and the error is surfaced. L
 
 ## 10. Recovery Scheduling and Lifecycle
 
-`RecoveryCoordinator` is main-actor isolated because it captures `DocumentSession` snapshots. It owns a dictionary of pending debounce tasks keyed by document ID even though recovery initially exposes one document. This prevents a return to the prototype's single-global-debouncer defect.
+`RecoveryCoordinator` is main-actor isolated because it captures `DocumentSession` snapshots. It owns a dictionary of pending debounce entries keyed by document ID even though recovery initially exposes one document. Each entry contains a unique generation token and task. Completion clears the entry only when the token still matches, so an older task cannot erase its replacement. This prevents a return to the prototype's single-global-debouncer defect.
 
 ```swift
 @MainActor
@@ -470,7 +478,15 @@ final class RecoveryCoordinator {
 
 The two-second debounce closure captures only document identity. When it fires on the main actor, it creates a fresh snapshot of the latest text and sends the `RecoveryRecord` to `SessionRepository`.
 
-### 10.1 Termination handshake
+Repository calls are serialized through one FIFO async gate per document ID. The gate covers persistence, not the debounce sleep. If cancellation arrives after an older write begins, a replacement debounce or explicit flush waits for that write and then writes the newer snapshot, guaranteeing the newest accepted record finishes last. A canceled waiter checks cancellation after acquiring the gate and does not persist. Different document IDs never share a gate.
+
+### 10.1 Launch restoration gate
+
+`ApplicationModel` owns `.restoring`, `.ready`, and `.failed(message:)` launch states. Each attempt loads session and matching recovery, then selects exactly one source: unsaved or nonempty untitled recovery; current disk bytes for a clean file-backed session; or a new empty document. Recovery metadata is authoritative for its bookmark ID and path hint. Recovered text enters storage only through `replaceEntireContents`; nonempty untitled recovery is edited and unsaved.
+
+After source application, `ApplicationModel` writes a fresh session record with `didCloseCleanly = false`. Only verified success transitions to `.ready`. Any directory, decoding/quarantine, bookmark, file, restore, or session-write failure transitions to `.failed` without constructing `EditorHost`. Retry reuses the live graph when available or reruns composition when creation failed, re-reads persisted state, and performs a new idempotent attempt. Window-task cancellation never opens the gate.
+
+### 10.2 Termination handshake
 
 `AppDelegate.applicationShouldTerminate` returns `.terminateLater` and starts one main-actor termination task. The task:
 
