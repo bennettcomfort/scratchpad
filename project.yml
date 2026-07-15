@@ -49,6 +49,7 @@ targets:
       - ScratchpadTests/Editor/EditorCoordinatorTests.swift
       - ScratchpadTests/Editor/LineTableTests.swift
       - ScratchpadTests/Editor/EditorCommandRouterTests.swift
+      - ScratchpadTests/Editor/ScratchTextViewCommandTests.swift
     settings:
       GENERATE_INFOPLIST_FILE: YES
     dependencies:

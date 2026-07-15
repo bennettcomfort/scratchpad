@@ -21,6 +21,7 @@ struct EditorHost: NSViewRepresentable {
         }
         precondition(textView.textLayoutManager != nil)
         precondition(textView.textStorage === document.storage)
+        textView.commandContext = .defaults(lineEnding: document.lineEnding)
     }
 
     static func dismantleNSView(
@@ -43,6 +44,7 @@ struct EditorHost: NSViewRepresentable {
         scrollView.autohidesScrollers = true
 
         let textView = ScratchTextView(usingTextLayoutManager: true)
+        textView.commandContext = .defaults(lineEnding: document.lineEnding)
         guard let contentStorage = textView.textContentStorage else {
             preconditionFailure("TextKit 2 content storage is unavailable")
         }
