@@ -4,9 +4,9 @@ Rules for every coding agent in this repository. Read this file before acting.
 
 ## Current Stage
 
-> **Recovery Stage 1 — Document and editor core**
+> **Recovery Stage 2 — Sublime-style command system**
 >
-> **Implementation lock: OFF.** Stage 0 was approved by the user. The current implementation task is 1.5; do not begin Recovery Stage 2.
+> **Implementation lock: OFF.** Stage 1 was approved by the user. The current implementation task is 2.1; do not begin Task 2.2 or a later task.
 
 Work only on the current stage and current task recorded in `TRACKER.md`. Never prepare, scaffold, or begin a later stage without the user's explicit approval.
 

@@ -1,8 +1,8 @@
 # TRACKER.md — Scratchpad Recovery
 
-> **Current stage:** Recovery Stage 1 — Document and editor core
+> **Current stage:** Recovery Stage 2 — Sublime-style command system
 > **Current phase:** Implementation
-> **Current task:** Task 1.5 — replace containment shell with the single editor
+> **Current task:** Task 2.1 — define command values and UTF-16 line geometry
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -48,7 +48,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 2.1 | Define command values and UTF-16 line geometry | pending | Approved plan; awaiting Gate 5 implementation unlock |
+| 2.1 | Define command values and UTF-16 line geometry | in progress | Stage 1 explicitly approved by user; approved Stage 2 plan starting |
 | 2.2 | Implement and prove pure command transformations | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 2.3 | Apply commands through one undoable AppKit transaction | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 2.4 | Route fixed shortcuts through the first responder | pending | Approved plan; awaiting Gate 5 implementation unlock |
@@ -88,8 +88,8 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | Stage | Outcome | State | Approval gate |
 |---|---|---|---|
 | 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | verified | User approved Stage 0 on 2026-07-14; commits `61be30c`, `f7c765a`, `81d0865` |
-| 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | in progress | Tasks 1.1–1.5 verified; Stage 1 remains open at its explicit user approval gate |
-| 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | pending | User approves command matrix |
+| 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | verified | User approved Stage 1 on 2026-07-15; commits `988a539`, `3bdacc9`, `3a1e4af`, `2e8c4c7`, `2b703b5` |
+| 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | in progress | Task 2.1 starting; user approval required after Tasks 2.1–2.4 |
 | 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | pending | User approves forced-termination and data-loss matrix |
 | 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | pending | User approves visual and settings matrix |
 | 5 | Complete warning, regression, accessibility, performance, and dogfood hardening | pending | User accepts recovery milestone |
@@ -127,10 +127,11 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2026-07-14 | Align Task 0.1 regression ownership with the exact test names approved in later stage task blocks | `IMPLEMENTATION_PLAN.md`, `docs/recovery/REGRESSION_MATRIX.md` |
 | 2026-07-14 | User explicitly approved aligning the live pointer to Task 0.2 and removing the invalid standalone 1024px app-icon child so containment has zero project-owned warnings | `AGENTS.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md`, app icon catalog |
 | 2026-07-14 | User approved the complete Stage 0 evidence matrix and authorized Recovery Stage 1 | `AGENTS.md`, `TRACKER.md` |
+| 2026-07-15 | User approved the complete Stage 1 evidence matrix and authorized Recovery Stage 2 | `AGENTS.md`, `TRACKER.md` |
 
 ## Blockers
 
-None. All Stage 1 tasks are verified; the stage remains in progress at its required user approval gate.
+None. Task 2.1 is in progress, not blocked.
 
 When blocked, record the concrete evidence, affected task, safe work already exhausted, and exact user decision needed. Never mark a task `blocked` merely because it is difficult or incomplete.
 
@@ -157,6 +158,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-14 | Task 1.3 TextKit 2 attachment | Missing-editor compile failure; SDK numeric ambiguity reproduced and type-qualified; 2 focused tests; empty forbidden-access scan; warning-as-error build; 15 full tests; independent review | verified | This task commit |
 | 2026-07-14 | Task 1.4 native editor synchronization | Missing-delegate compile failure; 3 focused tests; native undo and exactly-once callback evidence; empty forbidden-access scan; warning-as-error build; 18 full tests; independent lifecycle review | verified | This task commit |
 | 2026-07-14 | Task 1.5 editor-core shell | Missing-root-model compile failure; missing-native-Find policy failure; 6 focused tests; warning-as-error build; 18 full tests; empty TextKit 1 and deleted-source scans; whitespace and scoped-diff review; eight-item Computer Use matrix | verified | One root model and one native editor window; standard `TextEditingCommands` restores native Find; this task commit |
+| 2026-07-15 | Stage 1 approval | User approval after the complete ownership, TextKit 2, native editing, source-boundary, automated, and manual matrix | verified | Approved; Stage 2 authorized |
 
 ## Current Manual Acceptance Matrix
 
