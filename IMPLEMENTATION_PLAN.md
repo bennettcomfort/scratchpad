@@ -3787,7 +3787,7 @@ Planning approval for Gate 4E does not merge the two implementation approvals: e
 
 **Interfaces:** Produces `AppearancePreference`, `FontPreference`, `EditorSettingsSnapshot`, `LaunchAtLoginServicing`, and `SettingsStore` for Tasks 4.2–4.5.
 
-- [ ] **Step 1: Write the failing settings tests**
+- [x] **Step 1: Write the failing settings tests**
 
 Create tests named exactly:
 
@@ -3806,7 +3806,7 @@ Use a unique volatile `UserDefaults` suite and a fake launch service. Assert def
 
 Run the focused tests. Expected: compilation fails because `SettingsStore` does not exist.
 
-- [ ] **Step 2: Implement the typed store and service boundary**
+- [x] **Step 2: Implement the typed store and service boundary**
 
 ```swift
 enum AppearancePreference: String, CaseIterable, Codable, Sendable {
@@ -3861,9 +3861,9 @@ final class SettingsStore {
 
 Register defaults once in the initializer. Every setter writes one typed value and rebuilds one snapshot. No view reads `UserDefaults`; no defaults-changed notification is posted. The live launch service reads `SMAppService.mainApp.status`, calls `register()` or `unregister()`, then rereads status. On error, the store reflects actual service status and publishes a concise error.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
-Run focused tests and the full suite. Expected: 8 new tests pass; cumulative suite count is 106.
+Run focused tests and the full suite. Verified: 8 new tests pass; cumulative suite count is 203.
 
 ```sh
 git add Scratchpad/Settings/SettingsStore.swift Scratchpad/Settings/LaunchAtLoginService.swift ScratchpadTests/Settings/SettingsStoreTests.swift project.yml TRACKER.md
