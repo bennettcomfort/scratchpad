@@ -161,6 +161,9 @@ final class FileServiceTests: XCTestCase {
         XCTAssertEqual(savedData, expected)
         XCTAssertEqual(result.lineEnding, .crlf)
         XCTAssertEqual(result.contentHash, ContentHash.sha256(expected))
+        let acquiredTokenID = await fixture.bookmarks.acquiredTokenID()
+        let refreshedTokenIDs = await fixture.bookmarks.refreshedTokenIDs()
+        XCTAssertEqual(refreshedTokenIDs, [acquiredTokenID].compactMap { $0 })
     }
 
     func testSaveAsWritesSelectedDestinationWithoutPathFallback() async throws {
@@ -179,6 +182,9 @@ final class FileServiceTests: XCTestCase {
         XCTAssertEqual(savedData, Data("selected".utf8))
         XCTAssertEqual(result.reference, misleadingReference)
         XCTAssertEqual(result.displayName, fixture.url.lastPathComponent)
+        let acquiredTokenID = await fixture.bookmarks.acquiredTokenID()
+        let refreshedTokenIDs = await fixture.bookmarks.refreshedTokenIDs()
+        XCTAssertEqual(refreshedTokenIDs, [acquiredTokenID].compactMap { $0 })
     }
 
     func testSaveVerificationFailureThrowsAfterRereadMismatch() async throws {
@@ -745,6 +751,7 @@ private actor FileServiceBookmarkSpy: BookmarkAccessing {
     private var tokenIDs: [UUID]
     private var acquiredTokenIDs: [UUID] = []
     private var endedTokenIDs: [UUID] = []
+    private var refreshedTokenIDsStorage: [UUID] = []
     private var nextBeginError: Error?
 
     init(url: URL, tokenIDs: [UUID]) {
@@ -774,7 +781,9 @@ private actor FileServiceBookmarkSpy: BookmarkAccessing {
         endedTokenIDs.append(token.id)
     }
 
-    func refresh(_ token: ScopedAccessToken) async throws {}
+    func refresh(_ token: ScopedAccessToken) async throws {
+        refreshedTokenIDsStorage.append(token.id)
+    }
     func forget(_ reference: ExternalFileReference) async throws {}
 
     func failNextBegin(with error: Error) {
@@ -787,6 +796,14 @@ private actor FileServiceBookmarkSpy: BookmarkAccessing {
 
     func accessSnapshot() -> (acquired: [UUID], ended: [UUID]) {
         (acquiredTokenIDs, endedTokenIDs)
+    }
+
+    func acquiredTokenID() -> UUID? {
+        acquiredTokenIDs.first
+    }
+
+    func refreshedTokenIDs() -> [UUID] {
+        refreshedTokenIDsStorage
     }
 }
 

@@ -306,6 +306,23 @@ final class AtomicFileWriterTests: XCTestCase {
         )
     }
 
+    func testSecurityScopedWriteUsesAtomicDestinationWriteWithoutExplicitSiblingTemporary() async throws {
+        let destination = makeRoot().appending(path: "selected/document.md")
+        let fileSystem = RecordingAtomicFileSystem(
+            initialData: [destination: Data("old".utf8)]
+        )
+        let writer = makeWriter(fileSystem: fileSystem)
+        let replacement = Data("replacement".utf8)
+
+        try await writer.writeSecurityScoped(replacement, to: destination)
+
+        let snapshot = await fileSystem.snapshot()
+        XCTAssertEqual(snapshot.data[destination], replacement)
+        XCTAssertEqual(snapshot.calls, [
+            .writeAtomicallyAndSynchronize(replacement, destination)
+        ])
+    }
+
     func testLiveFileSystemRemovesSynchronizedTemporaryFileDuringCleanup() async throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory.appending(
@@ -539,6 +556,7 @@ private enum RecordingFailure: Error, Sendable {
 
 private enum AtomicFileSystemCall: Equatable, Sendable {
     case writeAndSynchronize(Data, URL)
+    case writeAtomicallyAndSynchronize(Data, URL)
     case replace(URL, URL)
     case move(URL, URL)
     case remove(URL)
@@ -582,6 +600,14 @@ private actor RecordingAtomicFileSystem: AtomicFileSystem {
         }
         pendingTemporaryURLs.insert(temporaryURL)
         data[temporaryURL] = newData
+    }
+
+    func writeAtomicallyAndSynchronize(_ newData: Data, to destination: URL) throws {
+        calls.append(.writeAtomicallyAndSynchronize(newData, destination))
+        if failure == .replace {
+            throw RecordingFailure.replace
+        }
+        data[destination] = newData
     }
 
     func replace(_ destination: URL, with temporaryURL: URL) throws {

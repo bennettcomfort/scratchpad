@@ -180,6 +180,7 @@ actor FileService: FileServicing {
             let result: FileSaveResult
             switch outcome {
             case let .written(version):
+                try await bookmarks.refresh(token)
                 result = makeSaveResult(
                     snapshot,
                     reference: reference,
@@ -223,6 +224,7 @@ actor FileService: FileServicing {
                 reference: reference,
                 destination: token.url
             )
+            try await bookmarks.refresh(token)
             await bookmarks.endAccess(token)
             return result
         } catch {
@@ -288,7 +290,7 @@ actor FileService: FileServicing {
         let requestedBytes = encodedBytes(for: snapshot)
 
         do {
-            try await writer.write(requestedBytes, to: destination)
+            try await writer.writeSecurityScoped(requestedBytes, to: destination)
         } catch {
             throw FileServiceError.writeFailed
         }

@@ -14,6 +14,7 @@ enum ConditionalWriteResult: Equatable, Sendable {
 
 protocol AtomicFileWriting: Sendable {
     func write(_ data: Data, to destination: URL) async throws
+    func writeSecurityScoped(_ data: Data, to destination: URL) async throws
     func write(
         _ data: Data,
         to destination: URL,
@@ -24,6 +25,10 @@ protocol AtomicFileWriting: Sendable {
 }
 
 extension AtomicFileWriting {
+    func writeSecurityScoped(_ data: Data, to destination: URL) async throws {
+        try await write(data, to: destination)
+    }
+
     func write(
         _ data: Data,
         to destination: URL,
@@ -36,6 +41,7 @@ extension AtomicFileWriting {
 protocol AtomicFileSystem: Actor {
     func exists(_ url: URL) -> Bool
     func writeAndSynchronize(_ data: Data, to temporaryURL: URL) throws
+    func writeAtomicallyAndSynchronize(_ data: Data, to destination: URL) throws
     func replace(_ destination: URL, with temporaryURL: URL) throws
     func replaceIfUnchanged(
         _ data: Data,
@@ -90,6 +96,18 @@ actor AtomicFileWriter: AtomicFileWriting {
             }
         } catch {
             try? await fileSystem.remove(temporaryURL)
+            throw AtomicFileWriterError.writeFailed(destination: destination)
+        }
+    }
+
+    func writeSecurityScoped(_ data: Data, to destination: URL) async throws {
+        let transactionKey = transactionKey(for: destination)
+        await acquire(transactionKey)
+        defer { release(transactionKey) }
+
+        do {
+            try await fileSystem.writeAtomicallyAndSynchronize(data, to: destination)
+        } catch {
             throw AtomicFileWriterError.writeFailed(destination: destination)
         }
     }
@@ -233,6 +251,13 @@ actor LiveAtomicFileSystem: AtomicFileSystem {
         try handle.synchronize()
     }
 
+    func writeAtomicallyAndSynchronize(_ data: Data, to destination: URL) throws {
+        try data.write(to: destination, options: .atomic)
+        let handle = try FileHandle(forWritingTo: destination)
+        defer { try? handle.close() }
+        try handle.synchronize()
+    }
+
     func replace(_ destination: URL, with temporaryURL: URL) throws {
         _ = try fileManager.replaceItemAt(destination, withItemAt: temporaryURL)
     }
@@ -288,8 +313,7 @@ actor LiveAtomicFileSystem: AtomicFileSystem {
                     return
                 }
 
-                try writeAndSynchronize(data, to: temporaryURL)
-                try replace(uncachedURL, with: temporaryURL)
+                try writeAtomicallyAndSynchronize(data, to: uncachedURL)
 
                 let verificationURL = URL(fileURLWithPath: coordinatedURL.path)
                 let verifiedData: Data
