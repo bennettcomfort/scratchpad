@@ -49,4 +49,24 @@ final class RecoveryProjectPolicyTests: XCTestCase {
         let workflow = try contents(at: ".github/workflows/ci.yml")
         XCTAssertFalse(workflow.contains("MACOSX_DEPLOYMENT_TARGET"))
     }
+
+    func testProductionLaunchUsesLiveServicesAndConstructsEditorOnlyWhenReady() throws {
+        let app = try contents(at: "Scratchpad/App/ScratchpadApp.swift")
+        let window = try contents(at: "Scratchpad/App/MainWindowView.swift")
+
+        XCTAssertTrue(app.contains("ApplicationModel.live()"))
+        XCTAssertTrue(window.contains(".task(id: model.launchAttempt)"))
+
+        let restoring = try XCTUnwrap(window.range(of: "case .restoring:"))
+        let failed = try XCTUnwrap(window.range(of: "case .failed"))
+        let ready = try XCTUnwrap(window.range(of: "case .ready:"))
+        let task = try XCTUnwrap(window.range(of: ".task(id: model.launchAttempt)"))
+        let restoringSlice = window[restoring.lowerBound..<failed.lowerBound]
+        let failedSlice = window[failed.lowerBound..<ready.lowerBound]
+        let readySlice = window[ready.lowerBound..<task.lowerBound]
+        XCTAssertFalse(restoringSlice.contains("EditorHost"))
+        XCTAssertFalse(failedSlice.contains("EditorHost"))
+        XCTAssertTrue(readySlice.contains("EditorHost"))
+        XCTAssertTrue(readySlice.contains("onEdit: model.handleCurrentDocumentEdit"))
+    }
 }

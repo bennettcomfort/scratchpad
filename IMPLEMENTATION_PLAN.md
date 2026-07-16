@@ -3443,6 +3443,9 @@ Add tests named exactly:
 func testLaunchGateRemainsClosedUntilUncleanSessionWriteCompletes()
 func testLaunchFailureKeepsGateClosedAndRetrySucceeds()
 func testProductionLaunchUsesLiveServicesAndConstructsEditorOnlyWhenReady()
+func testCurrentDocumentEditSchedulesRecoveryThroughLaunchCoordinator()
+func testCleanFileBackedLaunchFailsWhenSessionBookmarkCannotResolve()
+func testRecoveryLaunchFailsWhenRecoveryBookmarkCannotResolve()
 ```
 
 The model tests inject a repository whose `writeSession` can suspend or fail. Assert `launchState == .restoring` until the suspended write resumes, then `.ready`; on failure assert `.failed`, increment the retry attempt, allow the repository to succeed, and assert `.ready`. The policy test reads production sources and proves `ScratchpadApp` creates `ApplicationModel.live()`, `MainWindowView` starts `.task(id: model.launchAttempt)`, and `EditorHost` appears only inside the `.ready` switch branch.
@@ -3488,7 +3491,7 @@ Launch resolution is pure: a session with `hasUnsavedChanges == true`, or a none
 
 - [ ] **Step 5: Prove recovery freshness, launch safety, and commit**
 
-Run the 14 Task 3.5 tests, the warning-as-error build, and the full suite. Expected: all 14 focused tests pass and the cumulative suite count is 110. Run invariant, prohibited-scope, wall-clock-sleep, and whitespace scans. Manually launch with a seeded recovery record and with a clean file-backed session; verify the window never flashes an editable empty document and restored content is the first editable content shown.
+Run the 17 Task 3.5 tests, the warning-as-error build, and the full suite. Expected: all 17 focused tests pass and the cumulative suite count is 113. Run invariant, prohibited-scope, wall-clock-sleep, and whitespace scans. Manually launch with a seeded recovery record and with a clean file-backed session; verify the window never flashes an editable empty document and restored content is the first editable content shown.
 
 ```sh
 git add AGENTS.md SPEC.md ARCHITECTURE.md IMPLEMENTATION_PLAN.md TRACKER.md Scratchpad/App/ApplicationServices.swift Scratchpad/App/ApplicationModel.swift Scratchpad/App/ScratchpadApp.swift Scratchpad/App/MainWindowView.swift Scratchpad/Document/DocumentSession.swift Scratchpad/Persistence/RecoveryCoordinator.swift ScratchpadTests/App/ApplicationModelTests.swift ScratchpadTests/Persistence/RecoveryCoordinatorTests.swift ScratchpadTests/RecoveryProjectPolicyTests.swift project.yml

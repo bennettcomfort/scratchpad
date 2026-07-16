@@ -193,7 +193,7 @@ Retry calls only `model.requestLaunchRetry()`. Use the actual key-window frame w
 
 - [ ] **Step 13: Run the complete focused Task 3.5 suite**
 
-Run the 14 exact Task 3.5 tests. Expected: 14 passed, 0 failed. Re-run each suspended-repository race five times to expose nondeterministic ordering.
+Run the 17 Task 3.5 tests, including the review regressions for production edit routing and missing session/recovery bookmarks. Expected: 17 passed, 0 failed. Re-run each suspended-repository race five times to expose nondeterministic ordering.
 
 - [ ] **Step 14: Run mandatory automated verification**
 
@@ -206,7 +206,7 @@ xcodebuild -scheme Scratchpad -destination 'platform=macOS' test
 git diff --check
 ```
 
-Expected: warning-free build and 110/110 tests. Scan changed production sources for `layoutManager`, `NSTextStorage` subclasses, force unwraps, `try!`, `print(`, notifications/defaults signaling, network code, and deferred feature sources. Confirm `project.yml` contains only the amended files.
+Expected: warning-free build and 113/113 tests. Scan changed production sources for `layoutManager`, `NSTextStorage` subclasses, force unwraps, `try!`, `print(`, notifications/defaults signaling, network code, and deferred feature sources. Confirm `project.yml` contains only the amended files.
 
 - [ ] **Step 15: Perform manual launch acceptance**
 

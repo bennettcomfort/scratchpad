@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct ScratchpadApp: App {
-    @State private var model = ApplicationModel()
+    @State private var model = ApplicationModel.live()
 
     var body: some Scene {
         Window("Untitled", id: "main") {

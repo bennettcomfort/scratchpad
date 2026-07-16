@@ -20,6 +20,7 @@ targets:
     sources:
       - path: Scratchpad/App/AppCommands.swift
       - path: Scratchpad/App/ApplicationModel.swift
+      - path: Scratchpad/App/ApplicationServices.swift
       - path: Scratchpad/App/MainWindowView.swift
       - path: Scratchpad/App/ScratchpadApp.swift
       - path: Scratchpad/Document/DocumentSession.swift
@@ -38,6 +39,7 @@ targets:
       - path: Scratchpad/Persistence/AtomicFileWriter.swift
       - path: Scratchpad/Persistence/BookmarkStore.swift
       - path: Scratchpad/Persistence/PersistenceRecords.swift
+      - path: Scratchpad/Persistence/RecoveryCoordinator.swift
       - path: Scratchpad/Persistence/SessionRepository.swift
       - path: Scratchpad/Utilities/ContentHash.swift
       - path: Scratchpad/Assets.xcassets
@@ -63,6 +65,7 @@ targets:
       - ScratchpadTests/Editor/ScratchTextViewCommandTests.swift
       - ScratchpadTests/Persistence/AtomicFileWriterTests.swift
       - ScratchpadTests/Persistence/BookmarkStoreTests.swift
+      - ScratchpadTests/Persistence/RecoveryCoordinatorTests.swift
       - ScratchpadTests/Persistence/SessionRepositoryTests.swift
       - ScratchpadTests/Files/FileServiceTests.swift
     settings:

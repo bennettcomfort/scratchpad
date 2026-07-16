@@ -112,4 +112,43 @@ final class DocumentSession {
             lastKnownDiskMTime: lastKnownDiskMTime
         )
     }
+
+    func recoverySnapshot(savedAt: Date = Date()) -> RecoveryRecord {
+        RecoveryRecord(
+            schemaVersion: 1,
+            documentID: id,
+            fileReferenceID: fileReference?.bookmarkID,
+            filePathHint: fileReference?.pathHint,
+            unsavedText: storage.string,
+            baseDiskHash: lastSavedHash,
+            baseDiskMTime: lastKnownDiskMTime,
+            lineEnding: lineEnding,
+            selection: selection,
+            scrollOffsetY: scrollOffsetY,
+            savedAt: savedAt
+        )
+    }
+
+    func sessionRecord(
+        windowFrame: CGRect,
+        didCloseCleanly: Bool,
+        savedAt: Date = Date()
+    ) -> SessionRecord {
+        SessionRecord(
+            schemaVersion: 1,
+            documentID: id,
+            fileReferenceID: fileReference?.bookmarkID,
+            displayName: displayName,
+            saveState: saveState,
+            hasUnsavedChanges: hasUnsavedChanges,
+            selection: selection,
+            scrollOffsetY: scrollOffsetY,
+            lineEnding: lineEnding,
+            lastSavedHash: lastSavedHash,
+            lastKnownDiskMTime: lastKnownDiskMTime,
+            windowFrame: windowFrame,
+            didCloseCleanly: didCloseCleanly,
+            savedAt: savedAt
+        )
+    }
 }
