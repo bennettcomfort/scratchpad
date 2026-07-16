@@ -99,6 +99,15 @@ actor FileService: FileServicing {
         return try await saveAsOperation(snapshot, to: reference)
     }
 
+    func saveAs(
+        _ snapshot: DocumentSnapshot,
+        toSelectedURL url: URL
+    ) async throws -> FileSaveResult {
+        await acquireOperation()
+        defer { releaseOperation() }
+        return try await saveAsSelectedURLOperation(snapshot, to: url)
+    }
+
     func inspect(_ snapshot: DocumentSnapshot) async throws -> ExternalFileStatus {
         await acquireOperation()
         defer { releaseOperation() }
@@ -231,6 +240,43 @@ actor FileService: FileServicing {
             await bookmarks.endAccess(token)
             throw mapOperationError(error)
         }
+    }
+
+    private func saveAsSelectedURLOperation(
+        _ snapshot: DocumentSnapshot,
+        to destination: URL
+    ) async throws -> FileSaveResult {
+        let requestedBytes = encodedBytes(for: snapshot)
+
+        do {
+            try await writer.writeSecurityScoped(requestedBytes, to: destination)
+        } catch {
+            throw FileServiceError.writeFailed
+        }
+
+        let verified = try await read(destination)
+        let requestedHash = ContentHash.sha256(requestedBytes)
+        guard verified.data == requestedBytes,
+              ContentHash.sha256(verified.data) == requestedHash else {
+            throw FileServiceError.verificationFailed
+        }
+
+        let reference: ExternalFileReference
+        do {
+            reference = try await bookmarks.storeSelection(destination)
+        } catch {
+            throw FileServiceError.accessFailed
+        }
+
+        return FileSaveResult(
+            documentID: snapshot.documentID,
+            initiatingGeneration: snapshot.generation,
+            reference: reference,
+            displayName: destination.lastPathComponent,
+            lineEnding: snapshot.lineEnding,
+            contentHash: requestedHash,
+            modificationDate: verified.modificationDate
+        )
     }
 
     private func inspectOperation(

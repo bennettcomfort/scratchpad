@@ -243,6 +243,12 @@ private actor LaunchFileFake: FileServicing {
     ) async throws -> FileSaveResult {
         throw LaunchRepositoryError.writeFailed
     }
+    func saveAs(
+        _ snapshot: DocumentSnapshot,
+        toSelectedURL url: URL
+    ) async throws -> FileSaveResult {
+        throw LaunchRepositoryError.writeFailed
+    }
     func inspect(_ snapshot: DocumentSnapshot) async throws -> ExternalFileStatus {
         throw LaunchRepositoryError.writeFailed
     }

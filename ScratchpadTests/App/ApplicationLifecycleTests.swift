@@ -423,6 +423,13 @@ private actor LifecycleFileService: FileServicing {
         throw LifecycleFailure.recovery
     }
 
+    func saveAs(
+        _ snapshot: DocumentSnapshot,
+        toSelectedURL url: URL
+    ) async throws -> FileSaveResult {
+        throw LifecycleFailure.recovery
+    }
+
     func inspect(_ snapshot: DocumentSnapshot) async throws -> ExternalFileStatus {
         .unchanged
     }

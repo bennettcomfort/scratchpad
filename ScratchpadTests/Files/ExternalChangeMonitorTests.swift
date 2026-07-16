@@ -472,6 +472,13 @@ private actor ExternalMonitorFileServiceFake: FileServicing {
         throw ExternalMonitorFakeError.unconfigured
     }
 
+    func saveAs(
+        _ snapshot: DocumentSnapshot,
+        toSelectedURL url: URL
+    ) async throws -> FileSaveResult {
+        throw ExternalMonitorFakeError.unconfigured
+    }
+
     func inspect(_ snapshot: DocumentSnapshot) async throws -> ExternalFileStatus {
         inspectEntries += 1
         resumeSatisfiedInspectWaiters()

@@ -48,5 +48,9 @@ protocol FileServicing: Sendable {
         _ snapshot: DocumentSnapshot,
         to reference: ExternalFileReference
     ) async throws -> FileSaveResult
+    func saveAs(
+        _ snapshot: DocumentSnapshot,
+        toSelectedURL url: URL
+    ) async throws -> FileSaveResult
     func inspect(_ snapshot: DocumentSnapshot) async throws -> ExternalFileStatus
 }

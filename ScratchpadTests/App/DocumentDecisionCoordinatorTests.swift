@@ -428,7 +428,7 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertTrue(saved)
     }
 
-    func testSaveAsFromExistingFilePersistsDestinationRecoveryBeforeCleanSession() async throws {
+    func testSaveAsFromExistingFilePersistsOriginalRecoveryBeforeSelectedURLWrite() async throws {
         let repository = OperationRepositoryFake(sessionWriteSuspended: true)
         let files = ControllableFileServiceFake(saveSuspended: true)
         let bookmarks = OperationBookmarkFake()
@@ -449,23 +449,21 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let save = Task { await model.saveAs() }
         await files.waitForSaveCalls(1)
 
-        let pendingWrites = await repository.recoveryWrites
-        let pendingRecovery = try XCTUnwrap(pendingWrites.last)
-        let pending = try XCTUnwrap(pendingRecovery.pendingSaveAs)
-        XCTAssertEqual(pendingRecovery.fileReferenceID, priorSession.fileReferenceID)
-        XCTAssertEqual(pendingRecovery.baseDiskHash, "base-hash")
-        XCTAssertEqual(pending.destinationPathHint, destinationURL.path)
-        XCTAssertEqual(
-            pending.expectedContentHash,
-            ContentHash.sha256(document.snapshot().persistedBytes)
-        )
+        let prewriteRecoveries = await repository.recoveryWrites
+        let prewriteRecovery = try XCTUnwrap(prewriteRecoveries.last)
+        let selectedURLs = await files.selectedSaveAsURLs
+        let bookmarkSelections = await bookmarks.storeSelectionCount
+        XCTAssertEqual(prewriteRecovery.fileReferenceID, priorSession.fileReferenceID)
+        XCTAssertEqual(prewriteRecovery.baseDiskHash, "base-hash")
+        XCTAssertNil(prewriteRecovery.pendingSaveAs)
+        XCTAssertEqual(selectedURLs, [destinationURL])
+        XCTAssertEqual(bookmarkSelections, 0)
 
         await files.resumeSaveSuccessfully()
         await repository.waitForSessionWrites(1)
 
-        let saveAsReferences = await files.saveAsReferences
         let recoveryWrites = await repository.recoveryWrites
-        let destination = try XCTUnwrap(saveAsReferences.last ?? nil)
+        let destination = try XCTUnwrap(document.fileReference)
         let recovery = try XCTUnwrap(recoveryWrites.last)
         XCTAssertNil(recovery.pendingSaveAs)
         XCTAssertEqual(recovery.fileReferenceID, destination.bookmarkID)
@@ -487,7 +485,7 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertTrue(saved)
     }
 
-    func testSaveAsFromUntitledPersistsDestinationRecoveryBeforeCleanSession() async throws {
+    func testSaveAsFromUntitledPersistsUntitledRecoveryBeforeSelectedURLWrite() async throws {
         let repository = OperationRepositoryFake(sessionWriteSuspended: true)
         let files = ControllableFileServiceFake(saveSuspended: true)
         let bookmarks = OperationBookmarkFake()
@@ -514,23 +512,21 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let save = Task { await model.saveAs() }
         await files.waitForSaveCalls(1)
 
-        let pendingWrites = await repository.recoveryWrites
-        let pendingRecovery = try XCTUnwrap(pendingWrites.last)
-        let pending = try XCTUnwrap(pendingRecovery.pendingSaveAs)
-        XCTAssertNil(pendingRecovery.fileReferenceID)
-        XCTAssertNil(pendingRecovery.baseDiskHash)
-        XCTAssertEqual(pending.destinationPathHint, destinationURL.path)
-        XCTAssertEqual(
-            pending.expectedContentHash,
-            ContentHash.sha256(Data("untitled\r\ndestination text".utf8))
-        )
+        let prewriteRecoveries = await repository.recoveryWrites
+        let prewriteRecovery = try XCTUnwrap(prewriteRecoveries.last)
+        let selectedURLs = await files.selectedSaveAsURLs
+        let bookmarkSelections = await bookmarks.storeSelectionCount
+        XCTAssertNil(prewriteRecovery.fileReferenceID)
+        XCTAssertNil(prewriteRecovery.baseDiskHash)
+        XCTAssertNil(prewriteRecovery.pendingSaveAs)
+        XCTAssertEqual(selectedURLs, [destinationURL])
+        XCTAssertEqual(bookmarkSelections, 0)
 
         await files.resumeSaveSuccessfully()
         await repository.waitForSessionWrites(1)
 
-        let saveAsReferences = await files.saveAsReferences
         let recoveryWrites = await repository.recoveryWrites
-        let destination = try XCTUnwrap(saveAsReferences.last ?? nil)
+        let destination = try XCTUnwrap(document.fileReference)
         let recovery = try XCTUnwrap(recoveryWrites.last)
         XCTAssertNil(recovery.pendingSaveAs)
         XCTAssertEqual(recovery.fileReferenceID, destination.bookmarkID)
@@ -584,8 +580,8 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertEqual(deletedDocumentIDs, [])
     }
 
-    func testFailedSaveAsClearFailureLeavesPendingJournalForSafeLaunchReconciliation() async throws {
-        let repository = OperationRepositoryFake(recoveryWriteFailureCalls: [2])
+    func testFailedSelectedURLSaveAsKeepsOriginalRecoveryAssociation() async throws {
+        let repository = OperationRepositoryFake()
         let files = ControllableFileServiceFake(saveAsError: .writeFailed)
         let destinationURL = URL(fileURLWithPath: "/tmp/pending-after-failure.md")
         let document = makeEditedDocument(text: "pending survives clear failure")
@@ -603,11 +599,11 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let recovery = try XCTUnwrap(recoveryWrites.last)
         XCTAssertEqual(recovery.fileReferenceID, document.fileReference?.bookmarkID)
         XCTAssertEqual(recovery.unsavedText, "pending survives clear failure")
-        XCTAssertEqual(recovery.pendingSaveAs?.destinationPathHint, destinationURL.path)
+        XCTAssertNil(recovery.pendingSaveAs)
         XCTAssertNotNil(model.banner)
     }
 
-    func testVerifiedSaveAsRewriteFailureLeavesPendingJournalAndPriorLiveAssociation() async throws {
+    func testVerifiedSelectedURLSaveAsPromotionFailureKeepsPriorLiveAssociation() async throws {
         let repository = OperationRepositoryFake(recoveryWriteFailureCalls: [2])
         let files = ControllableFileServiceFake()
         let destinationURL = URL(fileURLWithPath: "/tmp/verified-before-journal.md")
@@ -628,7 +624,9 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let recoveryWrites = await repository.recoveryWrites
         let recovery = try XCTUnwrap(recoveryWrites.last)
         XCTAssertEqual(recovery.fileReferenceID, originalReference?.bookmarkID)
-        XCTAssertEqual(recovery.pendingSaveAs?.destinationPathHint, destinationURL.path)
+        XCTAssertNil(recovery.pendingSaveAs)
+        let selectedURLs = await files.selectedSaveAsURLs
+        XCTAssertEqual(selectedURLs, [destinationURL])
         XCTAssertNotNil(model.banner)
     }
 
@@ -657,7 +655,7 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertFalse(saved)
         XCTAssertEqual(recoveryWrites.count, 2)
         XCTAssertEqual(recoveryWrites.first?.documentGeneration, document.generation - 1)
-        XCTAssertNotNil(recoveryWrites.first?.pendingSaveAs)
+        XCTAssertNil(recoveryWrites.first?.pendingSaveAs)
         let recovery = try XCTUnwrap(recoveryWrites.last)
         let session = try XCTUnwrap(sessionWrites.last)
         XCTAssertEqual(recovery.unsavedText, "latest N plus one")
@@ -667,7 +665,7 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertTrue(session.hasUnsavedChanges)
     }
 
-    func testConcurrentEditDuringVerifiedSaveAsRewriteFailurePersistsLatestPendingJournal() async throws {
+    func testConcurrentEditDuringVerifiedSaveAsPromotionFailurePersistsLatestOriginalRecovery() async throws {
         let repository = OperationRepositoryFake(recoveryWriteFailureCalls: [2])
         let files = ControllableFileServiceFake(saveSuspended: true)
         let destinationURL = URL(fileURLWithPath: "/tmp/verified-concurrent.md")
@@ -693,7 +691,7 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let session = try XCTUnwrap(sessionWrites.last)
         XCTAssertEqual(recovery.unsavedText, "latest N plus one")
         XCTAssertEqual(recovery.documentGeneration, document.generation)
-        XCTAssertEqual(recovery.pendingSaveAs?.destinationPathHint, destinationURL.path)
+        XCTAssertNil(recovery.pendingSaveAs)
         XCTAssertEqual(session.documentGeneration, document.generation)
         XCTAssertTrue(session.hasUnsavedChanges)
     }
@@ -917,8 +915,8 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
                 XCTAssertFalse(document.hasUnsavedChanges)
             case .saveAs:
                 XCTAssertTrue(result)
-                let referenceCount = await files.saveAsReferences.count
-                XCTAssertEqual(referenceCount, 1)
+                let selectedURLs = await files.selectedSaveAsURLs
+                XCTAssertEqual(selectedURLs, [URL(fileURLWithPath: "/tmp/copy.md")])
                 XCTAssertEqual(document.fileReference?.pathHint, "/tmp/copy.md")
             case .cancel:
                 XCTAssertFalse(result)
@@ -1425,6 +1423,7 @@ private actor ControllableFileServiceFake: FileServicing {
     private(set) var openCallCount = 0
     private(set) var saveCallCount = 0
     private(set) var saveAsReferences: [ExternalFileReference?] = []
+    private(set) var selectedSaveAsURLs: [URL] = []
 
     init(
         events: OperationEventRecorder? = nil,
@@ -1489,6 +1488,26 @@ private actor ControllableFileServiceFake: FileServicing {
         }
         if let saveAsError { throw saveAsError }
         return makeSaveResult(snapshot, reference: reference)
+    }
+
+    func saveAs(
+        _ snapshot: DocumentSnapshot,
+        toSelectedURL url: URL
+    ) async throws -> FileSaveResult {
+        selectedSaveAsURLs.append(url)
+        saveCallCount += 1
+        lastSaveSnapshot = snapshot
+        resumeSaveWaiters()
+        if saveSuspended {
+            saveSuspended = false
+            let result = await withCheckedContinuation { saveContinuations.append($0) }
+            try result.get()
+        }
+        if let saveAsError { throw saveAsError }
+        return makeSaveResult(
+            snapshot,
+            reference: ExternalFileReference(bookmarkID: UUID(), pathHint: url.path)
+        )
     }
 
     func inspect(_ snapshot: DocumentSnapshot) async throws -> ExternalFileStatus { .unchanged }

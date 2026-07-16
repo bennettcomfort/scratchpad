@@ -187,6 +187,60 @@ final class FileServiceTests: XCTestCase {
         XCTAssertEqual(refreshedTokenIDs, [acquiredTokenID].compactMap { $0 })
     }
 
+    func testSaveAsSelectedURLWritesBeforeCreatingBookmark() async throws {
+        let events = SelectedURLEventRecorder()
+        let fileSystem = SelectedURLFileSystemSpy(events: events)
+        let writer = SelectedURLWriterSpy(fileSystem: fileSystem, events: events)
+        let bookmarks = SelectedURLBookmarkSpy(events: events)
+        let service = FileService(
+            bookmarks: bookmarks,
+            writer: writer,
+            fileSystem: fileSystem
+        )
+        let destination = URL(fileURLWithPath: "/panel/New.md")
+        let snapshot = makeSnapshot(
+            reference: nil,
+            hash: nil,
+            mtime: nil,
+            text: "selected destination"
+        )
+
+        let result = try await service.saveAs(snapshot, toSelectedURL: destination)
+
+        let recordedEvents = await events.snapshot()
+        XCTAssertEqual(recordedEvents, ["write", "verify", "bookmark"])
+        XCTAssertEqual(result.reference.pathHint, destination.path)
+        XCTAssertEqual(result.contentHash, ContentHash.sha256(snapshot.persistedBytes))
+    }
+
+    func testSaveAsSelectedURLBookmarkFailureLeavesVerifiedBytesButReturnsFailure() async {
+        let events = SelectedURLEventRecorder()
+        let fileSystem = SelectedURLFileSystemSpy(events: events)
+        let writer = SelectedURLWriterSpy(fileSystem: fileSystem, events: events)
+        let bookmarks = SelectedURLBookmarkSpy(events: events, storeFails: true)
+        let service = FileService(
+            bookmarks: bookmarks,
+            writer: writer,
+            fileSystem: fileSystem
+        )
+        let destination = URL(fileURLWithPath: "/panel/BookmarkFailure.md")
+        let snapshot = makeSnapshot(
+            reference: nil,
+            hash: nil,
+            mtime: nil,
+            text: "verified before bookmark"
+        )
+
+        await XCTAssertFileServiceThrows(.accessFailed) {
+            _ = try await service.saveAs(snapshot, toSelectedURL: destination)
+        }
+
+        let recordedEvents = await events.snapshot()
+        let verifiedBytes = await fileSystem.bytes(at: destination)
+        XCTAssertEqual(recordedEvents, ["write", "verify", "bookmark"])
+        XCTAssertEqual(verifiedBytes, snapshot.persistedBytes)
+    }
+
     func testSaveVerificationFailureThrowsAfterRereadMismatch() async throws {
         let base = Data("base".utf8)
         let fixture = await makeFixture(
@@ -1022,4 +1076,93 @@ private actor FileServiceWriterSpy: AtomicFileWriting {
         firstWriteRelease?.resume()
         firstWriteRelease = nil
     }
+}
+
+private actor SelectedURLEventRecorder {
+    private var events: [String] = []
+
+    func append(_ event: String) {
+        events.append(event)
+    }
+
+    func snapshot() -> [String] {
+        events
+    }
+}
+
+private enum SelectedURLBookmarkError: Error {
+    case failed
+}
+
+private actor SelectedURLBookmarkSpy: BookmarkAccessing {
+    private let events: SelectedURLEventRecorder
+    private let storeFails: Bool
+
+    init(events: SelectedURLEventRecorder, storeFails: Bool = false) {
+        self.events = events
+        self.storeFails = storeFails
+    }
+
+    func storeSelection(_ url: URL) async throws -> ExternalFileReference {
+        await events.append("bookmark")
+        if storeFails { throw SelectedURLBookmarkError.failed }
+        return ExternalFileReference(bookmarkID: UUID(), pathHint: url.path)
+    }
+
+    func reference(for bookmarkID: UUID) async throws -> ExternalFileReference? { nil }
+    func beginAccess(_ reference: ExternalFileReference) async throws -> ScopedAccessToken {
+        throw SelectedURLBookmarkError.failed
+    }
+    func endAccess(_ token: ScopedAccessToken) async {}
+    func refresh(_ token: ScopedAccessToken) async throws {}
+    func forget(_ reference: ExternalFileReference) async throws {}
+}
+
+private actor SelectedURLFileSystemSpy: FileSystemAccessing {
+    private let events: SelectedURLEventRecorder
+    private var storedBytes: [URL: Data] = [:]
+
+    init(events: SelectedURLEventRecorder) {
+        self.events = events
+    }
+
+    func read(_ url: URL) async throws -> FileReadSnapshot {
+        await events.append("verify")
+        guard let data = storedBytes[url] else { throw FileSystemAccessError.missing }
+        return FileReadSnapshot(
+            data: data,
+            modificationDate: Date(timeIntervalSince1970: 4_000),
+            isWritable: true
+        )
+    }
+
+    func replace(_ url: URL, with data: Data) {
+        storedBytes[url] = data
+    }
+
+    func bytes(at url: URL) -> Data? {
+        storedBytes[url]
+    }
+}
+
+private actor SelectedURLWriterSpy: AtomicFileWriting {
+    private let fileSystem: SelectedURLFileSystemSpy
+    private let events: SelectedURLEventRecorder
+
+    init(fileSystem: SelectedURLFileSystemSpy, events: SelectedURLEventRecorder) {
+        self.fileSystem = fileSystem
+        self.events = events
+    }
+
+    func write(_ data: Data, to destination: URL) async throws {
+        try await writeSecurityScoped(data, to: destination)
+    }
+
+    func writeSecurityScoped(_ data: Data, to destination: URL) async throws {
+        await events.append("write")
+        await fileSystem.replace(destination, with: data)
+    }
+
+    func removeIfPresent(_ url: URL) async throws {}
+    func quarantine(_ source: URL, as destination: URL) async throws {}
 }

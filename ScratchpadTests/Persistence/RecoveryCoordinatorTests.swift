@@ -1594,6 +1594,13 @@ private actor LaunchFileServiceSpy: FileServicing {
         throw LaunchFileServiceError.unsupported
     }
 
+    func saveAs(
+        _ snapshot: DocumentSnapshot,
+        toSelectedURL url: URL
+    ) async throws -> FileSaveResult {
+        throw LaunchFileServiceError.unsupported
+    }
+
     func inspect(_ snapshot: DocumentSnapshot) async throws -> ExternalFileStatus {
         throw LaunchFileServiceError.unsupported
     }

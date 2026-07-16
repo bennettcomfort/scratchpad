@@ -1004,18 +1004,45 @@ final class ApplicationModel {
                 suggestedName: document.displayName
               ) else { return false }
 
-        let reference: ExternalFileReference
+        guard await flushRecovery(
+            snapshot,
+            using: dependencies.recovery
+        ) else { return false }
+
         do {
-            reference = try await dependencies.services.bookmarks.storeSelection(selectedURL)
+            let result = try await dependencies.services.files.saveAs(
+                snapshot,
+                toSelectedURL: selectedURL
+            )
+            guard await flushRecovery(
+                snapshot.recoveryRecord(verifiedSaveAs: result),
+                using: dependencies.recovery
+            ) else {
+                if document.id == snapshot.documentID,
+                   document.generation != snapshot.generation {
+                    _ = await preserveLatestDocumentState(
+                        documentID: snapshot.documentID,
+                        using: dependencies
+                    )
+                }
+                return false
+            }
+            return await applySaveResult(
+                result,
+                initiatedBy: snapshot,
+                using: dependencies
+            )
         } catch {
-            publishBookmarkBanner(error, path: selectedURL.path)
+            if document.id == snapshot.documentID,
+               document.generation != snapshot.generation {
+                _ = await preserveLatestDocumentState(
+                    documentID: snapshot.documentID,
+                    using: dependencies
+                )
+            }
+            publishFileBanner(error, path: selectedURL.path)
             return false
         }
-        return await performUnconditionalSave(
-            snapshot,
-            to: reference,
-            using: dependencies
-        )
     }
 
     private func performUnconditionalSave(
