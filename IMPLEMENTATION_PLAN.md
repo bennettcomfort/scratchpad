@@ -4002,7 +4002,7 @@ git commit -m "feat: add prompt document metrics"
 
 **Interfaces:** Consumes current document metadata, accepted metrics, banner, theme, and settings. Produces the complete single-window hierarchy and testable `DocumentTitlePresentation`/`InformationBarPresentation` values.
 
-- [ ] **Step 1: Write the failing presentation tests**
+- [x] **Step 1: Write the failing presentation tests**
 
 Create tests named exactly:
 
@@ -4017,7 +4017,7 @@ func testWindowHierarchyContainsNoDeferredChrome()
 
 Assert title strings `Untitled`, `Untitled — Edited`, `prompt.md`, and `prompt.md — Edited`. The suffix is driven by `hasUnsavedChanges`, including deleted content, rather than inferred from the display-state enum. Assert the sample bar renders `72 characters · 14 words · 8 lines · ~21 tokens` and `Unicode (UTF-8)`.
 
-- [ ] **Step 2: Assemble the window without a toolbar or movable divider**
+- [x] **Step 2: Assemble the window without a toolbar or movable divider**
 
 Use one vertical hierarchy in this exact order:
 
@@ -4033,9 +4033,9 @@ Configure the scene with `.windowStyle(.hiddenTitleBar)`, `.windowBackgroundDrag
 
 `DocumentTitleView` uses a monochrome document icon and semibold centered title. It exposes save state through title text and accessibility value. `InformationBarView` uses 11-point system text, requires the `~`, provides help text `Estimated token count. Exact counts vary by model.`, and keeps the encoding label trailing. `ErrorBannerView` exposes only the actions in its typed banner. No toolbar, tab, sidebar, divider, line counter, syntax layer, HUD, welcome screen, or floating button exists.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
-Run focused tests and full suite. Expected: 6 new tests pass; cumulative suite count is 127.
+Run focused tests and full suite. Verified: 15 focused presentation/lifecycle tests pass; cumulative suite count is 233 after review regressions.
 
 ```sh
 git add Scratchpad/UI Scratchpad/App/MainWindowView.swift Scratchpad/App/ScratchpadApp.swift ScratchpadTests/UI/PresentationModelTests.swift project.yml TRACKER.md

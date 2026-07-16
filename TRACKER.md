@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 4 — Noto-inspired shell, settings, and metrics
 > **Current phase:** Implementation
-> **Next task:** Task 4.4 — build the Noto-inspired main window
+> **Next task:** Task 4.5 — build native General, Editor, and Theme settings
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -73,8 +73,8 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 4.1 | Implement typed settings and Launch at Login | verified | `c89eaa2`; missing-type compile RED; 8/8 focused tests; warning-as-error build; 203/203 full suite; independent review found no Critical or Important issues; no manual check required |
 | 4.2 | Define fixed themes and apply editor appearance safely | verified | `cc663bb`; missing-theme compile RED; 7/7 focused tests; warning-as-error build; 210/210 full suite; independent review found no issues; fixed palettes, contrast, style idempotence, and TextKit 2 scroll-layout regression verified |
 | 4.3 | Calculate prompt metrics off the main actor | verified | `1c87027`, `63a1135`; missing-metrics and review-regression REDs; 14/14 focused tests; warning-as-error build; 224/224 full suite; independent re-review approved cancellation, retention, and typed-setting integration |
-| 4.4 | Build the Noto-inspired main window | verified | Missing-presentation-type RED plus review REDs for launch-frame preservation, typed retry context, actual title geometry, and rendered hierarchy; 15/15 focused review tests; warning-as-error build; 233/233 full suite; exact title, metrics, hierarchy, frame validation, invariant, scope, data-loss, and whitespace checks pass; no manual check required; implementation commit `9a4e153` plus this correction commit |
-| 4.5 | Build native General, Editor, and Theme settings | pending | Approved plan; awaits Task 4.4 verification |
+| 4.4 | Build the Noto-inspired main window | verified | `9a4e153`, `b5ee934`; missing-presentation and four review-regression REDs; 15/15 focused tests; warning-as-error build; 233/233 full suite; independent re-review approved frame preservation, typed retry, safe title geometry, and rendered hierarchy |
+| 4.5 | Build native General, Editor, and Theme settings | in progress | Authorized after verified Task 4.4; 233/233 baseline passes |
 
 ### Stage 5 Task Ledger
 
@@ -91,7 +91,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | verified | User approved Stage 1 on 2026-07-15; commits `988a539`, `3bdacc9`, `3a1e4af`, `2e8c4c7`, `2b703b5` |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | verified | User approved Stage 2 on 2026-07-15; commits `cfaed34`, `04ef7ce`, `c804391`, `9d04dc0` |
 | 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | verified | User approved Stage 3 on 2026-07-16, including deterministic substitution for two fault-injection-only branches; commits through `102ecc8` |
-| 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | in progress | Tasks 4.1–4.3 verified; Task 4.4 is current; user approves the completed visual and settings matrix |
+| 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | in progress | Tasks 4.1–4.4 verified; Task 4.5 is current; user approves the completed visual and settings matrix |
 | 5 | Complete warning, regression, accessibility, performance, and dogfood hardening | pending | User accepts recovery milestone |
 
 ## Known Defect Ledger
