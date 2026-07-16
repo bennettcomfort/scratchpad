@@ -3876,7 +3876,7 @@ git commit -m "feat: add typed editor settings"
 
 **Interfaces:** Consumes `EditorSettingsSnapshot`. Produces `ThemeDefinition`, `ResolvedEditorStyle`, and idempotent `ScratchTextView.apply(style:)`.
 
-- [ ] **Step 1: Write the failing theme/editor-style tests**
+- [x] **Step 1: Write the failing theme/editor-style tests**
 
 Create tests named exactly:
 
@@ -3892,7 +3892,7 @@ func testEditorStyleConfiguresWrapLineHeightAndNativeTextOptions()
 
 The palette tests compare device-RGB components to the values below with tolerance `0.005`. The editor test starts with attributed text and an undo action, applies a style, and asserts identical string, generation, selection, and undo action name.
 
-- [ ] **Step 2: Implement the fixed palette and editor-style transaction**
+- [x] **Step 2: Implement the fixed palette and editor-style transaction**
 
 ```swift
 struct ThemeDefinition: Equatable {
@@ -3924,9 +3924,9 @@ Selection uses the resolved system selected-text background and selected-text fo
 
 `apply(style:)` sets `font`, foreground/background, insertion point, selected-text attributes, `textContainerInset = NSSize(width: 24, height: 20)`, horizontal resize off, vertical resize on, width tracking on, and a paragraph style with `lineHeightMultiple = 1.45`. It configures native quote/dash substitution, continuous spelling, automatic spelling correction, tab width, and wrap. It does not call `replaceCharacters`, `didChangeText`, or `noteUserEdit` and does not register undo.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
-Run focused tests and full suite. Expected: 7 new tests pass; cumulative suite count is 113.
+Run focused tests and full suite. Verified: 7 new tests pass; cumulative suite count is 210.
 
 ```sh
 git add Scratchpad/Settings/ThemeDefinition.swift Scratchpad/Editor/EditorHost.swift Scratchpad/Editor/ScratchTextView.swift Scratchpad/Editor/EditorCoordinator.swift ScratchpadTests/Settings/ThemeDefinitionTests.swift project.yml TRACKER.md
