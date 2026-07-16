@@ -28,6 +28,8 @@ targets:
       - path: Scratchpad/App/MainWindowView.swift
       - path: Scratchpad/App/ScratchpadApp.swift
       - path: Scratchpad/Document/DocumentSession.swift
+      - path: Scratchpad/Document/DocumentMetrics.swift
+      - path: Scratchpad/Document/MetricsCoordinator.swift
       - path: Scratchpad/Document/DocumentSnapshot.swift
       - path: Scratchpad/Document/DocumentState.swift
       - path: Scratchpad/Editor/EditorCoordinator.swift
@@ -69,6 +71,8 @@ targets:
       - ScratchpadTests/App/DocumentDecisionCoordinatorTests.swift
       - ScratchpadTests/Document/DocumentStateTests.swift
       - ScratchpadTests/Document/DocumentSessionTests.swift
+      - ScratchpadTests/Document/DocumentMetricsTests.swift
+      - ScratchpadTests/Document/MetricsCoordinatorTests.swift
       - ScratchpadTests/Editor/EditorHostTests.swift
       - ScratchpadTests/Editor/EditorCoordinatorTests.swift
       - ScratchpadTests/Editor/LineTableTests.swift

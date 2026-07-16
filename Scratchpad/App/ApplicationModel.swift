@@ -26,6 +26,7 @@ enum DocumentOperationState: Equatable, Sendable {
 @Observable
 final class ApplicationModel {
     private(set) var document: DocumentSession
+    private(set) var metrics: DocumentMetrics
     private(set) var launchState: LaunchState
     private(set) var launchAttempt = 0
     private(set) var operationState: DocumentOperationState = .idle
@@ -63,6 +64,10 @@ final class ApplicationModel {
     private let windowFrameProvider: @MainActor () -> CGRect
     @ObservationIgnored
     private let requestEditorFocus: @MainActor () -> Void
+    @ObservationIgnored
+    private let metricsCoordinator: MetricsCoordinator
+    @ObservationIgnored
+    private let countsWhitespaceProvider: @MainActor () -> Bool
 
     init(
         document: DocumentSession = DocumentSession(),
@@ -71,15 +76,21 @@ final class ApplicationModel {
         panelProvider: (any FilePanelProviding)? = nil,
         decisionCoordinator: DocumentDecisionCoordinator = DocumentDecisionCoordinator(),
         windowFrameProvider: @escaping @MainActor () -> CGRect = { .zero },
-        requestEditorFocus: @escaping @MainActor () -> Void = {}
+        requestEditorFocus: @escaping @MainActor () -> Void = {},
+        metricsCoordinator: MetricsCoordinator = MetricsCoordinator(),
+        countsWhitespaceProvider: @escaping @MainActor () -> Bool = { false }
     ) {
         self.document = document
+        self.metrics = .empty
         self.launchState = launchState
         self.servicesFactory = servicesFactory
         self.panelProvider = panelProvider
         self.decisionCoordinator = decisionCoordinator
         self.windowFrameProvider = windowFrameProvider
         self.requestEditorFocus = requestEditorFocus
+        self.metricsCoordinator = metricsCoordinator
+        self.countsWhitespaceProvider = countsWhitespaceProvider
+        scheduleMetrics(for: document)
     }
 
     static func live() -> ApplicationModel {
@@ -253,8 +264,9 @@ final class ApplicationModel {
     func handleCurrentDocumentEdit(_ editedDocument: DocumentSession) {
         guard launchState == .ready,
               editedDocument === document,
-              editedDocument.id == document.id,
-              let recoveryCoordinator else { return }
+              editedDocument.id == document.id else { return }
+        scheduleMetrics(for: editedDocument)
+        guard let recoveryCoordinator else { return }
         if recoveryCleanupRequiredDocumentID == editedDocument.id {
             recoveryCleanupRequiredDocumentID = nil
         }
@@ -635,6 +647,7 @@ final class ApplicationModel {
                     return
                 }
                 document.applyOpenedFile(result, source: .confirmedDiskReload)
+                scheduleMetrics(for: document)
             } catch is CancellationError {
                 return
             } catch let error as FileServiceError {
@@ -695,6 +708,33 @@ final class ApplicationModel {
     private func replaceCurrentDocument(with replacement: DocumentSession) {
         externalChangeMonitor?.stop()
         document = replacement
+        scheduleMetrics(for: replacement)
+    }
+
+    private func scheduleMetrics(for document: DocumentSession) {
+        let snapshot = document.snapshot()
+        metricsCoordinator.schedule(
+            documentID: snapshot.documentID,
+            generation: snapshot.generation,
+            text: snapshot.text,
+            countsWhitespace: countsWhitespaceProvider()
+        ) { [weak self] documentID, generation, metrics in
+            self?.receiveMetrics(
+                documentID: documentID,
+                generation: generation,
+                metrics: metrics
+            )
+        }
+    }
+
+    func receiveMetrics(
+        documentID: UUID,
+        generation: Int,
+        metrics: DocumentMetrics
+    ) {
+        guard document.id == documentID,
+              document.generation == generation else { return }
+        self.metrics = metrics
     }
 
     private func persistAndReplaceCurrentDocument(
@@ -980,6 +1020,7 @@ final class ApplicationModel {
                 let result = try await dependencies.services.files.open(context.fileReference)
                 guard await revalidate(reloadBoundary, using: dependencies) else { return false }
                 document.applyOpenedFile(result, source: .confirmedDiskReload)
+                scheduleMetrics(for: document)
             } catch {
                 publishFileBanner(error, path: context.fileReference.pathHint)
             }
