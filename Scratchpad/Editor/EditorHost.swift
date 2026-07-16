@@ -35,17 +35,24 @@ struct EditorHost: NSViewRepresentable {
     let document: DocumentSession
     var onEdit: @MainActor (DocumentSession) -> Void = { _ in }
     var onStateChange: @MainActor (DocumentSession) -> Void = { _ in }
+    var isEditable = true
+    var canEdit: @MainActor () -> Bool = { true }
 
     func makeCoordinator() -> EditorCoordinator {
         EditorCoordinator(
             document: document,
             onEdit: onEdit,
-            onStateChange: onStateChange
+            onStateChange: onStateChange,
+            canEdit: canEdit
         )
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        Self.makeScrollView(document: document, coordinator: context.coordinator)
+        Self.makeScrollView(
+            document: document,
+            coordinator: context.coordinator,
+            isEditable: isEditable
+        )
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
@@ -55,6 +62,7 @@ struct EditorHost: NSViewRepresentable {
         }
         precondition(textView.textLayoutManager != nil)
         precondition(textView.textStorage === document.storage)
+        textView.isEditable = isEditable
         textView.commandContext = .defaults(lineEnding: document.lineEnding)
     }
 
@@ -70,7 +78,8 @@ struct EditorHost: NSViewRepresentable {
 
     static func makeScrollView(
         document: DocumentSession,
-        coordinator: EditorCoordinator
+        coordinator: EditorCoordinator,
+        isEditable: Bool = true
     ) -> NSScrollView {
         let scrollView = RestoringScrollView()
         scrollView.hasVerticalScroller = true
@@ -91,6 +100,7 @@ struct EditorHost: NSViewRepresentable {
         precondition(textView.textStorage === document.storage)
 
         textView.isRichText = false
+        textView.isEditable = isEditable
         textView.importsGraphics = false
         textView.allowsUndo = true
         textView.usesFindBar = true

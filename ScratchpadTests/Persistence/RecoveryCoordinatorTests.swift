@@ -426,14 +426,16 @@ final class RecoveryCoordinatorTests: XCTestCase {
         let reference = ExternalFileReference(bookmarkID: bookmarkID, pathHint: "/Notes/File.md")
         let session = makeSession(
             documentID: documentID,
+            documentGeneration: 2,
             fileReferenceID: bookmarkID,
             hasUnsavedChanges: false,
             saveState: .clean
         )
         let recovery = makeRecovery(
             documentID: documentID,
+            documentGeneration: 1,
             text: "stale recovery",
-            savedAt: Date(timeIntervalSince1970: 5)
+            savedAt: Date(timeIntervalSince1970: 20)
         )
         let repository = RecoveryRepositorySpy(session: session, recoveries: [recovery])
         let bookmarks = BookmarkAccessSpy(references: [bookmarkID: reference])
@@ -464,6 +466,7 @@ final class RecoveryCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(source, .file(session, reference))
         XCTAssertEqual(model.document.storage.string, "current disk text")
+        XCTAssertEqual(model.document.generation, 2)
         XCTAssertEqual(model.document.selection, session.selection)
         XCTAssertEqual(model.document.scrollOffsetY, session.scrollOffsetY)
         let openedReferences = await files.openedReferences
@@ -480,6 +483,7 @@ final class RecoveryCoordinatorTests: XCTestCase {
         )
         let cleanSession = makeSession(
             documentID: documentID,
+            documentGeneration: 1,
             fileReferenceID: staleSessionBookmarkID,
             hasUnsavedChanges: false,
             saveState: .clean
@@ -491,6 +495,7 @@ final class RecoveryCoordinatorTests: XCTestCase {
             displayName: "Edited.md",
             saveState: .clean,
             hasUnsavedChanges: false,
+            generation: 1,
             lastSavedHash: "base-hash",
             lastKnownDiskMTime: Date(timeIntervalSince1970: 40)
         )
@@ -542,7 +547,579 @@ final class RecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(source, .recovery(recovery))
         XCTAssertEqual(launchModel.document.storage.string, "unsaved text after replacement")
         XCTAssertTrue(launchModel.document.hasUnsavedChanges)
+        XCTAssertEqual(launchModel.document.saveState, .edited)
         XCTAssertEqual(launchModel.document.fileReference, reference)
+        XCTAssertEqual(launchModel.document.generation, 2)
+    }
+
+    func testGenerationAuthorityIgnoresWallClockRollback() {
+        let documentID = UUID()
+        let bookmarkID = UUID()
+        let reference = ExternalFileReference(
+            bookmarkID: bookmarkID,
+            pathHint: "/Notes/Clock.md"
+        )
+        let cleanSession = makeSession(
+            documentID: documentID,
+            documentGeneration: 4,
+            fileReferenceID: bookmarkID,
+            hasUnsavedChanges: false,
+            saveState: .clean,
+            savedAt: Date(timeIntervalSince1970: 100)
+        )
+        let newerRecoveryWithEarlierClock = makeRecovery(
+            documentID: documentID,
+            documentGeneration: 5,
+            text: "newer generation",
+            savedAt: Date(timeIntervalSince1970: 50)
+        )
+        XCTAssertEqual(
+            RecoveryCoordinator.restoreSource(
+                session: cleanSession,
+                recovery: newerRecoveryWithEarlierClock,
+                fileReference: reference
+            ),
+            .recovery(newerRecoveryWithEarlierClock)
+        )
+
+        let staleRecoveryWithLaterClock = makeRecovery(
+            documentID: documentID,
+            documentGeneration: 3,
+            text: "stale generation",
+            savedAt: Date(timeIntervalSince1970: 200)
+        )
+        XCTAssertEqual(
+            RecoveryCoordinator.restoreSource(
+                session: cleanSession,
+                recovery: staleRecoveryWithLaterClock,
+                fileReference: reference
+            ),
+            .file(cleanSession, reference)
+        )
+    }
+
+    func testRolledOverRecoveryGenerationOverridesCleanTerminalSession() {
+        let documentID = UUID()
+        let bookmarkID = UUID()
+        let reference = ExternalFileReference(
+            bookmarkID: bookmarkID,
+            pathHint: "/Notes/Rollover.md"
+        )
+        let session = makeSession(
+            documentID: documentID,
+            documentGeneration: Int.max,
+            fileReferenceID: bookmarkID,
+            hasUnsavedChanges: false,
+            saveState: .clean
+        )
+        let recovery = makeRecovery(
+            documentID: documentID,
+            documentGeneration: 0,
+            text: "edit after rollover"
+        )
+
+        XCTAssertEqual(
+            RecoveryCoordinator.restoreSource(
+                session: session,
+                recovery: recovery,
+                fileReference: reference
+            ),
+            .recovery(recovery)
+        )
+    }
+
+    func testLegacyCleanSessionUsesMatchingBaseRecoveryWithoutWallClockAuthority() {
+        let documentID = UUID()
+        let bookmarkID = UUID()
+        let reference = ExternalFileReference(
+            bookmarkID: bookmarkID,
+            pathHint: "/Notes/Legacy.md"
+        )
+        let cleanSession = makeSession(
+            documentID: documentID,
+            fileReferenceID: bookmarkID,
+            hasUnsavedChanges: false,
+            saveState: .clean,
+            savedAt: Date(timeIntervalSince1970: 100)
+        )
+        let matchingBaseRecovery = makeRecovery(
+            documentID: documentID,
+            fileReferenceID: bookmarkID,
+            text: "unsaved legacy edit",
+            baseDiskHash: "base-hash",
+            savedAt: Date(timeIntervalSince1970: 50)
+        )
+
+        XCTAssertEqual(
+            RecoveryCoordinator.restoreSource(
+                session: cleanSession,
+                recovery: matchingBaseRecovery,
+                fileReference: reference
+            ),
+            .recovery(matchingBaseRecovery)
+        )
+
+        let staleRecovery = makeRecovery(
+            documentID: documentID,
+            fileReferenceID: bookmarkID,
+            text: "stale pre-save text",
+            baseDiskHash: "older-disk-hash",
+            savedAt: Date(timeIntervalSince1970: 200)
+        )
+        XCTAssertEqual(
+            RecoveryCoordinator.restoreSource(
+                session: cleanSession,
+                recovery: staleRecovery,
+                fileReference: reference
+            ),
+            .file(cleanSession, reference)
+        )
+    }
+
+    func testDirtySessionPreservesMatchingRecoveryWhenRecoveryGenerationIsLower() {
+        let documentID = UUID()
+        let dirtySession = makeSession(
+            documentID: documentID,
+            documentGeneration: 8,
+            hasUnsavedChanges: true,
+            saveState: .edited
+        )
+        let lastDurableRecovery = makeRecovery(
+            documentID: documentID,
+            documentGeneration: 7,
+            text: "last durable unsaved text"
+        )
+
+        XCTAssertEqual(
+            RecoveryCoordinator.restoreSource(
+                session: dirtySession,
+                recovery: lastDurableRecovery,
+                fileReference: nil
+            ),
+            .recovery(lastDurableRecovery)
+        )
+    }
+
+    func testPendingSaveAsPromotesMatchingDestinationForExistingAndUntitledSources() async throws {
+        for startsFileBacked in [true, false] {
+            let documentID = UUID()
+            let sourceID = UUID()
+            let destinationID = UUID()
+            let sourceReference = ExternalFileReference(
+                bookmarkID: sourceID,
+                pathHint: "/Notes/Source.md"
+            )
+            let destinationReference = ExternalFileReference(
+                bookmarkID: destinationID,
+                pathHint: "/Notes/Destination.md"
+            )
+            let session = makeSession(
+                documentID: documentID,
+                documentGeneration: 4,
+                fileReferenceID: startsFileBacked ? sourceID : nil,
+                hasUnsavedChanges: true,
+                saveState: .edited
+            )
+            let pending = PendingSaveAsRecord(
+                destinationFileReferenceID: destinationID,
+                destinationPathHint: destinationReference.pathHint,
+                expectedContentHash: "destination-hash"
+            )
+            let recovery = makeRecovery(
+                documentID: documentID,
+                documentGeneration: 4,
+                fileReferenceID: startsFileBacked ? sourceID : nil,
+                filePathHint: startsFileBacked ? sourceReference.pathHint : nil,
+                text: "exact pending text",
+                baseDiskHash: startsFileBacked ? "base-hash" : nil,
+                pendingSaveAs: pending
+            )
+            let repository = RecoveryRepositorySpy(session: session, recoveries: [recovery])
+            let model = ApplicationModel()
+            let coordinator = RecoveryCoordinator(
+                repository: repository,
+                clock: VirtualRecoveryClock(),
+                documentProvider: { id in model.document.id == id ? model.document : nil }
+            )
+            var references = [destinationID: destinationReference]
+            if startsFileBacked { references[sourceID] = sourceReference }
+
+            let source = try await model.restoreAtLaunch(
+                repository: repository,
+                bookmarks: BookmarkAccessSpy(references: references),
+                files: LaunchFileServiceSpy(
+                    openResult: FileOpenResult(
+                        reference: destinationReference,
+                        text: "exact pending text",
+                        displayName: "Destination.md",
+                        lineEnding: .lf,
+                        contentHash: "destination-hash",
+                        modificationDate: Date(timeIntervalSince1970: 80)
+                    )
+                ),
+                recoveryCoordinator: coordinator,
+                windowFrame: session.windowFrame
+            )
+
+            let storedRecovery = await repository.storedRecovery(documentID: documentID)
+            let verified = try XCTUnwrap(storedRecovery)
+            XCTAssertEqual(source, .recovery(verified))
+            XCTAssertNil(verified.pendingSaveAs)
+            XCTAssertEqual(verified.fileReferenceID, destinationID)
+            XCTAssertEqual(verified.baseDiskHash, "destination-hash")
+            XCTAssertEqual(model.document.fileReference, destinationReference)
+            XCTAssertTrue(model.document.hasUnsavedChanges)
+        }
+    }
+
+    func testCleanPendingSaveAsPromotesVerifiedDestinationWithNewLogicalRevision() async throws {
+        for startsFileBacked in [true, false] {
+            let documentID = UUID()
+            let sourceID = UUID()
+            let destinationID = UUID()
+            let sourceReference = ExternalFileReference(
+                bookmarkID: sourceID,
+                pathHint: "/Notes/CleanSource.md"
+            )
+            let destinationReference = ExternalFileReference(
+                bookmarkID: destinationID,
+                pathHint: "/Notes/CleanDestination.md"
+            )
+            let session = makeSession(
+                documentID: documentID,
+                documentGeneration: 4,
+                fileReferenceID: startsFileBacked ? sourceID : nil,
+                hasUnsavedChanges: false,
+                saveState: startsFileBacked ? .clean : .untitled
+            )
+            let recovery = makeRecovery(
+                documentID: documentID,
+                documentGeneration: 4,
+                fileReferenceID: startsFileBacked ? sourceID : nil,
+                filePathHint: startsFileBacked ? sourceReference.pathHint : nil,
+                text: startsFileBacked ? "clean saved-as text" : "",
+                baseDiskHash: startsFileBacked ? "base-hash" : nil,
+                pendingSaveAs: PendingSaveAsRecord(
+                    destinationFileReferenceID: destinationID,
+                    destinationPathHint: destinationReference.pathHint,
+                    expectedContentHash: "verified-destination-hash"
+                )
+            )
+            let repository = RecoveryRepositorySpy(session: session, recoveries: [recovery])
+            let model = ApplicationModel()
+            let coordinator = RecoveryCoordinator(
+                repository: repository,
+                clock: VirtualRecoveryClock(),
+                documentProvider: { id in model.document.id == id ? model.document : nil }
+            )
+            var references = [destinationID: destinationReference]
+            if startsFileBacked { references[sourceID] = sourceReference }
+
+            _ = try await model.restoreAtLaunch(
+                repository: repository,
+                bookmarks: BookmarkAccessSpy(references: references),
+                files: LaunchFileServiceSpy(
+                    openResult: FileOpenResult(
+                        reference: destinationReference,
+                        text: recovery.unsavedText,
+                        displayName: "CleanDestination.md",
+                        lineEnding: .lf,
+                        contentHash: "verified-destination-hash",
+                        modificationDate: Date(timeIntervalSince1970: 120)
+                    )
+                ),
+                recoveryCoordinator: coordinator,
+                windowFrame: session.windowFrame
+            )
+
+            let storedRecord = await repository.storedRecovery(documentID: documentID)
+            let stored = try XCTUnwrap(storedRecord)
+            XCTAssertEqual(stored.documentGeneration, 5)
+            XCTAssertNil(stored.pendingSaveAs)
+            XCTAssertEqual(stored.fileReferenceID, destinationID)
+            XCTAssertEqual(stored.baseDiskHash, "verified-destination-hash")
+            XCTAssertEqual(stored.baseDiskMTime, Date(timeIntervalSince1970: 120))
+            XCTAssertEqual(model.document.fileReference, destinationReference)
+            XCTAssertEqual(model.document.generation, 5)
+            XCTAssertTrue(model.document.hasUnsavedChanges)
+        }
+    }
+
+    func testCleanStalePendingSaveAsNeverPromotesMatchingDestination() async throws {
+        for generations in [(session: 5, recovery: 4), (session: 0, recovery: Int.max)] {
+            let documentID = UUID()
+            let sourceReference = ExternalFileReference(
+                bookmarkID: UUID(),
+                pathHint: "/Notes/Current.md"
+            )
+            let destinationReference = ExternalFileReference(
+                bookmarkID: UUID(),
+                pathHint: "/Notes/StaleDestination.md"
+            )
+            let session = makeSession(
+                documentID: documentID,
+                documentGeneration: generations.session,
+                fileReferenceID: sourceReference.bookmarkID,
+                hasUnsavedChanges: false,
+                saveState: .clean
+            )
+            let pendingRecovery = makeRecovery(
+                documentID: documentID,
+                documentGeneration: generations.recovery,
+                fileReferenceID: sourceReference.bookmarkID,
+                filePathHint: sourceReference.pathHint,
+                text: "stale pending text",
+                pendingSaveAs: PendingSaveAsRecord(
+                    destinationFileReferenceID: destinationReference.bookmarkID,
+                    destinationPathHint: destinationReference.pathHint,
+                    expectedContentHash: "matching-old-hash"
+                )
+            )
+            let repository = RecoveryRepositorySpy(
+                session: session,
+                recoveries: [pendingRecovery]
+            )
+            let files = LaunchFileServiceSpy(
+                openResult: FileOpenResult(
+                    reference: sourceReference,
+                    text: "current disk text",
+                    displayName: "Current.md",
+                    lineEnding: .lf,
+                    contentHash: "matching-old-hash",
+                    modificationDate: Date(timeIntervalSince1970: 140)
+                )
+            )
+            let model = ApplicationModel()
+            let coordinator = RecoveryCoordinator(
+                repository: repository,
+                clock: VirtualRecoveryClock(),
+                documentProvider: { id in model.document.id == id ? model.document : nil }
+            )
+
+            let source = try await model.restoreAtLaunch(
+                repository: repository,
+                bookmarks: BookmarkAccessSpy(
+                    references: [
+                        sourceReference.bookmarkID: sourceReference,
+                        destinationReference.bookmarkID: destinationReference,
+                    ]
+                ),
+                files: files,
+                recoveryCoordinator: coordinator,
+                windowFrame: session.windowFrame
+            )
+
+            XCTAssertEqual(source, .file(session, sourceReference))
+            XCTAssertEqual(model.document.fileReference, sourceReference)
+            XCTAssertEqual(model.document.storage.string, "current disk text")
+            let openedReferences = await files.openedReferences
+            let storedRecovery = await repository.storedRecovery(documentID: documentID)
+            XCTAssertEqual(openedReferences, [sourceReference])
+            XCTAssertEqual(
+                storedRecovery,
+                pendingRecovery
+            )
+        }
+    }
+
+    func testCleanPendingSaveAsWithoutDestinationBytesRemainsNonAuthoritative() async throws {
+        for startsFileBacked in [true, false] {
+            let documentID = UUID()
+            let sourceID = UUID()
+            let destinationID = UUID()
+            let sourceReference = ExternalFileReference(
+                bookmarkID: sourceID,
+                pathHint: "/Notes/CleanSource.md"
+            )
+            let session = makeSession(
+                documentID: documentID,
+                documentGeneration: 4,
+                fileReferenceID: startsFileBacked ? sourceID : nil,
+                hasUnsavedChanges: false,
+                saveState: startsFileBacked ? .clean : .untitled
+            )
+            let recovery = makeRecovery(
+                documentID: documentID,
+                documentGeneration: 4,
+                fileReferenceID: startsFileBacked ? sourceID : nil,
+                filePathHint: startsFileBacked ? sourceReference.pathHint : nil,
+                text: "",
+                baseDiskHash: startsFileBacked ? "base-hash" : nil,
+                pendingSaveAs: PendingSaveAsRecord(
+                    destinationFileReferenceID: destinationID,
+                    destinationPathHint: "/Notes/NeverWritten.md",
+                    expectedContentHash: "never-written-hash"
+                )
+            )
+            let repository = RecoveryRepositorySpy(session: session, recoveries: [recovery])
+            let model = ApplicationModel()
+            let coordinator = RecoveryCoordinator(
+                repository: repository,
+                clock: VirtualRecoveryClock(),
+                documentProvider: { id in model.document.id == id ? model.document : nil }
+            )
+            let files = LaunchFileServiceSpy(
+                openResult: startsFileBacked
+                    ? FileOpenResult(
+                        reference: sourceReference,
+                        text: "clean disk text",
+                        displayName: "CleanSource.md",
+                        lineEnding: .lf,
+                        contentHash: "base-hash",
+                        modificationDate: Date(timeIntervalSince1970: 40)
+                    )
+                    : nil
+            )
+
+            let source = try await model.restoreAtLaunch(
+                repository: repository,
+                bookmarks: BookmarkAccessSpy(
+                    references: startsFileBacked ? [sourceID: sourceReference] : [:]
+                ),
+                files: files,
+                recoveryCoordinator: coordinator,
+                windowFrame: session.windowFrame
+            )
+
+            XCTAssertEqual(
+                source,
+                startsFileBacked ? .file(session, sourceReference) : .empty
+            )
+            XCTAssertEqual(model.document.fileReference, startsFileBacked ? sourceReference : nil)
+            XCTAssertFalse(model.document.hasUnsavedChanges)
+            let stored = await repository.storedRecovery(documentID: documentID)
+            XCTAssertEqual(stored, recovery)
+        }
+    }
+
+    func testPendingSaveAsDifferentDestinationBytesRestorePriorAssociationAndPreserveJournal() async throws {
+        let documentID = UUID()
+        let sourceID = UUID()
+        let destinationID = UUID()
+        let sourceReference = ExternalFileReference(
+            bookmarkID: sourceID,
+            pathHint: "/Notes/Source.md"
+        )
+        let destinationReference = ExternalFileReference(
+            bookmarkID: destinationID,
+            pathHint: "/Notes/Occupied.md"
+        )
+        let session = makeSession(
+            documentID: documentID,
+            documentGeneration: 4,
+            fileReferenceID: sourceID,
+            hasUnsavedChanges: true,
+            saveState: .edited
+        )
+        let recovery = makeRecovery(
+            documentID: documentID,
+            documentGeneration: 4,
+            fileReferenceID: sourceID,
+            filePathHint: sourceReference.pathHint,
+            text: "keep source edit",
+            baseDiskHash: "base-hash",
+            pendingSaveAs: PendingSaveAsRecord(
+                destinationFileReferenceID: destinationID,
+                destinationPathHint: destinationReference.pathHint,
+                expectedContentHash: "expected-hash"
+            )
+        )
+        let repository = RecoveryRepositorySpy(session: session, recoveries: [recovery])
+        let model = ApplicationModel()
+        let coordinator = RecoveryCoordinator(
+            repository: repository,
+            clock: VirtualRecoveryClock(),
+            documentProvider: { id in model.document.id == id ? model.document : nil }
+        )
+
+        let source = try await model.restoreAtLaunch(
+            repository: repository,
+            bookmarks: BookmarkAccessSpy(
+                references: [sourceID: sourceReference, destinationID: destinationReference]
+            ),
+            files: LaunchFileServiceSpy(
+                openResult: FileOpenResult(
+                    reference: destinationReference,
+                    text: "somebody else's bytes",
+                    displayName: "Occupied.md",
+                    lineEnding: .lf,
+                    contentHash: "different-hash",
+                    modificationDate: Date(timeIntervalSince1970: 90)
+                )
+            ),
+            recoveryCoordinator: coordinator,
+            windowFrame: session.windowFrame
+        )
+
+        XCTAssertEqual(source, .recovery(recovery))
+        XCTAssertEqual(model.document.fileReference, sourceReference)
+        let storedRecovery = await repository.storedRecovery(documentID: documentID)
+        XCTAssertEqual(storedRecovery, recovery)
+    }
+
+    func testPendingSaveAsMissingOrDeniedDestinationNeverUsesPathFallback() async throws {
+        for mode in 0..<3 {
+            let documentID = UUID()
+            let destinationID = UUID()
+            let destinationReference = ExternalFileReference(
+                bookmarkID: destinationID,
+                pathHint: "/Notes/UntrustedPath.md"
+            )
+            let session = makeSession(
+                documentID: documentID,
+                documentGeneration: 2,
+                hasUnsavedChanges: true,
+                saveState: .edited
+            )
+            let recovery = makeRecovery(
+                documentID: documentID,
+                documentGeneration: 2,
+                text: "untitled survives",
+                pendingSaveAs: PendingSaveAsRecord(
+                    destinationFileReferenceID: destinationID,
+                    destinationPathHint: destinationReference.pathHint,
+                    expectedContentHash: "expected-hash"
+                )
+            )
+            let repository = RecoveryRepositorySpy(session: session, recoveries: [recovery])
+            let model = ApplicationModel()
+            let coordinator = RecoveryCoordinator(
+                repository: repository,
+                clock: VirtualRecoveryClock(),
+                documentProvider: { id in model.document.id == id ? model.document : nil }
+            )
+            let bookmarks: BookmarkAccessSpy
+            let files: LaunchFileServiceSpy
+            switch mode {
+            case 0:
+                bookmarks = BookmarkAccessSpy()
+                files = LaunchFileServiceSpy()
+            case 1:
+                bookmarks = BookmarkAccessSpy(
+                    references: [destinationID: destinationReference],
+                    deniedReferenceIDs: [destinationID]
+                )
+                files = LaunchFileServiceSpy()
+            default:
+                bookmarks = BookmarkAccessSpy(references: [destinationID: destinationReference])
+                files = LaunchFileServiceSpy(openError: .missing)
+            }
+
+            let source = try await model.restoreAtLaunch(
+                repository: repository,
+                bookmarks: bookmarks,
+                files: files,
+                recoveryCoordinator: coordinator,
+                windowFrame: session.windowFrame
+            )
+
+            XCTAssertEqual(source, .recovery(recovery))
+            XCTAssertNil(model.document.fileReference)
+            let storedRecovery = await repository.storedRecovery(documentID: documentID)
+            XCTAssertEqual(storedRecovery, recovery)
+            let openedReferences = await files.openedReferences
+            XCTAssertEqual(openedReferences, mode == 2 ? [destinationReference] : [])
+        }
     }
 
     func testUnreadableSessionPreservesOrphanRecoveryForNextLaunch() async throws {
@@ -746,13 +1323,16 @@ private extension RecoveryCoordinatorTests {
 
     func makeSession(
         documentID: UUID,
+        documentGeneration: Int? = nil,
         fileReferenceID: UUID? = nil,
         hasUnsavedChanges: Bool,
-        saveState: DocumentSaveState
+        saveState: DocumentSaveState,
+        savedAt: Date = Date(timeIntervalSince1970: 10)
     ) -> SessionRecord {
         SessionRecord(
             schemaVersion: 1,
             documentID: documentID,
+            documentGeneration: documentGeneration,
             fileReferenceID: fileReferenceID,
             displayName: fileReferenceID == nil ? "Untitled" : "File.md",
             saveState: saveState,
@@ -764,29 +1344,34 @@ private extension RecoveryCoordinatorTests {
             lastKnownDiskMTime: fileReferenceID == nil ? nil : Date(timeIntervalSince1970: 40),
             windowFrame: CGRect(x: 1, y: 2, width: 820, height: 640),
             didCloseCleanly: true,
-            savedAt: Date(timeIntervalSince1970: 10)
+            savedAt: savedAt
         )
     }
 
     func makeRecovery(
         documentID: UUID,
+        documentGeneration: Int? = nil,
         fileReferenceID: UUID? = nil,
         filePathHint: String? = nil,
         text: String,
+        baseDiskHash: String? = nil,
+        pendingSaveAs: PendingSaveAsRecord? = nil,
         savedAt: Date = Date(timeIntervalSince1970: 20)
     ) -> RecoveryRecord {
         RecoveryRecord(
             schemaVersion: 1,
             documentID: documentID,
+            documentGeneration: documentGeneration,
             fileReferenceID: fileReferenceID,
             filePathHint: filePathHint,
             unsavedText: text,
-            baseDiskHash: nil,
+            baseDiskHash: baseDiskHash,
             baseDiskMTime: nil,
             lineEnding: .lf,
             selection: TextSelection(location: 1, length: 2),
             scrollOffsetY: 31,
-            savedAt: savedAt
+            savedAt: savedAt,
+            pendingSaveAs: pendingSaveAs
         )
     }
 }
@@ -948,9 +1533,14 @@ private actor RecoveryRepositorySpy: SessionPersisting {
 
 private actor BookmarkAccessSpy: BookmarkAccessing {
     private let references: [UUID: ExternalFileReference]
+    private let deniedReferenceIDs: Set<UUID>
 
-    init(references: [UUID: ExternalFileReference] = [:]) {
+    init(
+        references: [UUID: ExternalFileReference] = [:],
+        deniedReferenceIDs: Set<UUID> = []
+    ) {
         self.references = references
+        self.deniedReferenceIDs = deniedReferenceIDs
     }
 
     func storeSelection(_ url: URL) async throws -> ExternalFileReference {
@@ -958,7 +1548,10 @@ private actor BookmarkAccessSpy: BookmarkAccessing {
     }
 
     func reference(for bookmarkID: UUID) async throws -> ExternalFileReference? {
-        references[bookmarkID]
+        if deniedReferenceIDs.contains(bookmarkID) {
+            throw BookmarkStoreError.accessDenied
+        }
+        return references[bookmarkID]
     }
 
     func beginAccess(_ reference: ExternalFileReference) async throws -> ScopedAccessToken {
@@ -972,14 +1565,20 @@ private actor BookmarkAccessSpy: BookmarkAccessing {
 
 private actor LaunchFileServiceSpy: FileServicing {
     private let openResult: FileOpenResult?
+    private let openError: LaunchFileServiceError?
     private(set) var openedReferences: [ExternalFileReference] = []
 
-    init(openResult: FileOpenResult? = nil) {
+    init(
+        openResult: FileOpenResult? = nil,
+        openError: LaunchFileServiceError? = nil
+    ) {
         self.openResult = openResult
+        self.openError = openError
     }
 
     func open(_ reference: ExternalFileReference) async throws -> FileOpenResult {
         openedReferences.append(reference)
+        if let openError { throw openError }
         guard let openResult else { throw LaunchFileServiceError.missingResult }
         return openResult
     }
@@ -1002,5 +1601,6 @@ private actor LaunchFileServiceSpy: FileServicing {
 
 private enum LaunchFileServiceError: Error {
     case missingResult
+    case missing
     case unsupported
 }

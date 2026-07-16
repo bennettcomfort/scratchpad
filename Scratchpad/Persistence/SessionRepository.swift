@@ -10,6 +10,7 @@ protocol SessionPersisting: Sendable {
 }
 
 enum SessionRepositoryError: Error, Equatable, Sendable {
+    case invalidRecord
     case quarantineFailed(source: URL, destination: URL)
     case unsupportedSchema(expected: Int, actual: Int)
 }
@@ -36,7 +37,7 @@ actor SessionRepository: SessionPersisting {
     }
 
     func writeSession(_ record: SessionRecord) async throws {
-        try validateWritableSchema(record.schemaVersion)
+        try validateWritable(record)
         try await writer.write(try encoder.encode(record), to: paths.latestSession)
     }
 
@@ -65,7 +66,7 @@ actor SessionRepository: SessionPersisting {
     }
 
     func writeRecovery(_ record: RecoveryRecord) async throws {
-        try validateWritableSchema(record.schemaVersion)
+        try validateWritable(record)
         try await writer.write(
             try encoder.encode(record),
             to: paths.recovery(documentID: record.documentID)
@@ -76,7 +77,7 @@ actor SessionRepository: SessionPersisting {
         try await writer.removeIfPresent(paths.recovery(documentID: documentID))
     }
 
-    private func load<Record: Decodable & SchemaVersioned>(
+    private func load<Record: Decodable & PersistedRecord>(
         _ type: Record.Type,
         from source: URL,
         validate: (Record) -> Bool = { _ in true }
@@ -89,7 +90,7 @@ actor SessionRepository: SessionPersisting {
             guard record.schemaVersion == Self.schemaVersion else {
                 throw UnsupportedSchemaError()
             }
-            guard validate(record) else {
+            guard record.hasValidSemantics, validate(record) else {
                 throw InvalidRecordError()
             }
             return record
@@ -136,14 +137,50 @@ actor SessionRepository: SessionPersisting {
             )
         }
     }
+
+    private func validateWritable<Record: PersistedRecord>(_ record: Record) throws {
+        try validateWritableSchema(record.schemaVersion)
+        guard record.hasValidSemantics else {
+            throw SessionRepositoryError.invalidRecord
+        }
+    }
 }
 
 private protocol SchemaVersioned {
     var schemaVersion: Int { get }
 }
 
-extension SessionRecord: SchemaVersioned {}
-extension RecoveryRecord: SchemaVersioned {}
+private protocol PersistedRecord: SchemaVersioned {
+    var hasValidSemantics: Bool { get }
+}
+
+extension SessionRecord: PersistedRecord {
+    fileprivate var hasValidSemantics: Bool {
+        documentGeneration.isValidPersistedGeneration
+    }
+}
+
+extension RecoveryRecord: PersistedRecord {
+    fileprivate var hasValidSemantics: Bool {
+        documentGeneration.isValidPersistedGeneration
+            && (pendingSaveAs?.expectedContentHash.isLowercaseSHA256 ?? true)
+    }
+}
+
+private extension Optional where Wrapped == Int {
+    var isValidPersistedGeneration: Bool {
+        guard let self else { return true }
+        return self >= 0
+    }
+}
+
+private extension String {
+    var isLowercaseSHA256: Bool {
+        utf8.count == 64 && utf8.allSatisfy {
+            ($0 >= 48 && $0 <= 57) || ($0 >= 97 && $0 <= 102)
+        }
+    }
+}
 
 private struct UnsupportedSchemaError: Error {}
 private struct InvalidRecordError: Error {}

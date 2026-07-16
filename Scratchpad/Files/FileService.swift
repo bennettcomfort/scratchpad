@@ -312,11 +312,7 @@ actor FileService: FileServicing {
     }
 
     private func encodedBytes(for snapshot: DocumentSnapshot) -> Data {
-        let normalized = normalizeLineEndings(snapshot.text)
-        let encodedText = snapshot.lineEnding == .crlf
-            ? normalized.replacingOccurrences(of: "\n", with: "\r\n")
-            : normalized
-        return Data(encodedText.utf8)
+        snapshot.persistedBytes
     }
 
     private func makeSaveResult(

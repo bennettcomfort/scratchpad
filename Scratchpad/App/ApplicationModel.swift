@@ -32,6 +32,14 @@ final class ApplicationModel {
     var banner: ErrorBanner?
 
     var pendingDecision: DocumentDecision? { decisionCoordinator.pending }
+    var allowsDocumentEditing: Bool {
+        switch operationState {
+        case .idle, .saving:
+            true
+        case .opening, .closing, .terminating:
+            false
+        }
+    }
 
     @ObservationIgnored
     private let servicesFactory: (@MainActor @Sendable () throws -> ApplicationServices)?
@@ -339,11 +347,26 @@ final class ApplicationModel {
         windowFrame: CGRect
     ) async throws -> RestoreSource {
         let session = try await repository.loadSession()
-        let recovery: RecoveryRecord?
+        var recovery: RecoveryRecord?
         let cleanFileReference: ExternalFileReference?
 
         if let session {
             recovery = try await repository.loadRecovery(documentID: session.documentID)
+            if let loadedRecovery = recovery,
+               loadedRecovery.documentID == session.documentID,
+               loadedRecovery.pendingSaveAs != nil,
+               pendingSaveAsCanReconcile(
+                   session: session,
+                   recovery: loadedRecovery
+               ) {
+                recovery = await reconcilePendingSaveAs(
+                    loadedRecovery,
+                    sessionGeneration: session.documentGeneration,
+                    bookmarks: bookmarks,
+                    files: files,
+                    recoveryCoordinator: recoveryCoordinator
+                )
+            }
             let recoveryWins = recovery.map {
                 RecoveryCoordinator.recoveryIsAuthoritative(
                     session: session,
@@ -394,6 +417,80 @@ final class ApplicationModel {
         return source
     }
 
+    private func reconcilePendingSaveAs(
+        _ recovery: RecoveryRecord,
+        sessionGeneration: Int?,
+        bookmarks: any BookmarkAccessing,
+        files: any FileServicing,
+        recoveryCoordinator: RecoveryCoordinator
+    ) async -> RecoveryRecord {
+        guard let pending = recovery.pendingSaveAs else { return recovery }
+        let destinationReference: ExternalFileReference
+        do {
+            guard let resolved = try await bookmarks.reference(
+                for: pending.destinationFileReferenceID
+            ) else { return recovery }
+            destinationReference = resolved
+        } catch {
+            return recovery
+        }
+
+        let opened: FileOpenResult
+        do {
+            opened = try await files.open(destinationReference)
+        } catch {
+            return recovery
+        }
+        guard opened.contentHash == pending.expectedContentHash else {
+            return recovery
+        }
+        guard let verifiedGeneration = nextPersistedGeneration(
+            recovery.documentGeneration,
+            sessionGeneration
+        ) else { return recovery }
+
+        let verified = RecoveryRecord(
+            schemaVersion: recovery.schemaVersion,
+            documentID: recovery.documentID,
+            documentGeneration: verifiedGeneration,
+            fileReferenceID: destinationReference.bookmarkID,
+            filePathHint: destinationReference.pathHint,
+            unsavedText: recovery.unsavedText,
+            baseDiskHash: opened.contentHash,
+            baseDiskMTime: opened.modificationDate,
+            lineEnding: opened.lineEnding,
+            selection: recovery.selection,
+            scrollOffsetY: recovery.scrollOffsetY,
+            savedAt: Date(),
+            pendingSaveAs: nil
+        )
+        do {
+            try await recoveryCoordinator.flushRecovery(verified)
+            return verified
+        } catch {
+            return recovery
+        }
+    }
+
+    private func pendingSaveAsCanReconcile(
+        session: SessionRecord,
+        recovery: RecoveryRecord
+    ) -> Bool {
+        if session.hasUnsavedChanges { return true }
+        if let sessionGeneration = session.documentGeneration,
+           let recoveryGeneration = recovery.documentGeneration {
+            return recoveryGeneration == sessionGeneration
+                || DocumentGeneration.isNewer(
+                    recoveryGeneration,
+                    than: sessionGeneration
+                )
+        }
+        return RecoveryCoordinator.recoveryIsAuthoritative(
+            session: session,
+            recovery: recovery
+        )
+    }
+
     private func requireReference(
         bookmarkID: UUID,
         bookmarks: any BookmarkAccessing
@@ -412,12 +509,11 @@ final class ApplicationModel {
     ) async throws {
         switch source {
         case .recovery(let recovery):
-            let containsPreservationRequiredText = !recovery.unsavedText.isEmpty
             let restoredSaveState: DocumentSaveState
-            if fileReference == nil,
-               containsPreservationRequiredText {
+            switch session?.saveState {
+            case .clean, .untitled, .none:
                 restoredSaveState = .edited
-            } else {
+            case .edited, .conflicted, .deleted, .readOnly:
                 restoredSaveState = session?.saveState ?? .edited
             }
             let restoredDocument = DocumentSession(
@@ -425,8 +521,10 @@ final class ApplicationModel {
                 fileReference: fileReference,
                 displayName: session?.displayName ?? "Untitled",
                 saveState: restoredSaveState,
-                hasUnsavedChanges: session?.hasUnsavedChanges == true
-                    || containsPreservationRequiredText,
+                hasUnsavedChanges: true,
+                generation: generationBeforeReplacement(
+                    recovery.documentGeneration ?? session?.documentGeneration
+                ),
                 lastSavedHash: recovery.baseDiskHash,
                 lastKnownDiskMTime: recovery.baseDiskMTime,
                 lineEnding: recovery.lineEnding,
@@ -447,6 +545,7 @@ final class ApplicationModel {
                 displayName: openedFile.displayName,
                 saveState: .clean,
                 hasUnsavedChanges: false,
+                generation: generationBeforeReplacement(session.documentGeneration),
                 lastSavedHash: openedFile.contentHash,
                 lastKnownDiskMTime: openedFile.modificationDate,
                 lineEnding: openedFile.lineEnding,
@@ -613,7 +712,7 @@ final class ApplicationModel {
             publishPersistenceBanner(error)
             if document.id == boundary.documentID,
                document.hasUnsavedChanges {
-                await preserveLatestDocumentState(
+                _ = await preserveLatestDocumentState(
                     documentID: boundary.documentID,
                     using: dependencies
                 )
@@ -802,6 +901,11 @@ final class ApplicationModel {
             )
         }
 
+        guard await flushRecovery(
+            snapshot,
+            using: dependencies.recovery
+        ) else { return false }
+
         do {
             let result = try await dependencies.services.files.save(snapshot)
             return await applySaveResult(
@@ -919,14 +1023,55 @@ final class ApplicationModel {
         to reference: ExternalFileReference,
         using dependencies: OperationDependencies
     ) async -> Bool {
+        let changesAssociation = snapshot.fileReference != reference
+        let pendingSaveAs = changesAssociation
+            ? PendingSaveAsRecord(
+                destinationFileReferenceID: reference.bookmarkID,
+                destinationPathHint: reference.pathHint,
+                expectedContentHash: ContentHash.sha256(snapshot.persistedBytes)
+            )
+            : nil
+        guard await flushRecovery(
+            snapshot,
+            pendingSaveAs: pendingSaveAs,
+            using: dependencies.recovery
+        ) else { return false }
         do {
             let result = try await dependencies.services.files.saveAs(snapshot, to: reference)
+            if changesAssociation {
+                guard await flushRecovery(
+                    snapshot.recoveryRecord(verifiedSaveAs: result),
+                    using: dependencies.recovery
+                ) else {
+                    if document.id == snapshot.documentID,
+                       document.generation != snapshot.generation {
+                        _ = await preserveLatestDocumentState(
+                            documentID: snapshot.documentID,
+                            pendingSaveAs: pendingSaveAs,
+                            using: dependencies
+                        )
+                    }
+                    return false
+                }
+            }
             return await applySaveResult(
                 result,
                 initiatedBy: snapshot,
                 using: dependencies
             )
         } catch {
+            if document.id == snapshot.documentID,
+               document.generation != snapshot.generation {
+                _ = await preserveLatestDocumentState(
+                    documentID: snapshot.documentID,
+                    using: dependencies
+                )
+            } else if changesAssociation {
+                _ = await flushRecovery(
+                    snapshot,
+                    using: dependencies.recovery
+                )
+            }
             publishFileBanner(error, path: reference.pathHint)
             return false
         }
@@ -964,13 +1109,44 @@ final class ApplicationModel {
                 using: dependencies
             )
         }
-        dependencies.recovery.scheduleRecovery(for: document)
-        return true
+        return await preserveLatestDocumentState(
+            documentID: snapshot.documentID,
+            using: dependencies
+        )
     }
 
     private func flushRecovery(using coordinator: RecoveryCoordinator) async -> Bool {
         do {
             try await coordinator.flushRecovery(for: document)
+            return true
+        } catch {
+            publishPersistenceBanner(error)
+            return false
+        }
+    }
+
+    private func flushRecovery(
+        _ snapshot: DocumentSnapshot,
+        pendingSaveAs: PendingSaveAsRecord? = nil,
+        using coordinator: RecoveryCoordinator
+    ) async -> Bool {
+        do {
+            try await coordinator.flushRecovery(
+                snapshot.recoveryRecord(pendingSaveAs: pendingSaveAs)
+            )
+            return true
+        } catch {
+            publishPersistenceBanner(error)
+            return false
+        }
+    }
+
+    private func flushRecovery(
+        _ record: RecoveryRecord,
+        using coordinator: RecoveryCoordinator
+    ) async -> Bool {
+        do {
+            try await coordinator.flushRecovery(record)
             return true
         } catch {
             publishPersistenceBanner(error)
@@ -1008,7 +1184,7 @@ final class ApplicationModel {
     ) async -> Bool {
         guard document.id == boundary.documentID else { return false }
         guard document.generation != boundary.generation else { return true }
-        await preserveLatestDocumentState(
+        _ = await preserveLatestDocumentState(
             documentID: boundary.documentID,
             using: dependencies
         )
@@ -1018,14 +1194,19 @@ final class ApplicationModel {
 
     private func preserveLatestDocumentState(
         documentID: UUID,
+        pendingSaveAs: PendingSaveAsRecord? = nil,
         using dependencies: OperationDependencies
-    ) async {
+    ) async -> Bool {
         while document.id == documentID {
             let generation = document.generation
             if recoveryCleanupRequiredDocumentID == documentID {
                 recoveryCleanupRequiredDocumentID = nil
             }
-            guard await flushRecovery(using: dependencies.recovery) else { return }
+            guard await flushRecovery(
+                document.snapshot(),
+                pendingSaveAs: pendingSaveAs,
+                using: dependencies.recovery
+            ) else { return false }
             do {
                 try await dependencies.recovery.flushSession(
                     for: document,
@@ -1034,11 +1215,14 @@ final class ApplicationModel {
                 )
             } catch {
                 publishPersistenceBanner(error)
-                return
+                return false
             }
             guard document.id == documentID,
-                  document.generation != generation else { return }
+                  document.generation != generation else {
+                return document.id == documentID
+            }
         }
+        return false
     }
 
     // MARK: - Error Presentation
@@ -1106,6 +1290,7 @@ final class ApplicationModel {
     private func publishPersistenceBanner(_ error: Error) {
         let category: String
         switch error as? SessionRepositoryError {
+        case .invalidRecord: category = "SessionRepositoryError.invalidRecord"
         case .quarantineFailed: category = "SessionRepositoryError.quarantineFailed"
         case .unsupportedSchema: category = "SessionRepositoryError.unsupportedSchema"
         case nil: category = String(describing: type(of: error))
@@ -1118,6 +1303,30 @@ final class ApplicationModel {
             message: "Scratchpad couldn't update recovery safely. Your text remains open.",
             actions: [.retry, .openRecoveryFolder, .dismiss]
         )
+    }
+
+    private func generationBeforeReplacement(_ generation: Int?) -> Int {
+        guard let generation else { return 0 }
+        return DocumentGeneration.previous(before: generation)
+    }
+
+    private func nextPersistedGeneration(_ first: Int?, _ second: Int?) -> Int? {
+        let current: Int
+        switch (first, second) {
+        case let (first?, second?):
+            current = first == second
+                || DocumentGeneration.isNewer(first, than: second)
+                ? first
+                : second
+        case let (first?, nil):
+            current = first
+        case let (nil, second?):
+            current = second
+        case (nil, nil):
+            current = 0
+        }
+        guard current >= 0 else { return nil }
+        return DocumentGeneration.next(after: current)
     }
 }
 

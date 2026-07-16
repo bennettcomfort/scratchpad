@@ -15,7 +15,9 @@ struct MainWindowView: View {
                 EditorHost(
                     document: model.document,
                     onEdit: model.handleCurrentDocumentEdit,
-                    onStateChange: model.handleCurrentDocumentStateChange
+                    onStateChange: model.handleCurrentDocumentStateChange,
+                    isEditable: model.allowsDocumentEditing,
+                    canEdit: { model.allowsDocumentEditing }
                 )
                     .id(model.document.id)
             }

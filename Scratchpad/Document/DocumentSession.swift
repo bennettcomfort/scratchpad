@@ -39,7 +39,7 @@ final class DocumentSession {
         self.displayName = displayName
         self.saveState = saveState
         self.hasUnsavedChanges = hasUnsavedChanges
-        self.generation = generation
+        self.generation = DocumentGeneration.normalized(generation)
         self.lastSavedHash = lastSavedHash
         self.lastKnownDiskMTime = lastKnownDiskMTime
         self.lineEnding = lineEnding
@@ -61,7 +61,7 @@ final class DocumentSession {
             with: text
         )
         storage.endEditing()
-        generation += 1
+        advanceGeneration()
         selection = (replacementSelection ?? selection)
             .clamped(toUTF16Length: storage.length)
 
@@ -82,7 +82,7 @@ final class DocumentSession {
     }
 
     func noteUserEdit() {
-        generation += 1
+        advanceGeneration()
         hasUnsavedChanges = true
         if saveState == .untitled || saveState == .clean {
             saveState = .edited
@@ -154,6 +154,7 @@ final class DocumentSession {
         RecoveryRecord(
             schemaVersion: 1,
             documentID: id,
+            documentGeneration: generation,
             fileReferenceID: fileReference?.bookmarkID,
             filePathHint: fileReference?.pathHint,
             unsavedText: storage.string,
@@ -174,6 +175,7 @@ final class DocumentSession {
         SessionRecord(
             schemaVersion: 1,
             documentID: id,
+            documentGeneration: generation,
             fileReferenceID: fileReference?.bookmarkID,
             displayName: displayName,
             saveState: saveState,
@@ -187,5 +189,9 @@ final class DocumentSession {
             didCloseCleanly: didCloseCleanly,
             savedAt: savedAt
         )
+    }
+
+    private func advanceGeneration() {
+        generation = DocumentGeneration.next(after: generation)
     }
 }

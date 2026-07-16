@@ -13,6 +13,7 @@ final class SessionRepositoryTests: XCTestCase {
         let unwrapped = try XCTUnwrap(loaded)
         XCTAssertEqual(unwrapped.schemaVersion, record.schemaVersion)
         XCTAssertEqual(unwrapped.documentID, record.documentID)
+        XCTAssertEqual(unwrapped.documentGeneration, record.documentGeneration)
         XCTAssertEqual(unwrapped.fileReferenceID, record.fileReferenceID)
         XCTAssertEqual(unwrapped.displayName, record.displayName)
         XCTAssertEqual(unwrapped.saveState, record.saveState)
@@ -44,6 +45,7 @@ final class SessionRepositoryTests: XCTestCase {
         let unwrapped = try XCTUnwrap(loaded)
         XCTAssertEqual(unwrapped.schemaVersion, record.schemaVersion)
         XCTAssertEqual(unwrapped.documentID, record.documentID)
+        XCTAssertEqual(unwrapped.documentGeneration, record.documentGeneration)
         XCTAssertEqual(unwrapped.fileReferenceID, record.fileReferenceID)
         XCTAssertEqual(unwrapped.filePathHint, record.filePathHint)
         XCTAssertEqual(unwrapped.unsavedText, record.unsavedText)
@@ -53,10 +55,38 @@ final class SessionRepositoryTests: XCTestCase {
         XCTAssertEqual(unwrapped.selection, record.selection)
         XCTAssertEqual(unwrapped.scrollOffsetY, record.scrollOffsetY)
         XCTAssertEqual(unwrapped.savedAt, record.savedAt)
+        XCTAssertEqual(unwrapped.pendingSaveAs, record.pendingSaveAs)
 
         let data = try Data(contentsOf: fixture.paths.recovery(documentID: record.documentID))
         try assertSortedJSON(data)
         XCTAssertEqual(try schemaVersion(in: data), SessionRepository.schemaVersion)
+    }
+
+    func testLegacyRecordsDecodeWithoutDocumentGeneration() async throws {
+        let fixture = try makeFixture()
+        let session = try makeSessionRecord()
+        let recovery = try makeRecoveryRecord(
+            documentID: session.documentID.uuidString,
+            text: "legacy recovery"
+        )
+
+        try await fixture.writer.write(
+            removingDocumentGeneration(from: session),
+            to: fixture.paths.latestSession
+        )
+        try await fixture.writer.write(
+            removingPendingSaveAsAndDocumentGeneration(from: recovery),
+            to: fixture.paths.recovery(documentID: recovery.documentID)
+        )
+
+        let loadedSession = try await fixture.repository.loadSession()
+        let loadedRecovery = try await fixture.repository.loadRecovery(
+            documentID: recovery.documentID
+        )
+        XCTAssertNil(loadedSession?.documentGeneration)
+        XCTAssertNil(loadedRecovery?.documentGeneration)
+        XCTAssertNil(loadedRecovery?.pendingSaveAs)
+        XCTAssertEqual(loadedRecovery?.unsavedText, "legacy recovery")
     }
 
     func testRecoveryFilesRemainIndependentByDocumentID() async throws {
@@ -261,6 +291,140 @@ final class SessionRepositoryTests: XCTestCase {
             )
         )
     }
+
+    func testInvalidDocumentGenerationsAreQuarantinedOnLoad() async throws {
+        for generation in [Int.min, -1] {
+            let sessionFixture = try makeFixture()
+            let session = try makeSessionRecord(documentGeneration: generation)
+            try JSONEncoder().encode(session).write(to: sessionFixture.paths.latestSession)
+
+            let loadedSession = try await sessionFixture.repository.loadSession()
+            XCTAssertNil(loadedSession)
+            XCTAssertFalse(
+                FileManager.default.fileExists(atPath: sessionFixture.paths.latestSession.path)
+            )
+
+            let recoveryFixture = try makeFixture()
+            let recovery = try makeRecoveryRecord(
+                documentID: "12345678-90AB-CDEF-1234-567890ABCDEF",
+                text: "invalid generation",
+                documentGeneration: generation
+            )
+            let recoveryURL = recoveryFixture.paths.recovery(documentID: recovery.documentID)
+            try JSONEncoder().encode(recovery).write(to: recoveryURL)
+
+            let loadedRecovery = try await recoveryFixture.repository.loadRecovery(
+                documentID: recovery.documentID
+            )
+            XCTAssertNil(loadedRecovery)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: recoveryURL.path))
+        }
+    }
+
+    func testInvalidDocumentGenerationWritesLeaveDestinationsUntouched() async throws {
+        let sentinel = Data("existing record".utf8)
+
+        for generation in [Int.min, -1] {
+            let sessionFixture = try makeFixture()
+            try sentinel.write(to: sessionFixture.paths.latestSession)
+
+            await XCTAssertThrowsErrorAsync {
+                try await sessionFixture.repository.writeSession(
+                    try makeSessionRecord(documentGeneration: generation)
+                )
+            } verify: { error in
+                XCTAssertEqual(error as? SessionRepositoryError, .invalidRecord)
+            }
+            XCTAssertEqual(try Data(contentsOf: sessionFixture.paths.latestSession), sentinel)
+
+            let recoveryFixture = try makeFixture()
+            let recovery = try makeRecoveryRecord(
+                documentID: "12345678-90AB-CDEF-1234-567890ABCDEF",
+                text: "invalid generation",
+                documentGeneration: generation
+            )
+            let recoveryURL = recoveryFixture.paths.recovery(documentID: recovery.documentID)
+            try sentinel.write(to: recoveryURL)
+
+            await XCTAssertThrowsErrorAsync {
+                try await recoveryFixture.repository.writeRecovery(recovery)
+            } verify: { error in
+                XCTAssertEqual(error as? SessionRepositoryError, .invalidRecord)
+            }
+            XCTAssertEqual(try Data(contentsOf: recoveryURL), sentinel)
+        }
+    }
+
+    func testMaximumDocumentGenerationRoundTripsForRollover() async throws {
+        let fixture = try makeFixture()
+        let session = try makeSessionRecord(documentGeneration: Int.max)
+        let recovery = try makeRecoveryRecord(
+            documentID: session.documentID.uuidString,
+            text: "maximum rollover generation",
+            documentGeneration: Int.max
+        )
+
+        try await fixture.repository.writeSession(session)
+        try await fixture.repository.writeRecovery(recovery)
+
+        let loadedSession = try await fixture.repository.loadSession()
+        let loadedRecovery = try await fixture.repository.loadRecovery(
+            documentID: recovery.documentID
+        )
+        XCTAssertEqual(loadedSession?.documentGeneration, Int.max)
+        XCTAssertEqual(loadedRecovery?.documentGeneration, Int.max)
+    }
+
+    func testMalformedPendingSaveAsHashesAreRejectedAndQuarantined() async throws {
+        let invalidHashes = [
+            "",
+            String(repeating: "a", count: 63),
+            String(repeating: "A", count: 64),
+            String(repeating: "g", count: 64),
+        ]
+
+        for hash in invalidHashes {
+            let fixture = try makeFixture()
+            let recovery = try makeRecoveryRecord(
+                documentID: "12345678-90AB-CDEF-1234-567890ABCDEF",
+                text: "invalid pending hash",
+                expectedContentHash: hash
+            )
+            let source = fixture.paths.recovery(documentID: recovery.documentID)
+            try JSONEncoder().encode(recovery).write(to: source)
+
+            let loaded = try await fixture.repository.loadRecovery(documentID: recovery.documentID)
+            XCTAssertNil(loaded)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
+
+            try Data("existing record".utf8).write(to: source)
+            await XCTAssertThrowsErrorAsync {
+                try await fixture.repository.writeRecovery(recovery)
+            } verify: { error in
+                XCTAssertEqual(error as? SessionRepositoryError, .invalidRecord)
+            }
+            XCTAssertEqual(try Data(contentsOf: source), Data("existing record".utf8))
+        }
+    }
+
+    func testSemanticValidationQuarantineFailurePreservesOriginal() async throws {
+        let fixture = try makeFixture(quarantineFails: true)
+        let invalid = try JSONEncoder().encode(
+            try makeSessionRecord(documentGeneration: -1)
+        )
+        try invalid.write(to: fixture.paths.latestSession)
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await fixture.repository.loadSession()
+        } verify: { error in
+            guard case let .quarantineFailed(source, _) = error as? SessionRepositoryError else {
+                return XCTFail("Expected quarantineFailed, got \(error)")
+            }
+            XCTAssertEqual(source, fixture.paths.latestSession)
+        }
+
+        XCTAssertEqual(try Data(contentsOf: fixture.paths.latestSession), invalid)
+    }
 }
 
 private extension SessionRepositoryTests {
@@ -289,11 +453,13 @@ private extension SessionRepositoryTests {
     }
 
     func makeSessionRecord(
-        schemaVersion: Int = SessionRepository.schemaVersion
+        schemaVersion: Int = SessionRepository.schemaVersion,
+        documentGeneration: Int? = 7
     ) throws -> SessionRecord {
         SessionRecord(
             schemaVersion: schemaVersion,
             documentID: try fixedUUID("AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"),
+            documentGeneration: documentGeneration,
             fileReferenceID: try fixedUUID("11111111-2222-3333-4444-555555555555"),
             displayName: "Prompt.md",
             saveState: .edited,
@@ -312,11 +478,14 @@ private extension SessionRepositoryTests {
     func makeRecoveryRecord(
         schemaVersion: Int = SessionRepository.schemaVersion,
         documentID: String,
-        text: String
+        text: String,
+        documentGeneration: Int? = 8,
+        expectedContentHash: String = String(repeating: "a", count: 64)
     ) throws -> RecoveryRecord {
         RecoveryRecord(
             schemaVersion: schemaVersion,
             documentID: try fixedUUID(documentID),
+            documentGeneration: documentGeneration,
             fileReferenceID: try fixedUUID("ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB"),
             filePathHint: "/Users/example/Prompt.md",
             unsavedText: text,
@@ -325,7 +494,14 @@ private extension SessionRepositoryTests {
             lineEnding: .lf,
             selection: TextSelection(location: 3, length: 2),
             scrollOffsetY: 91.25,
-            savedAt: Date(timeIntervalSince1970: 1_700_000_456)
+            savedAt: Date(timeIntervalSince1970: 1_700_000_456),
+            pendingSaveAs: PendingSaveAsRecord(
+                destinationFileReferenceID: try fixedUUID(
+                    "12345678-1234-1234-1234-123456789ABC"
+                ),
+                destinationPathHint: "/Users/example/Copy.md",
+                expectedContentHash: expectedContentHash
+            )
         )
     }
 
@@ -355,6 +531,41 @@ private extension SessionRepositoryTests {
     func schemaVersion(in data: Data) throws -> Int {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         return try XCTUnwrap(object["schemaVersion"] as? Int)
+    }
+
+    func removingDocumentGeneration<Record: Encodable>(from record: Record) throws -> Data {
+        let encoded = try JSONEncoder().encode(record)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "documentGeneration")
+        return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    }
+
+    func removingPendingSaveAsAndDocumentGeneration<Record: Encodable>(
+        from record: Record
+    ) throws -> Data {
+        let encoded = try JSONEncoder().encode(record)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "documentGeneration")
+        object.removeValue(forKey: "pendingSaveAs")
+        return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    }
+}
+
+private func XCTAssertThrowsErrorAsync(
+    _ expression: () async throws -> Void,
+    verify: (Error) -> Void = { _ in },
+    file: StaticString = #filePath,
+    line: UInt = #line
+) async {
+    do {
+        try await expression()
+        XCTFail("Expected expression to throw", file: file, line: line)
+    } catch {
+        verify(error)
     }
 }
 

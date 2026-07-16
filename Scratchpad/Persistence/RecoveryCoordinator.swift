@@ -90,9 +90,12 @@ final class RecoveryCoordinator {
     }
 
     func flushRecovery(for document: DocumentSession) async throws {
-        let documentID = document.id
+        try await flushRecovery(document.recoverySnapshot())
+    }
+
+    func flushRecovery(_ record: RecoveryRecord) async throws {
+        let documentID = record.documentID
         cancelRecovery(documentID: documentID)
-        let record = document.recoverySnapshot()
         await acquireWriteGate(documentID: documentID)
         defer { releaseWriteGate(documentID: documentID) }
         try Task.checkCancellation()
@@ -187,7 +190,26 @@ final class RecoveryCoordinator {
         recovery: RecoveryRecord
     ) -> Bool {
         guard recovery.documentID == session.documentID else { return false }
-        if session.hasUnsavedChanges || recovery.savedAt > session.savedAt {
+        // A session record has no text payload. When it says the document was
+        // dirty, the matching recovery is the only durable user-text evidence,
+        // even if an interrupted write left its generation one step behind.
+        if session.hasUnsavedChanges { return true }
+
+        if let sessionGeneration = session.documentGeneration,
+           let recoveryGeneration = recovery.documentGeneration {
+            return DocumentGeneration.isNewer(
+                recoveryGeneration,
+                than: sessionGeneration
+            )
+        }
+
+        // Legacy v1 records have no generation. A matching base hash proves
+        // that recovery was derived from the clean session's disk identity;
+        // after a later successful save, the clean session hash changes and a
+        // stale pre-save recovery no longer matches.
+        if let sessionBaseHash = session.lastSavedHash,
+           let recoveryBaseHash = recovery.baseDiskHash,
+           recoveryBaseHash == sessionBaseHash {
             return true
         }
         return session.fileReferenceID == nil && !recovery.unsavedText.isEmpty
@@ -198,6 +220,7 @@ extension SessionRecord: Equatable {
     static func == (lhs: SessionRecord, rhs: SessionRecord) -> Bool {
         lhs.schemaVersion == rhs.schemaVersion
             && lhs.documentID == rhs.documentID
+            && lhs.documentGeneration == rhs.documentGeneration
             && lhs.fileReferenceID == rhs.fileReferenceID
             && lhs.displayName == rhs.displayName
             && lhs.saveState == rhs.saveState
@@ -217,6 +240,7 @@ extension RecoveryRecord: Equatable {
     static func == (lhs: RecoveryRecord, rhs: RecoveryRecord) -> Bool {
         lhs.schemaVersion == rhs.schemaVersion
             && lhs.documentID == rhs.documentID
+            && lhs.documentGeneration == rhs.documentGeneration
             && lhs.fileReferenceID == rhs.fileReferenceID
             && lhs.filePathHint == rhs.filePathHint
             && lhs.unsavedText == rhs.unsavedText
@@ -226,5 +250,6 @@ extension RecoveryRecord: Equatable {
             && lhs.selection == rhs.selection
             && lhs.scrollOffsetY == rhs.scrollOffsetY
             && lhs.savedAt == rhs.savedAt
+            && lhs.pendingSaveAs == rhs.pendingSaveAs
     }
 }

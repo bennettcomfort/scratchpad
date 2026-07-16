@@ -171,7 +171,7 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
 
     func testCancelLeavesDocumentAndRecoveryUnchanged() async {
         let repository = OperationRepositoryFake()
-        let files = ControllableFileServiceFake()
+        let files = ControllableFileServiceFake(saveSuspended: true)
         let document = makeEditedDocument(text: "preserve me")
         document.updateSelection(TextSelection(location: 3, length: 4))
         let model = makeModel(document: document, repository: repository, files: files)
@@ -287,6 +287,44 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertEqual(model.operationState, .idle)
     }
 
+    func testReplacementPersistenceLocksNativeAndCommandEditsBeforePointerWrite() async throws {
+        let repository = OperationRepositoryFake(sessionWriteSuspended: true)
+        let oldDocument = makeEditedDocument(text: "sealed old document")
+        let model = makeModel(
+            document: oldDocument,
+            repository: repository,
+            files: ControllableFileServiceFake()
+        )
+        let coordinator = EditorCoordinator(
+            document: oldDocument,
+            onEdit: model.handleCurrentDocumentEdit,
+            canEdit: { model.allowsDocumentEditing }
+        )
+        let scrollView = EditorHost.makeScrollView(
+            document: oldDocument,
+            coordinator: coordinator
+        )
+        let textView = try XCTUnwrap(scrollView.documentView as? ScratchTextView)
+
+        let replacement = Task { await model.requestNewDocument() }
+        guard await waitUntil({ model.pendingDecision != nil }) else {
+            replacement.cancel()
+            return
+        }
+        model.resolvePendingDecision(with: .discard)
+        await repository.waitForSessionWrites(1)
+
+        let sealedGeneration = oldDocument.generation
+        textView.insertText(" lost native edit", replacementRange: textView.selectedRange())
+        textView.scratchpadDuplicateLine(nil)
+        XCTAssertEqual(oldDocument.storage.string, "sealed old document")
+        XCTAssertEqual(oldDocument.generation, sealedGeneration)
+
+        await repository.resumeSessionWrite()
+        await replacement.value
+        XCTAssertFalse(model.document === oldDocument)
+    }
+
     func testFailedReplacementSessionAfterDiscardRecreatesOldDocumentRecovery() async {
         let repository = OperationRepositoryFake(sessionWriteFailures: 1)
         let oldDocument = makeEditedDocument(text: "discarded only if replacement succeeds")
@@ -339,6 +377,325 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         await repository.resumeDelete()
         let saved = await save.value
         XCTAssertTrue(saved)
+    }
+
+    func testCrashBeforeCleanSessionCommitUsesExactSavedSnapshotRecovery() async {
+        let repository = OperationRepositoryFake(sessionWriteSuspended: true)
+        let document = makeEditedDocument(text: "exact saved snapshot")
+        let model = makeModel(
+            document: document,
+            repository: repository,
+            files: ControllableFileServiceFake()
+        )
+
+        let save = Task { await model.save() }
+        await repository.waitForSessionWrites(1)
+
+        guard let recovery = await repository.recoveryWrites.last else {
+            XCTFail("Save reached clean-session persistence without exact recovery")
+            await repository.resumeSessionWrite()
+            _ = await save.value
+            return
+        }
+        let priorDirtyDocument = DocumentSession(
+            id: document.id,
+            text: "older debounced snapshot",
+            fileReference: document.fileReference,
+            displayName: document.displayName,
+            saveState: .edited,
+            hasUnsavedChanges: true,
+            generation: document.generation - 1,
+            lastSavedHash: "base-hash",
+            lastKnownDiskMTime: Date(timeIntervalSince1970: 10)
+        )
+        let priorSession = priorDirtyDocument.sessionRecord(
+            windowFrame: frame,
+            didCloseCleanly: false
+        )
+        XCTAssertEqual(recovery.documentGeneration, document.generation)
+        XCTAssertEqual(recovery.unsavedText, "exact saved snapshot")
+        XCTAssertEqual(
+            RecoveryCoordinator.restoreSource(
+                session: priorSession,
+                recovery: recovery,
+                fileReference: document.fileReference
+            ),
+            .recovery(recovery)
+        )
+
+        await repository.resumeSessionWrite()
+        let saved = await save.value
+        XCTAssertTrue(saved)
+    }
+
+    func testSaveAsFromExistingFilePersistsDestinationRecoveryBeforeCleanSession() async throws {
+        let repository = OperationRepositoryFake(sessionWriteSuspended: true)
+        let files = ControllableFileServiceFake(saveSuspended: true)
+        let bookmarks = OperationBookmarkFake()
+        let destinationURL = URL(fileURLWithPath: "/tmp/save-as-existing.md")
+        let document = makeEditedDocument(text: "existing file saved elsewhere")
+        let priorSession = document.sessionRecord(
+            windowFrame: frame,
+            didCloseCleanly: false
+        )
+        let model = makeModel(
+            document: document,
+            repository: repository,
+            bookmarks: bookmarks,
+            files: files,
+            panel: OperationPanelFake(saveURLs: [destinationURL])
+        )
+
+        let save = Task { await model.saveAs() }
+        await files.waitForSaveCalls(1)
+
+        let pendingWrites = await repository.recoveryWrites
+        let pendingRecovery = try XCTUnwrap(pendingWrites.last)
+        let pending = try XCTUnwrap(pendingRecovery.pendingSaveAs)
+        XCTAssertEqual(pendingRecovery.fileReferenceID, priorSession.fileReferenceID)
+        XCTAssertEqual(pendingRecovery.baseDiskHash, "base-hash")
+        XCTAssertEqual(pending.destinationPathHint, destinationURL.path)
+        XCTAssertEqual(
+            pending.expectedContentHash,
+            ContentHash.sha256(document.snapshot().persistedBytes)
+        )
+
+        await files.resumeSaveSuccessfully()
+        await repository.waitForSessionWrites(1)
+
+        let saveAsReferences = await files.saveAsReferences
+        let recoveryWrites = await repository.recoveryWrites
+        let destination = try XCTUnwrap(saveAsReferences.last ?? nil)
+        let recovery = try XCTUnwrap(recoveryWrites.last)
+        XCTAssertNil(recovery.pendingSaveAs)
+        XCTAssertEqual(recovery.fileReferenceID, destination.bookmarkID)
+        XCTAssertEqual(recovery.filePathHint, destination.pathHint)
+        XCTAssertEqual(recovery.unsavedText, "existing file saved elsewhere")
+        XCTAssertEqual(recovery.baseDiskHash, "verified-hash")
+        XCTAssertEqual(
+            RecoveryCoordinator.restoreSource(
+                session: priorSession,
+                recovery: recovery,
+                fileReference: destination
+            ),
+            .recovery(recovery)
+        )
+        XCTAssertEqual(document.fileReference, destination)
+
+        await repository.resumeSessionWrite()
+        let saved = await save.value
+        XCTAssertTrue(saved)
+    }
+
+    func testSaveAsFromUntitledPersistsDestinationRecoveryBeforeCleanSession() async throws {
+        let repository = OperationRepositoryFake(sessionWriteSuspended: true)
+        let files = ControllableFileServiceFake(saveSuspended: true)
+        let bookmarks = OperationBookmarkFake()
+        let destinationURL = URL(fileURLWithPath: "/tmp/save-as-untitled.md")
+        let document = DocumentSession(
+            text: "untitled\ndestination text",
+            saveState: .edited,
+            hasUnsavedChanges: true,
+            generation: 3,
+            lineEnding: .crlf
+        )
+        let priorSession = document.sessionRecord(
+            windowFrame: frame,
+            didCloseCleanly: false
+        )
+        let model = makeModel(
+            document: document,
+            repository: repository,
+            bookmarks: bookmarks,
+            files: files,
+            panel: OperationPanelFake(saveURLs: [destinationURL])
+        )
+
+        let save = Task { await model.saveAs() }
+        await files.waitForSaveCalls(1)
+
+        let pendingWrites = await repository.recoveryWrites
+        let pendingRecovery = try XCTUnwrap(pendingWrites.last)
+        let pending = try XCTUnwrap(pendingRecovery.pendingSaveAs)
+        XCTAssertNil(pendingRecovery.fileReferenceID)
+        XCTAssertNil(pendingRecovery.baseDiskHash)
+        XCTAssertEqual(pending.destinationPathHint, destinationURL.path)
+        XCTAssertEqual(
+            pending.expectedContentHash,
+            ContentHash.sha256(Data("untitled\r\ndestination text".utf8))
+        )
+
+        await files.resumeSaveSuccessfully()
+        await repository.waitForSessionWrites(1)
+
+        let saveAsReferences = await files.saveAsReferences
+        let recoveryWrites = await repository.recoveryWrites
+        let destination = try XCTUnwrap(saveAsReferences.last ?? nil)
+        let recovery = try XCTUnwrap(recoveryWrites.last)
+        XCTAssertNil(recovery.pendingSaveAs)
+        XCTAssertEqual(recovery.fileReferenceID, destination.bookmarkID)
+        XCTAssertEqual(recovery.filePathHint, destination.pathHint)
+        XCTAssertEqual(recovery.baseDiskHash, "verified-hash")
+        XCTAssertEqual(
+            RecoveryCoordinator.restoreSource(
+                session: priorSession,
+                recovery: recovery,
+                fileReference: destination
+            ),
+            .recovery(recovery)
+        )
+        XCTAssertEqual(document.fileReference, destination)
+
+        await repository.resumeSessionWrite()
+        let saved = await save.value
+        XCTAssertTrue(saved)
+    }
+
+    func testFailedSaveAsKeepsDirtyRecoveryAssociatedWithChosenDestination() async throws {
+        let repository = OperationRepositoryFake()
+        let files = ControllableFileServiceFake(saveAsError: .writeFailed)
+        let bookmarks = OperationBookmarkFake()
+        let destinationURL = URL(fileURLWithPath: "/tmp/failed-save-as.md")
+        let document = makeEditedDocument(text: "failed save-as text")
+        let originalReference = document.fileReference
+        let model = makeModel(
+            document: document,
+            repository: repository,
+            bookmarks: bookmarks,
+            files: files,
+            panel: OperationPanelFake(saveURLs: [destinationURL])
+        )
+
+        let saved = await model.saveAs()
+        XCTAssertFalse(saved)
+
+        let recoveryWrites = await repository.recoveryWrites
+        let recovery = try XCTUnwrap(recoveryWrites.last)
+        XCTAssertNil(recovery.pendingSaveAs)
+        XCTAssertEqual(recovery.fileReferenceID, originalReference?.bookmarkID)
+        XCTAssertEqual(recovery.filePathHint, originalReference?.pathHint)
+        XCTAssertEqual(recovery.unsavedText, "failed save-as text")
+        XCTAssertEqual(recovery.documentGeneration, document.generation)
+        XCTAssertEqual(document.fileReference, originalReference)
+        XCTAssertTrue(document.hasUnsavedChanges)
+        let sessionWrites = await repository.sessionWrites
+        let deletedDocumentIDs = await repository.deletedDocumentIDs
+        XCTAssertEqual(sessionWrites, [])
+        XCTAssertEqual(deletedDocumentIDs, [])
+    }
+
+    func testFailedSaveAsClearFailureLeavesPendingJournalForSafeLaunchReconciliation() async throws {
+        let repository = OperationRepositoryFake(recoveryWriteFailureCalls: [2])
+        let files = ControllableFileServiceFake(saveAsError: .writeFailed)
+        let destinationURL = URL(fileURLWithPath: "/tmp/pending-after-failure.md")
+        let document = makeEditedDocument(text: "pending survives clear failure")
+        let model = makeModel(
+            document: document,
+            repository: repository,
+            files: files,
+            panel: OperationPanelFake(saveURLs: [destinationURL])
+        )
+
+        let saved = await model.saveAs()
+
+        XCTAssertFalse(saved)
+        let recoveryWrites = await repository.recoveryWrites
+        let recovery = try XCTUnwrap(recoveryWrites.last)
+        XCTAssertEqual(recovery.fileReferenceID, document.fileReference?.bookmarkID)
+        XCTAssertEqual(recovery.unsavedText, "pending survives clear failure")
+        XCTAssertEqual(recovery.pendingSaveAs?.destinationPathHint, destinationURL.path)
+        XCTAssertNotNil(model.banner)
+    }
+
+    func testVerifiedSaveAsRewriteFailureLeavesPendingJournalAndPriorLiveAssociation() async throws {
+        let repository = OperationRepositoryFake(recoveryWriteFailureCalls: [2])
+        let files = ControllableFileServiceFake()
+        let destinationURL = URL(fileURLWithPath: "/tmp/verified-before-journal.md")
+        let document = makeEditedDocument(text: "verified destination bytes")
+        let originalReference = document.fileReference
+        let model = makeModel(
+            document: document,
+            repository: repository,
+            files: files,
+            panel: OperationPanelFake(saveURLs: [destinationURL])
+        )
+
+        let saved = await model.saveAs()
+
+        XCTAssertFalse(saved)
+        XCTAssertEqual(document.fileReference, originalReference)
+        XCTAssertTrue(document.hasUnsavedChanges)
+        let recoveryWrites = await repository.recoveryWrites
+        let recovery = try XCTUnwrap(recoveryWrites.last)
+        XCTAssertEqual(recovery.fileReferenceID, originalReference?.bookmarkID)
+        XCTAssertEqual(recovery.pendingSaveAs?.destinationPathHint, destinationURL.path)
+        XCTAssertNotNil(model.banner)
+    }
+
+    func testConcurrentEditDuringFailedSaveAsPersistsLatestGenerationWithoutPending() async throws {
+        let repository = OperationRepositoryFake()
+        let files = ControllableFileServiceFake(saveSuspended: true)
+        let document = makeEditedDocument(text: "save-as snapshot N")
+        let model = makeModel(
+            document: document,
+            repository: repository,
+            files: files,
+            panel: OperationPanelFake(
+                saveURLs: [URL(fileURLWithPath: "/tmp/failed-concurrent.md")]
+            )
+        )
+
+        let save = Task { await model.saveAs() }
+        await files.waitForSaveCalls(1)
+        document.storage.setAttributedString(NSAttributedString(string: "latest N plus one"))
+        document.noteUserEdit()
+        await files.resumeSave(throwing: .writeFailed)
+
+        let saved = await save.value
+        let recoveryWrites = await repository.recoveryWrites
+        let sessionWrites = await repository.sessionWrites
+        XCTAssertFalse(saved)
+        XCTAssertEqual(recoveryWrites.count, 2)
+        XCTAssertEqual(recoveryWrites.first?.documentGeneration, document.generation - 1)
+        XCTAssertNotNil(recoveryWrites.first?.pendingSaveAs)
+        let recovery = try XCTUnwrap(recoveryWrites.last)
+        let session = try XCTUnwrap(sessionWrites.last)
+        XCTAssertEqual(recovery.unsavedText, "latest N plus one")
+        XCTAssertEqual(recovery.documentGeneration, document.generation)
+        XCTAssertNil(recovery.pendingSaveAs)
+        XCTAssertEqual(session.documentGeneration, document.generation)
+        XCTAssertTrue(session.hasUnsavedChanges)
+    }
+
+    func testConcurrentEditDuringVerifiedSaveAsRewriteFailurePersistsLatestPendingJournal() async throws {
+        let repository = OperationRepositoryFake(recoveryWriteFailureCalls: [2])
+        let files = ControllableFileServiceFake(saveSuspended: true)
+        let destinationURL = URL(fileURLWithPath: "/tmp/verified-concurrent.md")
+        let document = makeEditedDocument(text: "save-as snapshot N")
+        let model = makeModel(
+            document: document,
+            repository: repository,
+            files: files,
+            panel: OperationPanelFake(saveURLs: [destinationURL])
+        )
+
+        let save = Task { await model.saveAs() }
+        await files.waitForSaveCalls(1)
+        document.storage.setAttributedString(NSAttributedString(string: "latest N plus one"))
+        document.noteUserEdit()
+        await files.resumeSaveSuccessfully()
+
+        let saved = await save.value
+        let recoveryWrites = await repository.recoveryWrites
+        let sessionWrites = await repository.sessionWrites
+        XCTAssertFalse(saved)
+        let recovery = try XCTUnwrap(recoveryWrites.last)
+        let session = try XCTUnwrap(sessionWrites.last)
+        XCTAssertEqual(recovery.unsavedText, "latest N plus one")
+        XCTAssertEqual(recovery.documentGeneration, document.generation)
+        XCTAssertEqual(recovery.pendingSaveAs?.destinationPathHint, destinationURL.path)
+        XCTAssertEqual(session.documentGeneration, document.generation)
+        XCTAssertTrue(session.hasUnsavedChanges)
     }
 
     func testSaveAndCloseWaitsForVerifiedSaveResult() async {
@@ -464,6 +821,7 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
 
         let save = Task { await model.save() }
         await files.waitForSaveCalls(1)
+        XCTAssertTrue(model.allowsDocumentEditing)
         document.storage.setAttributedString(NSAttributedString(string: "newer generation"))
         document.noteUserEdit()
         await files.resumeSaveSuccessfully()
@@ -476,8 +834,13 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertEqual(document.lastSavedHash, "verified-hash")
         let deletedDocumentIDs = await repository.deletedDocumentIDs
         let recoveryWrites = await repository.recoveryWrites
+        let sessionWrites = await repository.sessionWrites
         XCTAssertEqual(deletedDocumentIDs, [])
         XCTAssertEqual(recoveryWrites.last?.unsavedText, "newer generation")
+        XCTAssertEqual(recoveryWrites.last?.documentGeneration, document.generation)
+        XCTAssertEqual(sessionWrites.last?.documentID, document.id)
+        XCTAssertEqual(sessionWrites.last?.documentGeneration, document.generation)
+        XCTAssertEqual(sessionWrites.last?.hasUnsavedChanges, true)
 
         let cleanupRepository = OperationRepositoryFake(deleteFailures: 2)
         let cleanupClock = SuspendingRecoveryClock()
@@ -901,6 +1264,8 @@ private actor OperationRepositoryFake: SessionPersisting {
     private var deleteWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
     private var remainingDeleteFailures: Int
     private var remainingSessionWriteFailures: Int
+    private let recoveryWriteFailureCalls: Set<Int>
+    private var recoveryWriteCallCount = 0
     private var sessionWriteSuspended: Bool
     private var deleteSuspended: Bool
     private var sessionWriteContinuation: CheckedContinuation<Void, Never>?
@@ -911,12 +1276,14 @@ private actor OperationRepositoryFake: SessionPersisting {
         events: OperationEventRecorder? = nil,
         deleteFailures: Int = 0,
         sessionWriteFailures: Int = 0,
+        recoveryWriteFailureCalls: Set<Int> = [],
         sessionWriteSuspended: Bool = false,
         deleteSuspended: Bool = false
     ) {
         self.events = events
         self.remainingDeleteFailures = deleteFailures
         self.remainingSessionWriteFailures = sessionWriteFailures
+        self.recoveryWriteFailureCalls = recoveryWriteFailureCalls
         self.sessionWriteSuspended = sessionWriteSuspended
         self.deleteSuspended = deleteSuspended
     }
@@ -941,6 +1308,10 @@ private actor OperationRepositoryFake: SessionPersisting {
     func loadRecovery(documentID: UUID) async throws -> RecoveryRecord? { nil }
     func loadAllRecovery() async throws -> [RecoveryRecord] { [] }
     func writeRecovery(_ record: RecoveryRecord) async throws {
+        recoveryWriteCallCount += 1
+        if recoveryWriteFailureCalls.contains(recoveryWriteCallCount) {
+            throw OperationFakeError.sessionWriteFailed
+        }
         recoveryWrites.append(record)
         let ready = recoveryWaiters.filter { recoveryWrites.count >= $0.0 }
         recoveryWaiters.removeAll { recoveryWrites.count >= $0.0 }
@@ -1042,6 +1413,7 @@ private final class OperationPanelFake: FilePanelProviding {
 private actor ControllableFileServiceFake: FileServicing {
     private let events: OperationEventRecorder?
     private let saveError: FileServiceError?
+    private let saveAsError: FileServiceError?
     private let openError: FileServiceError?
     private var saveSuspended: Bool
     private var openSuspended: Bool
@@ -1059,12 +1431,14 @@ private actor ControllableFileServiceFake: FileServicing {
         saveSuspended: Bool = false,
         openSuspended: Bool = false,
         saveError: FileServiceError? = nil,
+        saveAsError: FileServiceError? = nil,
         openError: FileServiceError? = nil
     ) {
         self.events = events
         self.saveSuspended = saveSuspended
         self.openSuspended = openSuspended
         self.saveError = saveError
+        self.saveAsError = saveAsError
         self.openError = openError
     }
 
@@ -1105,6 +1479,15 @@ private actor ControllableFileServiceFake: FileServicing {
         to reference: ExternalFileReference
     ) async throws -> FileSaveResult {
         saveAsReferences.append(reference)
+        saveCallCount += 1
+        lastSaveSnapshot = snapshot
+        resumeSaveWaiters()
+        if saveSuspended {
+            saveSuspended = false
+            let result = await withCheckedContinuation { saveContinuations.append($0) }
+            try result.get()
+        }
+        if let saveAsError { throw saveAsError }
         return makeSaveResult(snapshot, reference: reference)
     }
 

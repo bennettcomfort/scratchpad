@@ -6,16 +6,19 @@ final class EditorCoordinator: NSObject, NSTextViewDelegate {
     private weak var document: DocumentSession?
     private let onEdit: @MainActor (DocumentSession) -> Void
     private let onStateChange: @MainActor (DocumentSession) -> Void
+    private let canEdit: @MainActor () -> Bool
 
     init(
         document: DocumentSession,
         onEdit: @escaping @MainActor (DocumentSession) -> Void,
-        onStateChange: @escaping @MainActor (DocumentSession) -> Void = { _ in }
+        onStateChange: @escaping @MainActor (DocumentSession) -> Void = { _ in },
+        canEdit: @escaping @MainActor () -> Bool = { true }
     ) {
         self.documentID = document.id
         self.document = document
         self.onEdit = onEdit
         self.onStateChange = onStateChange
+        self.canEdit = canEdit
     }
 
     func attach(to scrollView: NSScrollView, textView: ScratchTextView) {
@@ -42,6 +45,16 @@ final class EditorCoordinator: NSObject, NSTextViewDelegate {
         guard !document.isPerformingWholeTextReplacement else { return }
         document.noteUserEdit()
         onEdit(document)
+    }
+
+    func textView(
+        _ textView: NSTextView,
+        shouldChangeTextIn affectedCharRange: NSRange,
+        replacementString: String?
+    ) -> Bool {
+        guard let document,
+              textView.textStorage === document.storage else { return false }
+        return canEdit()
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {

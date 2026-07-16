@@ -67,7 +67,7 @@ final class ApplicationLifecycleTests: XCTestCase {
         XCTAssertEqual(
             recorder.events,
             [
-                "decision", "recovery flush", "session(false)",
+                "decision", "recovery flush", "recovery flush", "session(false)",
                 "session(false)", "session(true)", "reply(true)"
             ]
         )
@@ -78,12 +78,15 @@ final class ApplicationLifecycleTests: XCTestCase {
             (LifecycleFailure.recovery, ["decision", "recovery flush", "reply(false)"]),
             (
                 .nonCleanSession,
-                ["decision", "recovery flush", "session(false) failed", "reply(false)"]
+                [
+                    "decision", "recovery flush", "recovery flush",
+                    "session(false) failed", "reply(false)"
+                ]
             ),
             (
                 .cleanSession,
                 [
-                    "decision", "recovery flush", "session(false)",
+                    "decision", "recovery flush", "recovery flush", "session(false)",
                     "session(false)", "session(true) failed", "reply(false)"
                 ]
             )

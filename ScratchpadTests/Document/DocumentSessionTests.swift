@@ -68,4 +68,23 @@ final class DocumentSessionTests: XCTestCase {
         XCTAssertEqual(snapshot.scrollOffsetY, 44)
         XCTAssertEqual(snapshot.lineEnding, .crlf)
     }
+
+    func testGenerationArithmeticRollsOverWithoutLosingMutationIdentity() {
+        let upperBound = DocumentSession(text: "draft", generation: Int.max)
+        XCTAssertEqual(upperBound.generation, Int.max)
+
+        upperBound.noteUserEdit()
+        XCTAssertEqual(upperBound.generation, 0)
+        upperBound.replaceEntireContents(
+            "replacement",
+            source: .sessionRestore,
+            selection: nil
+        )
+        XCTAssertEqual(upperBound.generation, 1)
+
+        let lowerBound = DocumentSession(text: "draft", generation: Int.min)
+        XCTAssertEqual(lowerBound.generation, 0)
+        lowerBound.noteUserEdit()
+        XCTAssertEqual(lowerBound.generation, 1)
+    }
 }
