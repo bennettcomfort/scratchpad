@@ -3314,6 +3314,8 @@ func testInspectDistinguishesUnchangedChangedMissingAndReadOnly()
 func testSaveRejectsHashOrMTimeMismatchBeforeWriting()
 func testSavePreservesStoredCRLFConvention()
 func testSaveAsWritesSelectedDestinationWithoutPathFallback()
+func testSaveAsSelectedURLWritesBeforeCreatingBookmark()
+func testSaveAsSelectedURLBookmarkFailureLeavesVerifiedBytesButReturnsFailure()
 func testSaveVerificationFailureThrowsAfterRereadMismatch()
 func testEveryExitPathEndsScopedAccessExactlyOnce()
 func testSuccessfulSaveReturnsVerifiedHashMTimeAndReference()
@@ -3388,7 +3390,9 @@ The exact pipeline is:
 6. The conditional writer atomically replaces only a matching destination, then re-reads bytes and metadata and requires exact byte equality and matching SHA-256 before returning `.written`.
 7. Return an immutable result without touching `DocumentSession`.
 
-`saveAs` skips old-base comparison because the save panel already confirms destination replacement, calls the existing unconditional `AtomicFileWriting.write`, and performs the same read-back verification. Missing, read-only, reselection, generic access, conflict, write, read, and verification failures remain distinct typed cases.
+`saveAs(_:to:)` skips old-base comparison because the destination is already represented by a durable bookmark, calls the security-scoped unconditional atomic writer, refreshes the bookmark after replacement, and performs the same read-back verification.
+
+`saveAs(_:toSelectedURL:)` handles a current Save-panel URL that may not exist yet. It calls the security-scoped unconditional atomic writer using only the panel grant, verifies exact bytes/hash/mtime, and then calls `BookmarkStore.storeSelection` after the file exists. It returns the resulting durable reference. A bookmark failure returns failure without adopting the URL; the verified file may remain, while the original document association and recovery remain authoritative. No path hint is opened or restored directly.
 
 - [ ] **Step 3: Capture the window-fixture lifecycle failure**
 
@@ -3679,6 +3683,8 @@ Record evidence for every row in `TRACKER.md`:
 | Bookmark relaunch | a user-selected file reopens after relaunch under the sandbox |
 | Repeated Quit | one decision, one flush sequence, one termination reply |
 | Corrupt JSON | file is quarantined; failure to quarantine leaves original untouched |
+
+Signed-sandbox correction approved on 2026-07-16: Save As must not create a security-scoped bookmark for a nonexistent panel URL. Add a selected-URL file-service path that atomically writes and verifies first, persists the bookmark second, promotes recovery third, and adopts the new association last. A failure at any boundary preserves the original association and dirty recovery; direct path fallback remains forbidden.
 
 - [ ] **Step 5: Commit Stage 3 lifecycle completion**
 

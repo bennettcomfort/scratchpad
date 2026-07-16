@@ -432,7 +432,7 @@ struct BookmarkCollection: Codable, Sendable {
 
 ### 9.3 Atomic writes and quarantine
 
-`AtomicFileWriter` writes a uniquely named temporary file in the destination directory, flushes it, then atomically replaces or creates the destination. Failure removes only the temporary file.
+For internal Application Support files, `AtomicFileWriter` writes a uniquely named temporary file in the destination directory, flushes it, then atomically replaces or creates the destination. Failure removes only the temporary file. For a user-selected security-scoped file, it uses Foundation's atomic destination write while the panel grant or scoped token is active, then synchronizes and verifies the resulting destination. This avoids requiring a separate sandbox grant for an explicitly named sibling temporary file while preserving auxiliary-file replacement semantics.
 
 Normal user-file Save uses a second conditional operation owned by the same writer:
 
@@ -450,7 +450,7 @@ enum ConditionalWriteResult: Equatable, Sendable {
 }
 ```
 
-The live conditional operation runs inside `NSFileCoordinator` with `.forReplacing`. Inside that coordinated block it reads the destination bytes and modification date, compares both values with the expected base, and returns `.conflict`, `.missing`, or `.readOnly` without replacement when appropriate. Only a matching destination is written through a synchronized same-directory temporary file and atomic replacement. The writer re-reads exact bytes and SHA-256 before returning `.written`.
+The live conditional operation runs inside `NSFileCoordinator` with `.forReplacing`. Inside that coordinated block it reads the destination bytes and modification date, compares both values with the expected base, and returns `.conflict`, `.missing`, or `.readOnly` without replacement when appropriate. Only a matching destination is written through the security-scoped atomic destination path. The writer re-reads exact bytes and SHA-256 before returning `.written`.
 
 The existing per-destination transaction lock remains held across coordination, comparison, replacement, and verification. Coordination protects against other macOS participants that use file coordination; macOS exposes no universal content-hash compare-and-swap for arbitrary uncoordinated raw filesystem writers. Post-write verification prevents Scratchpad from reporting success when different bytes are observed. Save As and explicit Overwrite retain the unconditional atomic path because replacement was already confirmed.
 
@@ -529,9 +529,9 @@ actor BookmarkStore {
 }
 ```
 
-The store persists bookmark data atomically and tracks active tokens. `FileService` obtains a token before every external read or write and ends it with `defer`. A stale bookmark is refreshed and persisted. An unresolvable bookmark produces a typed reselect-required error; direct path fallback is forbidden under the sandbox.
+The store persists bookmark data atomically and tracks active tokens. `FileService` obtains a token before every access through a persisted reference and ends it before returning. The sole exception is the initial write to a current Save-panel URL, which uses the panel grant and is bookmarked immediately after verification. A stale persisted bookmark is refreshed and persisted. An unresolvable bookmark produces a typed reselect-required error; direct path fallback is forbidden under the sandbox.
 
-Open-panel and Save-panel selections are converted into `ExternalFileReference` values before application state adopts them.
+Open-panel selections are converted into `ExternalFileReference` values before file access. A Save-panel URL may name a file that does not exist, so it remains an ephemeral panel-authorized URL through the first atomic write and verification. Only after the destination exists does `BookmarkStore.storeSelection` persist its security-scoped bookmark. Application state never adopts the raw URL or its path hint.
 
 `FilePanelProvider` wraps `NSOpenPanel.begin` and `NSSavePanel.begin` with checked continuations. Open accepts exactly `.md`, `.markdown`, `.mdown`, and `.txt`, allows one file, and allows no directory selection. Panel cancellation returns `nil` and changes no bookmark, operation, document, or recovery state. `BookmarkStore.storeSelection` reuses the existing bookmark ID for the same standardized file URL.
 
@@ -546,6 +546,7 @@ actor FileService {
     func open(_ reference: ExternalFileReference) async throws -> FileOpenResult
     func save(_ snapshot: DocumentSnapshot) async throws -> FileSaveResult
     func saveAs(_ snapshot: DocumentSnapshot, to reference: ExternalFileReference) async throws -> FileSaveResult
+    func saveAs(_ snapshot: DocumentSnapshot, toSelectedURL url: URL) async throws -> FileSaveResult
     func inspect(_ snapshot: DocumentSnapshot) async throws -> ExternalFileStatus
 }
 ```
@@ -583,7 +584,13 @@ main actor captures DocumentSnapshot
 
 If generation changed while saving, the successful disk write becomes the new base but the document remains edited and immediately receives a new recovery snapshot. No keystroke is marked clean accidentally.
 
-### 12.2 Open and replacement serialization
+### 12.2 Save As pipeline
+
+A Save-panel URL is current user authority, not persisted authority and not a path fallback. `ApplicationModel` first flushes recovery for the existing association, then passes the selected URL to `FileService`. The service writes the exact snapshot bytes through `AtomicFileWriter`, re-reads and verifies bytes, hash, and modification date, and only then asks `BookmarkStore` to persist the now-existing file. It returns `FileSaveResult` containing that durable reference.
+
+After the result returns, `ApplicationModel` persists recovery promoted to the new reference before adopting the verified save. It marks the document clean and deletes superseded recovery only when document identity and generation still match. If writing, verification, bookmark persistence, promoted-recovery persistence, or adoption fails, the original association remains active and the current text remains edited and recoverable. A verified destination created before a later failure may remain on disk, but Scratchpad never reports the document clean or restores through its path hint. A crash before promoted recovery is durable restores the original association and recovery; a crash after promotion can resolve only the persisted bookmark.
+
+### 12.3 Open and replacement serialization
 
 `ApplicationModel` owns one `DocumentOperationState` (`idle`, `opening`, `saving`, `closing`, or `terminating`). Operations that would replace or close the document serialize through that state. A duplicate open request for the same `ExternalFileReference` joins or ignores the in-flight operation.
 
