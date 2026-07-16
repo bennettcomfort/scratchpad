@@ -73,7 +73,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 4.1 | Implement typed settings and Launch at Login | verified | `c89eaa2`; missing-type compile RED; 8/8 focused tests; warning-as-error build; 203/203 full suite; independent review found no Critical or Important issues; no manual check required |
 | 4.2 | Define fixed themes and apply editor appearance safely | verified | `cc663bb`; missing-theme compile RED; 7/7 focused tests; warning-as-error build; 210/210 full suite; independent review found no issues; fixed palettes, contrast, style idempotence, and TextKit 2 scroll-layout regression verified |
 | 4.3 | Calculate prompt metrics off the main actor | verified | `1c87027`, `63a1135`; missing-metrics and review-regression REDs; 14/14 focused tests; warning-as-error build; 224/224 full suite; independent re-review approved cancellation, retention, and typed-setting integration |
-| 4.4 | Build the Noto-inspired main window | in progress | Authorized after verified Task 4.3; 224/224 baseline passes |
+| 4.4 | Build the Noto-inspired main window | verified | Missing-presentation-type RED; 6/6 focused tests; warning-as-error build; 230/230 full suite; exact title, metrics, hierarchy, frame validation, invariant, scope, data-loss, and whitespace checks pass; no manual check required; this task commit |
 | 4.5 | Build native General, Editor, and Theme settings | pending | Approved plan; awaits Task 4.4 verification |
 
 ### Stage 5 Task Ledger

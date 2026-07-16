@@ -51,6 +51,10 @@ targets:
       - path: Scratchpad/Settings/LaunchAtLoginService.swift
       - path: Scratchpad/Settings/SettingsStore.swift
       - path: Scratchpad/Settings/ThemeDefinition.swift
+      - path: Scratchpad/UI/DocumentTitleView.swift
+      - path: Scratchpad/UI/ErrorBannerView.swift
+      - path: Scratchpad/UI/InformationBarView.swift
+      - path: Scratchpad/UI/WindowChromeConfigurator.swift
       - path: Scratchpad/Utilities/ContentHash.swift
       - path: Scratchpad/Utilities/Log.swift
       - path: Scratchpad/Assets.xcassets
@@ -84,6 +88,7 @@ targets:
       - ScratchpadTests/Persistence/SessionRepositoryTests.swift
       - ScratchpadTests/Settings/SettingsStoreTests.swift
       - ScratchpadTests/Settings/ThemeDefinitionTests.swift
+      - ScratchpadTests/UI/PresentationModelTests.swift
       - ScratchpadTests/Files/FileServiceTests.swift
       - ScratchpadTests/Files/ExternalChangeMonitorTests.swift
     settings:

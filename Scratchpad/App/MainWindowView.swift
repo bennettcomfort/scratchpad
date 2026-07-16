@@ -3,17 +3,30 @@ import SwiftUI
 
 struct MainWindowView: View {
     @Environment(ApplicationModel.self) private var model
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
+            DocumentTitleView(
+                presentation: DocumentTitlePresentation(
+                    displayName: model.document.displayName,
+                    hasUnsavedChanges: model.document.hasUnsavedChanges
+                ),
+                theme: theme
+            )
+            .frame(height: 44)
+
             switch model.launchState {
             case .restoring:
                 ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(let message):
                 launchFailureView(message: message)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready:
                 EditorHost(
                     document: model.document,
+                    settings: model.settings.snapshot,
                     onEdit: model.handleCurrentDocumentEdit,
                     onStateChange: model.handleCurrentDocumentStateChange,
                     isEditable: model.allowsDocumentEditing,
@@ -21,12 +34,42 @@ struct MainWindowView: View {
                 )
                     .id(model.document.id)
             }
+
+            if let banner = model.banner {
+                ErrorBannerView(banner: banner, theme: theme) { action in
+                    handleBannerAction(action)
+                }
+            }
+
+            Color(nsColor: theme.separator)
+                .frame(height: 1)
+
+            if model.settings.snapshot.showsInformationBar {
+                InformationBarView(
+                    presentation: InformationBarPresentation(metrics: model.metrics),
+                    theme: theme
+                )
+                .frame(height: 28)
+            }
         }
+        .background(
+            WindowChromeConfigurator(restoredFrame: model.restoredWindowFrame)
+                .frame(width: 0, height: 0)
+        )
         .task(id: model.launchAttempt) {
             await model.restoreCurrentLaunchAttempt(windowFrame: currentWindowFrame)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .frame(minWidth: 480, minHeight: 320)
+    }
+
+    private var theme: ThemeDefinition {
+        let appearanceName: NSAppearance.Name = colorScheme == .dark ? .darkAqua : .aqua
+        let effectiveAppearance = NSAppearance(named: appearanceName) ?? NSApp.effectiveAppearance
+        return ThemeDefinition.resolve(
+            model.settings.snapshot.appearance,
+            effectiveAppearance: effectiveAppearance
+        )
     }
 
     private var currentWindowFrame: CGRect {
@@ -49,5 +92,41 @@ struct MainWindowView: View {
             }
         }
         .padding()
+    }
+
+    private func handleBannerAction(_ action: BannerAction) {
+        switch action {
+        case .dismiss:
+            model.banner = nil
+        case .retry:
+            Task { _ = await model.save() }
+        case .saveAs:
+            Task { _ = await model.saveAs() }
+        case .reselectFile:
+            Task { await model.requestOpen() }
+        case .openRecoveryFolder:
+            openRecoveryFolder()
+        }
+    }
+
+    private func openRecoveryFolder() {
+        do {
+            let applicationSupport = try FileManager.default.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: false
+            )
+            let recoveryDirectory = applicationSupport
+                .appending(path: "Scratchpad", directoryHint: .isDirectory)
+                .appending(path: "recovery", directoryHint: .isDirectory)
+            if !NSWorkspace.shared.open(recoveryDirectory) {
+                AppLog.persistence.error("Could not open the recovery directory")
+            }
+        } catch {
+            AppLog.persistence.error(
+                "Could not locate the recovery directory: \(String(describing: error), privacy: .public)"
+            )
+        }
     }
 }

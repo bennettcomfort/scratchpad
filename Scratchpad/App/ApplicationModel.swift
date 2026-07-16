@@ -30,6 +30,7 @@ final class ApplicationModel {
     private(set) var launchState: LaunchState
     private(set) var launchAttempt = 0
     private(set) var operationState: DocumentOperationState = .idle
+    private(set) var restoredWindowFrame: CGRect?
     let settings: SettingsStore
     var banner: ErrorBanner?
 
@@ -364,6 +365,7 @@ final class ApplicationModel {
         windowFrame: CGRect
     ) async throws -> RestoreSource {
         let session = try await repository.loadSession()
+        restoredWindowFrame = session?.windowFrame
         var recovery: RecoveryRecord?
         let cleanFileReference: ExternalFileReference?
 
