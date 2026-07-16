@@ -1,5 +1,7 @@
+import AppKit
 import Foundation
 import Observation
+import OSLog
 
 enum LaunchState: Equatable {
     case restoring
@@ -12,12 +14,24 @@ enum ApplicationModelLaunchError: Error, Equatable {
     case unresolvedBookmark(UUID)
 }
 
+enum DocumentOperationState: Equatable, Sendable {
+    case idle
+    case opening(ExternalFileReference)
+    case saving(UUID)
+    case closing
+    case terminating
+}
+
 @MainActor
 @Observable
 final class ApplicationModel {
     private(set) var document: DocumentSession
     private(set) var launchState: LaunchState
     private(set) var launchAttempt = 0
+    private(set) var operationState: DocumentOperationState = .idle
+    var banner: ErrorBanner?
+
+    var pendingDecision: DocumentDecision? { decisionCoordinator.pending }
 
     @ObservationIgnored
     private let servicesFactory: (@MainActor @Sendable () throws -> ApplicationServices)?
@@ -26,24 +40,150 @@ final class ApplicationModel {
     @ObservationIgnored
     private var recoveryCoordinator: RecoveryCoordinator?
     @ObservationIgnored
+    private var recoveryCleanupRequiredDocumentID: UUID?
+    @ObservationIgnored
     private var startedLaunchAttempt: Int?
+    @ObservationIgnored
+    private let panelProvider: (any FilePanelProviding)?
+    @ObservationIgnored
+    private let decisionCoordinator: DocumentDecisionCoordinator
+    @ObservationIgnored
+    private let windowFrameProvider: @MainActor () -> CGRect
+    @ObservationIgnored
+    private let requestEditorFocus: @MainActor () -> Void
 
     init(
         document: DocumentSession = DocumentSession(),
         launchState: LaunchState = .ready,
-        servicesFactory: (@MainActor @Sendable () throws -> ApplicationServices)? = nil
+        servicesFactory: (@MainActor @Sendable () throws -> ApplicationServices)? = nil,
+        panelProvider: (any FilePanelProviding)? = nil,
+        decisionCoordinator: DocumentDecisionCoordinator = DocumentDecisionCoordinator(),
+        windowFrameProvider: @escaping @MainActor () -> CGRect = { .zero },
+        requestEditorFocus: @escaping @MainActor () -> Void = {}
     ) {
         self.document = document
         self.launchState = launchState
         self.servicesFactory = servicesFactory
+        self.panelProvider = panelProvider
+        self.decisionCoordinator = decisionCoordinator
+        self.windowFrameProvider = windowFrameProvider
+        self.requestEditorFocus = requestEditorFocus
     }
 
     static func live() -> ApplicationModel {
         ApplicationModel(
             launchState: .restoring,
-            servicesFactory: { try ApplicationServices.live() }
+            servicesFactory: { try ApplicationServices.live() },
+            panelProvider: FilePanelProvider(),
+            windowFrameProvider: {
+                NSApp.keyWindow?.frame
+                    ?? CGRect(x: 0, y: 0, width: 820, height: 640)
+            },
+            requestEditorFocus: {
+                guard let contentView = NSApp.keyWindow?.contentView,
+                      let editor = contentView.firstDescendant(of: ScratchTextView.self) else {
+                    return
+                }
+                NSApp.keyWindow?.makeFirstResponder(editor)
+            }
         )
     }
+
+    // MARK: - Document Operations
+
+    func resolvePendingDecision(with resolution: DocumentDecisionResolution) {
+        decisionCoordinator.resolvePending(with: resolution)
+    }
+
+    func requestNewDocument() async {
+        guard launchState == .ready,
+              operationState == .idle else { return }
+        operationState = .closing
+        defer { operationState = .idle }
+
+        guard let dependencies = operationDependencies(),
+              await flushRecovery(using: dependencies.recovery) else { return }
+        guard await approveReplacement(
+            .newUntitled,
+            dependencies: dependencies
+        ) else { return }
+        document = DocumentSession()
+    }
+
+    func requestOpen() async {
+        guard launchState == .ready,
+              let panelProvider,
+              let selectedURL = await panelProvider.selectFileToOpen() else { return }
+
+        let services: ApplicationServices
+        do {
+            services = try resolvedServices()
+        } catch {
+            publishPersistenceBanner(error)
+            return
+        }
+
+        let reference: ExternalFileReference
+        do {
+            reference = try await services.bookmarks.storeSelection(selectedURL)
+        } catch {
+            publishBookmarkBanner(error, path: selectedURL.path)
+            return
+        }
+
+        if case .opening(reference) = operationState { return }
+        guard operationState == .idle else { return }
+        operationState = .opening(reference)
+        defer { operationState = .idle }
+
+        let recovery = resolvedRecoveryCoordinator(services: services)
+        guard await flushRecovery(using: recovery) else { return }
+        let dependencies = OperationDependencies(services: services, recovery: recovery)
+
+        let openedFile: FileOpenResult
+        do {
+            openedFile = try await services.files.open(reference)
+        } catch {
+            publishFileBanner(error, path: reference.pathHint)
+            return
+        }
+
+        guard await approveReplacement(
+            .open(reference),
+            dependencies: dependencies
+        ) else { return }
+        applyOpenedFile(openedFile)
+    }
+
+    func save() async -> Bool {
+        guard launchState == .ready,
+              operationState == .idle else { return false }
+        operationState = .saving(document.id)
+        defer { operationState = .idle }
+        guard let dependencies = operationDependencies() else { return false }
+        return await performSave(document.snapshot(), using: dependencies)
+    }
+
+    func saveAs() async -> Bool {
+        guard launchState == .ready,
+              operationState == .idle else { return false }
+        operationState = .saving(document.id)
+        defer { operationState = .idle }
+        guard let dependencies = operationDependencies() else { return false }
+        return await performSaveAs(document.snapshot(), using: dependencies)
+    }
+
+    func requestClose() async -> Bool {
+        guard launchState == .ready else { return false }
+        return await requestExit(.closeWindow, operation: .closing)
+    }
+
+    func requestTermination() async -> Bool {
+        guard launchState == .ready else { return false }
+        return await requestExit(.terminateApplication, operation: .terminating)
+    }
+
+    // MARK: - Launch Restoration
 
     func requestLaunchRetry() {
         guard case .failed = launchState else { return }
@@ -56,6 +196,9 @@ final class ApplicationModel {
               editedDocument === document,
               editedDocument.id == document.id,
               let recoveryCoordinator else { return }
+        if recoveryCleanupRequiredDocumentID == editedDocument.id {
+            recoveryCleanupRequiredDocumentID = nil
+        }
         recoveryCoordinator.scheduleRecovery(for: editedDocument)
     }
 
@@ -239,5 +382,404 @@ final class ApplicationModel {
         case .empty:
             document = DocumentSession()
         }
+    }
+
+    // MARK: - Operation State Machine
+
+    private struct OperationDependencies {
+        let services: ApplicationServices
+        let recovery: RecoveryCoordinator
+    }
+
+    private func operationDependencies() -> OperationDependencies? {
+        do {
+            let services = try resolvedServices()
+            return OperationDependencies(
+                services: services,
+                recovery: resolvedRecoveryCoordinator(services: services)
+            )
+        } catch {
+            publishPersistenceBanner(error)
+            return nil
+        }
+    }
+
+    private func approveReplacement(
+        _ replacement: PendingReplacement,
+        dependencies: OperationDependencies
+    ) async -> Bool {
+        guard document.hasUnsavedChanges else {
+            return await deleteRecovery(
+                documentID: document.id,
+                using: dependencies
+            )
+        }
+        switch await decisionCoordinator.request(.replaceCurrentDocument(replacement)) {
+        case .save:
+            return await performSave(document.snapshot(), using: dependencies)
+                && !document.hasUnsavedChanges
+        case .discard:
+            return await deleteRecovery(
+                documentID: document.id,
+                using: dependencies
+            )
+        case .cancel:
+            requestEditorFocus()
+            return false
+        default:
+            requestEditorFocus()
+            return false
+        }
+    }
+
+    private func requestExit(
+        _ decision: DocumentDecision,
+        operation: DocumentOperationState
+    ) async -> Bool {
+        guard operationState == .idle else { return false }
+        operationState = operation
+        defer { operationState = .idle }
+        guard let dependencies = operationDependencies() else { return false }
+
+        if document.hasUnsavedChanges {
+            if recoveryCleanupRequiredDocumentID == document.id {
+                recoveryCleanupRequiredDocumentID = nil
+            }
+            guard await flushRecovery(using: dependencies.recovery) else { return false }
+        } else if recoveryCleanupRequiredDocumentID == document.id,
+                  !(await deleteRecovery(documentID: document.id, using: dependencies)) {
+            return false
+        }
+
+        if document.hasUnsavedChanges {
+            switch await decisionCoordinator.request(decision) {
+            case .save:
+                guard await performSave(document.snapshot(), using: dependencies),
+                      !document.hasUnsavedChanges else { return false }
+            case .discard:
+                guard await deleteRecovery(
+                    documentID: document.id,
+                    using: dependencies
+                ) else { return false }
+            case .cancel:
+                requestEditorFocus()
+                return false
+            default:
+                requestEditorFocus()
+                return false
+            }
+        }
+
+        do {
+            try await dependencies.recovery.flushSession(
+                for: document,
+                windowFrame: windowFrameProvider(),
+                didCloseCleanly: true
+            )
+            return true
+        } catch {
+            publishPersistenceBanner(error)
+            return false
+        }
+    }
+
+    private func applyOpenedFile(_ result: FileOpenResult) {
+        let openedDocument = DocumentSession(
+            fileReference: result.reference,
+            displayName: result.displayName,
+            saveState: .clean,
+            hasUnsavedChanges: false,
+            lastSavedHash: result.contentHash,
+            lastKnownDiskMTime: result.modificationDate,
+            lineEnding: result.lineEnding
+        )
+        openedDocument.replaceEntireContents(
+            result.text,
+            source: .fileOpen,
+            selection: nil
+        )
+        document = openedDocument
+    }
+
+    private func performSave(
+        _ snapshot: DocumentSnapshot,
+        using dependencies: OperationDependencies
+    ) async -> Bool {
+        guard let reference = snapshot.fileReference else {
+            return await performSaveAs(snapshot, using: dependencies)
+        }
+
+        if snapshot.saveState == .deleted {
+            guard await decisionCoordinator.request(.recreateDeletedFile) == .recreate else {
+                requestEditorFocus()
+                return false
+            }
+            return await performUnconditionalSave(
+                snapshot,
+                to: reference,
+                using: dependencies
+            )
+        }
+
+        do {
+            let result = try await dependencies.services.files.save(snapshot)
+            return await applySaveResult(
+                result,
+                initiatedBy: snapshot,
+                using: dependencies
+            )
+        } catch let error as FileServiceError {
+            switch error {
+            case let .conflict(diskHash, diskModificationDate):
+                document.markConflicted()
+                let context = ConflictContext(
+                    documentID: snapshot.documentID,
+                    initiatingGeneration: snapshot.generation,
+                    fileReference: reference,
+                    baseHash: snapshot.lastSavedHash,
+                    diskHash: diskHash,
+                    diskModificationDate: diskModificationDate
+                )
+                return await resolveConflict(
+                    context,
+                    snapshot: snapshot,
+                    dependencies: dependencies
+                )
+            case .missing:
+                document.markDeleted()
+                dependencies.recovery.scheduleRecovery(for: document)
+                guard await decisionCoordinator.request(.recreateDeletedFile) == .recreate else {
+                    requestEditorFocus()
+                    return false
+                }
+                return await performUnconditionalSave(
+                    snapshot,
+                    to: reference,
+                    using: dependencies
+                )
+            case .readOnly:
+                document.markReadOnly()
+                publishFileBanner(error, path: reference.pathHint)
+                return false
+            default:
+                publishFileBanner(error, path: reference.pathHint)
+                return false
+            }
+        } catch {
+            publishFileBanner(error, path: reference.pathHint)
+            return false
+        }
+    }
+
+    private func resolveConflict(
+        _ context: ConflictContext,
+        snapshot: DocumentSnapshot,
+        dependencies: OperationDependencies
+    ) async -> Bool {
+        switch await decisionCoordinator.request(.resolveConflict(context)) {
+        case .overwrite:
+            return await performUnconditionalSave(
+                snapshot,
+                to: context.fileReference,
+                using: dependencies
+            )
+        case .reloadFromDisk:
+            guard await flushRecovery(using: dependencies.recovery) else { return false }
+            do {
+                let result = try await dependencies.services.files.open(context.fileReference)
+                guard document.id == context.documentID else { return false }
+                document.applyOpenedFile(result, source: .confirmedDiskReload)
+            } catch {
+                publishFileBanner(error, path: context.fileReference.pathHint)
+            }
+            return false
+        case .saveAs:
+            return await performSaveAs(snapshot, using: dependencies)
+        case .cancel:
+            requestEditorFocus()
+            return false
+        default:
+            requestEditorFocus()
+            return false
+        }
+    }
+
+    private func performSaveAs(
+        _ snapshot: DocumentSnapshot,
+        using dependencies: OperationDependencies
+    ) async -> Bool {
+        guard let panelProvider,
+              let selectedURL = await panelProvider.selectSaveDestination(
+                suggestedName: document.displayName
+              ) else { return false }
+
+        let reference: ExternalFileReference
+        do {
+            reference = try await dependencies.services.bookmarks.storeSelection(selectedURL)
+        } catch {
+            publishBookmarkBanner(error, path: selectedURL.path)
+            return false
+        }
+        return await performUnconditionalSave(
+            snapshot,
+            to: reference,
+            using: dependencies
+        )
+    }
+
+    private func performUnconditionalSave(
+        _ snapshot: DocumentSnapshot,
+        to reference: ExternalFileReference,
+        using dependencies: OperationDependencies
+    ) async -> Bool {
+        do {
+            let result = try await dependencies.services.files.saveAs(snapshot, to: reference)
+            return await applySaveResult(
+                result,
+                initiatedBy: snapshot,
+                using: dependencies
+            )
+        } catch {
+            publishFileBanner(error, path: reference.pathHint)
+            return false
+        }
+    }
+
+    private func applySaveResult(
+        _ result: FileSaveResult,
+        initiatedBy snapshot: DocumentSnapshot,
+        using dependencies: OperationDependencies
+    ) async -> Bool {
+        guard document.id == snapshot.documentID,
+              result.documentID == snapshot.documentID,
+              result.initiatingGeneration == snapshot.generation else { return false }
+
+        let matchesGeneration = document.generation == snapshot.generation
+        document.adoptVerifiedSave(result, markClean: matchesGeneration)
+        if matchesGeneration {
+            recoveryCleanupRequiredDocumentID = snapshot.documentID
+            return await deleteRecovery(
+                documentID: snapshot.documentID,
+                using: dependencies
+            )
+        }
+        dependencies.recovery.scheduleRecovery(for: document)
+        return true
+    }
+
+    private func flushRecovery(using coordinator: RecoveryCoordinator) async -> Bool {
+        do {
+            try await coordinator.flushRecovery(for: document)
+            return true
+        } catch {
+            publishPersistenceBanner(error)
+            return false
+        }
+    }
+
+    private func deleteRecovery(
+        documentID: UUID,
+        using dependencies: OperationDependencies
+    ) async -> Bool {
+        dependencies.recovery.cancelRecovery(documentID: documentID)
+        do {
+            try await dependencies.services.repository.deleteRecovery(documentID: documentID)
+            if recoveryCleanupRequiredDocumentID == documentID {
+                recoveryCleanupRequiredDocumentID = nil
+            }
+            return true
+        } catch {
+            publishPersistenceBanner(error)
+            return false
+        }
+    }
+
+    // MARK: - Error Presentation
+
+    private func publishFileBanner(_ error: Error, path: String) {
+        let category: String
+        let message: String
+        let actions: [BannerAction]
+        switch error as? FileServiceError {
+        case .missing:
+            category = "FileServiceError.missing"
+            message = "The file no longer exists. Your text is still open."
+            actions = [.saveAs, .dismiss]
+        case .readOnly:
+            category = "FileServiceError.readOnly"
+            message = "The file is read only. Save your text to another location."
+            actions = [.saveAs, .dismiss]
+        case .accessRequiresReselection:
+            category = "FileServiceError.accessRequiresReselection"
+            message = "Scratchpad needs permission to access this file again."
+            actions = [.reselectFile, .dismiss]
+        case .invalidUTF8:
+            category = "FileServiceError.invalidUTF8"
+            message = "Scratchpad can open UTF-8 text files only."
+            actions = [.dismiss]
+        case .verificationFailed:
+            category = "FileServiceError.verificationFailed"
+            message = "The save could not be verified. Your text remains open."
+            actions = [.retry, .saveAs, .dismiss]
+        case let typed?:
+            category = "FileServiceError.\(String(describing: typed))"
+            message = "The file operation failed. Your text remains open."
+            actions = [.retry, .saveAs, .dismiss]
+        case nil:
+            category = String(describing: type(of: error))
+            message = "The file operation failed. Your text remains open."
+            actions = [.retry, .saveAs, .dismiss]
+        }
+        AppLog.files.error(
+            "File operation failed: \(category, privacy: .public); path: \(path, privacy: .private)"
+        )
+        banner = ErrorBanner(id: UUID(), message: message, actions: actions)
+    }
+
+    private func publishBookmarkBanner(_ error: Error, path: String) {
+        let category: String
+        switch error as? BookmarkStoreError {
+        case .reselectionRequired: category = "BookmarkStoreError.reselectionRequired"
+        case .accessDenied: category = "BookmarkStoreError.accessDenied"
+        case .inactiveToken: category = "BookmarkStoreError.inactiveToken"
+        case .bookmarkInUse: category = "BookmarkStoreError.bookmarkInUse"
+        case .quarantineFailed: category = "BookmarkStoreError.quarantineFailed"
+        case nil: category = String(describing: type(of: error))
+        }
+        AppLog.bookmarks.error(
+            "Bookmark operation failed: \(category, privacy: .public); path: \(path, privacy: .private)"
+        )
+        banner = ErrorBanner(
+            id: UUID(),
+            message: "Scratchpad couldn't retain access to that file.",
+            actions: [.reselectFile, .dismiss]
+        )
+    }
+
+    private func publishPersistenceBanner(_ error: Error) {
+        let category: String
+        switch error as? SessionRepositoryError {
+        case .quarantineFailed: category = "SessionRepositoryError.quarantineFailed"
+        case .unsupportedSchema: category = "SessionRepositoryError.unsupportedSchema"
+        case nil: category = String(describing: type(of: error))
+        }
+        AppLog.persistence.error(
+            "Persistence operation failed: \(category, privacy: .public)"
+        )
+        banner = ErrorBanner(
+            id: UUID(),
+            message: "Scratchpad couldn't update recovery safely. Your text remains open.",
+            actions: [.retry, .openRecoveryFolder, .dismiss]
+        )
+    }
+}
+
+private extension NSView {
+    func firstDescendant<View: NSView>(of type: View.Type) -> View? {
+        if let matching = self as? View { return matching }
+        for subview in subviews {
+            if let matching = subview.firstDescendant(of: type) { return matching }
+        }
+        return nil
     }
 }

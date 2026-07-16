@@ -13,7 +13,7 @@ struct ScratchpadApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             TextEditingCommands()
-            AppCommands()
+            AppCommands(model: model)
         }
     }
 }

@@ -89,6 +89,43 @@ final class DocumentSession {
         }
     }
 
+    func applyOpenedFile(_ result: FileOpenResult, source: WholeTextReplacementSource) {
+        fileReference = result.reference
+        displayName = result.displayName
+        lineEnding = result.lineEnding
+        lastSavedHash = result.contentHash
+        lastKnownDiskMTime = result.modificationDate
+        replaceEntireContents(result.text, source: source, selection: selection)
+    }
+
+    func adoptVerifiedSave(_ result: FileSaveResult, markClean: Bool) {
+        fileReference = result.reference
+        displayName = result.displayName
+        lineEnding = result.lineEnding
+        lastSavedHash = result.contentHash
+        lastKnownDiskMTime = result.modificationDate
+        if markClean {
+            saveState = .clean
+            hasUnsavedChanges = false
+        } else {
+            saveState = .edited
+            hasUnsavedChanges = true
+        }
+    }
+
+    func markConflicted() {
+        saveState = .conflicted
+    }
+
+    func markDeleted() {
+        saveState = .deleted
+        hasUnsavedChanges = true
+    }
+
+    func markReadOnly() {
+        saveState = .readOnly
+    }
+
     func updateSelection(_ newSelection: TextSelection) {
         selection = newSelection.clamped(toUTF16Length: storage.length)
     }
