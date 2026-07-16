@@ -4048,7 +4048,7 @@ git commit -m "feat: build minimal native editor window"
 
 **Interfaces:** Consumes `SettingsStore`, `ApplicationSupportPaths`, and fixed themes. Produces one native `Settings` scene and font chooser lifetime.
 
-- [ ] **Step 1: Write the failing settings-integration tests**
+- [x] **Step 1: Write the failing settings-integration tests**
 
 Create tests named exactly:
 
@@ -4063,7 +4063,7 @@ func testThemePreviewNeverMutatesEditorOrSettings()
 
 Use a fake font manager for target/action assertions and presentation values for control inventory. Assert no HUD, theme color well, recovery toggle, custom shortcut editor, or plugin control exists.
 
-- [ ] **Step 2: Implement the native settings scene**
+- [x] **Step 2: Implement the native settings scene**
 
 Add exactly one:
 
@@ -4080,7 +4080,7 @@ Settings {
 
 `FontPanelCoordinator` saves the shared font manager's prior weak target and action, sets itself as target for `changeFont:`, sets the current font, and calls `orderFrontFontPanel`. `changeFont:` converts the current font and passes only postscript name and size to `SettingsStore`. Closing Settings or the panel restores the prior target/action. Open Recovery Folder calls `NSWorkspace.shared.open` only in direct response to the button.
 
-- [ ] **Step 3: Run the complete Stage 4 automated gate**
+- [x] **Step 3: Run the complete Stage 4 automated gate**
 
 ```sh
 xcodegen
@@ -4089,9 +4089,9 @@ xcodebuild -scheme Scratchpad -destination 'platform=macOS' -derivedDataPath /tm
 git diff --check
 ```
 
-Expected: warning-free build, 133 passing tests, and no whitespace errors.
+Verified: warning-free build, 245 passing tests, and no whitespace errors. The cumulative total includes review and manual-acceptance regressions added during earlier tasks.
 
-- [ ] **Step 4: Run the Stage 4 visual/settings matrix**
+- [x] **Step 4: Run the Stage 4 visual/settings matrix**
 
 Capture light and dark screenshots at 820 × 640 and narrow screenshots at 480 × 320. Record all rows in `TRACKER.md`:
 
@@ -4108,7 +4108,7 @@ Capture light and dark screenshots at 820 × 640 and narrow screenshots at 480 �
 | General settings | Launch at Login reports actual status; recovery folder opens correctly |
 | Window frame | default, minimum, restored, and off-screen fallback behavior pass |
 
-- [ ] **Step 5: Commit Stage 4 completion**
+- [x] **Step 5: Commit Stage 4 completion**
 
 ```sh
 git add Scratchpad/Settings/SettingsView.swift Scratchpad/Settings/FontPanelCoordinator.swift Scratchpad/UI/ThemePreviewView.swift Scratchpad/App/ScratchpadApp.swift ScratchpadTests/Settings/FontPanelCoordinatorTests.swift project.yml TRACKER.md
@@ -4117,7 +4117,7 @@ git commit -m "feat: complete native editor settings"
 
 ## Stage 4 Approval Gate
 
-After Tasks 4.1–4.5 are `verified`, stop before hardening. Present the warning-free build, 133-test result, ten-row manual matrix, and light/dark/narrow screenshots. The user must explicitly approve Stage 4 before Stage 5 begins.
+After Tasks 4.1–4.5 are `verified`, stop before hardening. Present the warning-free build, 245-test result, ten-row manual matrix, and light/dark/narrow screenshots. The user must explicitly approve Stage 4 before Stage 5 begins.
 
 # Recovery Stage 5 — Accessibility, Performance, and Release Proof
 
