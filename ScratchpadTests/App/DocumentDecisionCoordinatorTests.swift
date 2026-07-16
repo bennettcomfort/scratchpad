@@ -7,10 +7,88 @@ import XCTest
 final class DocumentDecisionCoordinatorTests: XCTestCase {
     private let frame = CGRect(x: 0, y: 0, width: 820, height: 640)
 
+    func testReentrantOnBeginResolutionCompletesOuterRequest() async {
+        var coordinator: DocumentDecisionCoordinator!
+        var observedResolution: DocumentDecisionResolution?
+        coordinator = DocumentDecisionCoordinator { _ in
+            coordinator.resolvePending(with: .save)
+        }
+
+        let request = Task {
+            observedResolution = await coordinator.request(.closeWindow)
+        }
+        guard await waitUntil({ observedResolution != nil }) else {
+            request.cancel()
+            return
+        }
+
+        await request.value
+        XCTAssertEqual(observedResolution, .save)
+        XCTAssertNil(coordinator.pending)
+    }
+
+    func testReentrantOnBeginCannotReplaceOuterPendingDecision() async {
+        var coordinator: DocumentDecisionCoordinator!
+        var callbackCount = 0
+        var nestedBeginResult: Bool?
+        coordinator = DocumentDecisionCoordinator { _ in
+            callbackCount += 1
+            if callbackCount == 1 {
+                nestedBeginResult = coordinator.begin(.terminateApplication)
+            }
+        }
+
+        let request = Task { await coordinator.request(.closeWindow) }
+        guard await waitUntil({ nestedBeginResult != nil && coordinator.pending != nil }) else {
+            request.cancel()
+            return
+        }
+
+        XCTAssertEqual(nestedBeginResult, false)
+        if case .closeWindow? = coordinator.pending {
+            // The outer decision remains authoritative.
+        } else {
+            XCTFail("Reentrant begin replaced the outer pending decision")
+        }
+        coordinator.resolvePending(with: .discard)
+        let resolution = await request.value
+        XCTAssertEqual(resolution, .discard)
+    }
+
+    func testResolvedDecisionCanImmediatelyPublishTheNextDecision() async {
+        let coordinator = DocumentDecisionCoordinator()
+        let first = Task { await coordinator.request(.closeWindow) }
+        guard await waitUntil({ coordinator.hasActiveWaiter }) else {
+            first.cancel()
+            return
+        }
+        coordinator.resolvePending(with: .cancel)
+
+        let second = Task { await coordinator.request(.terminateApplication) }
+        guard await waitUntil({ coordinator.hasActiveWaiter }) else {
+            second.cancel()
+            return
+        }
+        if case .terminateApplication? = coordinator.pending {
+            // A sheet observing pending can transition directly to this decision.
+        } else {
+            XCTFail("The next decision was not published")
+        }
+        coordinator.resolvePending(with: .save)
+
+        let firstResolution = await first.value
+        let secondResolution = await second.value
+        XCTAssertEqual(firstResolution, .cancel)
+        XCTAssertEqual(secondResolution, .save)
+    }
+
     func testCoordinatorAllowsOnlyOnePendingDecision() async {
         let coordinator = DocumentDecisionCoordinator()
         let first = Task { await coordinator.request(.closeWindow) }
-        await waitUntil { coordinator.pending != nil }
+        guard await waitUntil({ coordinator.pending != nil }) else {
+            first.cancel()
+            return
+        }
 
         let second = await coordinator.request(.terminateApplication)
         XCTAssertEqual(second, .cancel)
@@ -28,7 +106,10 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let coordinator = DocumentDecisionCoordinator()
         XCTAssertTrue(coordinator.begin(.closeWindow))
         let cancelled = Task { await coordinator.waitForResolution() }
-        await waitUntil { coordinator.hasActiveWaiter }
+        guard await waitUntil({ coordinator.hasActiveWaiter }) else {
+            cancelled.cancel()
+            return
+        }
 
         cancelled.cancel()
         let cancelledResolution = await cancelled.value
@@ -36,7 +117,10 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.pending)
 
         let replacement = Task { await coordinator.request(.terminateApplication) }
-        await waitUntil { coordinator.hasActiveWaiter }
+        guard await waitUntil({ coordinator.hasActiveWaiter }) else {
+            replacement.cancel()
+            return
+        }
         coordinator.resolvePending(with: .save)
         let replacementResolution = await replacement.value
         XCTAssertEqual(replacementResolution, .save)
@@ -46,7 +130,10 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let coordinator = DocumentDecisionCoordinator()
         XCTAssertTrue(coordinator.begin(.closeWindow))
         let first = Task { await coordinator.waitForResolution() }
-        await waitUntil { coordinator.hasActiveWaiter }
+        guard await waitUntil({ coordinator.hasActiveWaiter }) else {
+            first.cancel()
+            return
+        }
 
         let secondResolution = await coordinator.waitForResolution()
         XCTAssertEqual(secondResolution, .cancel)
@@ -91,7 +178,10 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let before = document.snapshot()
 
         let request = Task { await model.requestNewDocument() }
-        await waitUntil { model.pendingDecision != nil }
+        guard await waitUntil({ model.pendingDecision != nil }) else {
+            request.cancel()
+            return
+        }
         model.resolvePendingDecision(with: .cancel)
         await request.value
 
@@ -128,7 +218,10 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let close = Task {
             if await model.requestClose() { closeCount.increment() }
         }
-        await waitUntil { model.pendingDecision != nil }
+        guard await waitUntil({ model.pendingDecision != nil }) else {
+            close.cancel()
+            return
+        }
         model.resolvePendingDecision(with: .save)
         await files.waitForSaveCalls(1)
         XCTAssertEqual(closeCount.value, 0)
@@ -151,7 +244,10 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let close = Task {
             if await model.requestClose() { closeCount.increment() }
         }
-        await waitUntil { model.pendingDecision != nil }
+        guard await waitUntil({ model.pendingDecision != nil }) else {
+            close.cancel()
+            return
+        }
         model.resolvePendingDecision(with: .save)
         await files.waitForSaveCalls(1)
         await files.resumeSave(throwing: .writeFailed)
@@ -181,7 +277,10 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         )
 
         let open = Task { await model.requestOpen() }
-        await waitUntil { model.pendingDecision != nil }
+        guard await waitUntil({ model.pendingDecision != nil }) else {
+            open.cancel()
+            return
+        }
         model.resolvePendingDecision(with: .discard)
         await open.value
 
@@ -199,8 +298,19 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
             files: ControllableFileServiceFake(openError: .invalidUTF8),
             panel: OperationPanelFake(openURLs: [URL(fileURLWithPath: "/tmp/invalid.md")])
         )
-        let failedOpen = Task { await failedModel.requestOpen() }
-        if await waitUntilOrTimeout({ failedModel.pendingDecision != nil }) {
+        var failedOpenDidFinish = false
+        let failedOpen = Task {
+            await failedModel.requestOpen()
+            failedOpenDidFinish = true
+        }
+        guard await waitUntilOrTimeout({
+            failedModel.pendingDecision != nil || failedOpenDidFinish
+        }) else {
+            XCTFail("Timed out waiting for the failed-open operation")
+            failedOpen.cancel()
+            return
+        }
+        if failedModel.pendingDecision != nil {
             failedModel.resolvePendingDecision(with: .discard)
         }
         await failedOpen.value
@@ -255,7 +365,11 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let close = Task { await cleanupModel.requestClose() }
         let reachedPendingDecision = await waitUntilOrTimeout { cleanupModel.pendingDecision != nil }
         let cleanupRecoveryWrites = await cleanupRepository.recoveryWrites
-        XCTAssertTrue(reachedPendingDecision)
+        guard reachedPendingDecision else {
+            XCTFail("Timed out waiting for the cleanup decision")
+            close.cancel()
+            return
+        }
         XCTAssertEqual(cleanupRecoveryWrites.last?.unsavedText, "new unsaved edit")
         cleanupModel.resolvePendingDecision(with: .cancel)
         let closeResult = await close.value
@@ -286,9 +400,12 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
             )
 
             let save = Task { await model.save() }
-            await waitUntil {
+            guard await waitUntil({
                 if case .resolveConflict = model.pendingDecision { return true }
                 return false
+            }) else {
+                save.cancel()
+                return
             }
             model.resolvePendingDecision(with: resolution)
             let result = await save.value
@@ -407,7 +524,10 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         )
 
         let replacement = Task { await model.requestNewDocument() }
-        await waitUntil { model.pendingDecision != nil }
+        guard await waitUntil({ model.pendingDecision != nil }) else {
+            replacement.cancel()
+            return
+        }
         model.resolvePendingDecision(with: .discard)
         await repository.waitForDeleteCalls(1)
 
@@ -431,7 +551,10 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
             files: ControllableFileServiceFake()
         )
         let close = Task { await closeModel.requestClose() }
-        await waitUntil { closeModel.pendingDecision != nil }
+        guard await waitUntil({ closeModel.pendingDecision != nil }) else {
+            close.cancel()
+            return
+        }
         closeModel.resolvePendingDecision(with: .discard)
         await closeRepository.waitForDeleteCalls(1)
 
@@ -466,7 +589,10 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
 
             let close = Task { await model.requestClose() }
             if startsDirty {
-                await waitUntil { model.pendingDecision != nil }
+                guard await waitUntil({ model.pendingDecision != nil }) else {
+                    close.cancel()
+                    return
+                }
                 model.resolvePendingDecision(with: .discard)
             }
             await repository.waitForSessionWrites(1)
@@ -500,9 +626,12 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         let model = makeModel(document: document, repository: repository, files: files)
 
         let save = Task { await model.save() }
-        await waitUntil {
+        guard await waitUntil({
             if case .resolveConflict = model.pendingDecision { return true }
             return false
+        }) else {
+            save.cancel()
+            return
         }
         model.resolvePendingDecision(with: .reloadFromDisk)
         await files.waitForOpenCalls(1)
@@ -577,12 +706,13 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         )
     }
 
-    private func waitUntil(_ condition: @escaping @MainActor () -> Bool) async {
+    private func waitUntil(_ condition: @escaping @MainActor () -> Bool) async -> Bool {
         for _ in 0..<1_000 {
-            if condition() { return }
+            if condition() { return true }
             await Task.yield()
         }
         XCTFail("Timed out waiting for deterministic decision condition")
+        return false
     }
 
     private func waitUntilOrTimeout(

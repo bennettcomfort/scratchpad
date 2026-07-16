@@ -79,8 +79,8 @@ final class DocumentDecisionCoordinator {
         guard pending == nil,
               waiter == nil,
               queuedResolution == nil else { return false }
-        onBegin(decision)
         pending = decision
+        onBegin(decision)
         return true
     }
 

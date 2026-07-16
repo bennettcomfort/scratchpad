@@ -23,10 +23,13 @@ final class ApplicationLifecycleTests: XCTestCase {
 
         XCTAssertFalse(coordinator.windowShouldClose())
         XCTAssertFalse(coordinator.windowShouldClose())
-        await waitUntil { events == ["decision"] }
+        guard await waitUntil({ events == ["decision"] }) else {
+            gate.resume()
+            return
+        }
 
         gate.resume()
-        await waitUntil { events == ["decision", "close"] }
+        guard await waitUntil({ events == ["decision", "close"] }) else { return }
         XCTAssertEqual(closeHarness.results, [true])
         XCTAssertEqual(events, ["decision", "close"])
     }
@@ -42,7 +45,7 @@ final class ApplicationLifecycleTests: XCTestCase {
         )
 
         XCTAssertFalse(coordinator.windowShouldClose())
-        await waitUntil { events == ["decision"] }
+        guard await waitUntil({ events == ["decision"] }) else { return }
         await Task.yield()
 
         XCTAssertEqual(events, ["decision"])
@@ -57,9 +60,9 @@ final class ApplicationLifecycleTests: XCTestCase {
         delegate.attach(model: model)
 
         XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateLater)
-        await waitUntil { model.pendingDecision != nil }
+        guard await waitUntil({ model.pendingDecision != nil }) else { return }
         model.resolvePendingDecision(with: .save)
-        await waitUntil { recorder.events.last == "reply(true)" }
+        guard await waitUntil({ recorder.events.last == "reply(true)" }) else { return }
 
         XCTAssertEqual(
             recorder.events,
@@ -90,9 +93,9 @@ final class ApplicationLifecycleTests: XCTestCase {
             delegate.attach(model: model)
 
             XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateLater)
-            await waitUntil { model.pendingDecision != nil }
+            guard await waitUntil({ model.pendingDecision != nil }) else { return }
             model.resolvePendingDecision(with: .save)
-            await waitUntil { recorder.events.last == "reply(false)" }
+            guard await waitUntil({ recorder.events.last == "reply(false)" }) else { return }
 
             XCTAssertEqual(recorder.events, expected)
             XCTAssertFalse(recorder.events.contains("session(true)"))
@@ -124,9 +127,12 @@ final class ApplicationLifecycleTests: XCTestCase {
 
         XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateLater)
         XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateLater)
-        await waitUntil { requestCount == 1 }
+        guard await waitUntil({ requestCount == 1 }) else {
+            gate.resume()
+            return
+        }
         gate.resume()
-        await waitUntil { events.last == "reply(true)" }
+        guard await waitUntil({ events.last == "reply(true)" }) else { return }
 
         XCTAssertEqual(requestCount, 1)
         XCTAssertEqual(events.filter { $0.hasPrefix("reply") }, ["reply(true)"])
@@ -161,7 +167,7 @@ final class ApplicationLifecycleTests: XCTestCase {
         XCTAssertEqual(events, ["resign-start"])
 
         resignGate.resume()
-        await waitUntil { events.last == "reply(true)" }
+        guard await waitUntil({ events.last == "reply(true)" }) else { return }
         XCTAssertEqual(events, ["resign-start", "session(false)", "termination", "reply(true)"])
     }
 
@@ -193,7 +199,7 @@ final class ApplicationLifecycleTests: XCTestCase {
         XCTAssertEqual(events, ["termination"])
 
         terminationGate.resume()
-        await waitUntil { events.last == "reply(true)" }
+        guard await waitUntil({ events.last == "reply(true)" }) else { return }
         XCTAssertEqual(events, ["termination", "reply(true)"])
     }
 
@@ -211,7 +217,7 @@ final class ApplicationLifecycleTests: XCTestCase {
         )
 
         delegate.applicationDidResignActive(Notification(name: NSApplication.didResignActiveNotification))
-        await waitUntil { cleanValues.count == 1 }
+        guard await waitUntil({ cleanValues.count == 1 }) else { return }
 
         XCTAssertEqual(cleanValues, [false])
         XCTAssertEqual(presentationCount, 0)
@@ -221,12 +227,13 @@ final class ApplicationLifecycleTests: XCTestCase {
         XCTAssertEqual(presentationCount, 1)
     }
 
-    private func waitUntil(_ condition: @escaping @MainActor () -> Bool) async {
+    private func waitUntil(_ condition: @escaping @MainActor () -> Bool) async -> Bool {
         for _ in 0..<1_000 {
-            if condition() { return }
+            if condition() { return true }
             await Task.yield()
         }
         XCTFail("Timed out waiting for deterministic lifecycle condition")
+        return false
     }
 
     private func makeLifecycleModel(
