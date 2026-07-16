@@ -256,7 +256,7 @@ final class ApplicationModel {
               changedDocument.id == document.id,
               changedDocument.hasUnsavedChanges,
               let recoveryCoordinator else { return }
-        recoveryCoordinator.scheduleRecovery(for: changedDocument)
+        recoveryCoordinator.ensureRecoveryScheduled(for: changedDocument)
     }
 
     func restoreCurrentLaunchAttempt(windowFrame: CGRect) async {

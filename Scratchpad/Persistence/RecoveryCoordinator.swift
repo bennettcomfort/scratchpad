@@ -70,6 +70,11 @@ final class RecoveryCoordinator {
         pendingRecoveries[documentID] = PendingRecovery(token: token, task: task)
     }
 
+    func ensureRecoveryScheduled(for document: DocumentSession) {
+        guard pendingRecoveries[document.id] == nil else { return }
+        scheduleRecovery(for: document)
+    }
+
     func flushRecovery(for document: DocumentSession) async throws {
         let documentID = document.id
         pendingRecoveries.removeValue(forKey: documentID)?.task.cancel()

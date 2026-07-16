@@ -50,6 +50,80 @@ final class RecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(document.generation, 2)
     }
 
+    func testMetadataUpdatesPreservePendingTextRecoveryDeadline() async throws {
+        let repository = RecoveryRepositorySpy()
+        let clock = VirtualRecoveryClock()
+        let document = DocumentSession(
+            text: "dirty text",
+            hasUnsavedChanges: true,
+            generation: 1
+        )
+        let documents = DocumentLookup([document])
+        let coordinator = RecoveryCoordinator(
+            repository: repository,
+            clock: clock,
+            documentProvider: { documents.document(id: $0) }
+        )
+
+        coordinator.scheduleRecovery(for: document)
+        guard await waitForSleeperCount(1, clock: clock) else { return }
+        await clock.advance(by: .seconds(1))
+
+        document.updateSelection(TextSelection(location: 2, length: 3))
+        coordinator.ensureRecoveryScheduled(for: document)
+        document.updateScrollOffset(47)
+        coordinator.ensureRecoveryScheduled(for: document)
+
+        let deadlines = await clock.activeDeadlines
+        guard deadlines == [.seconds(2)] else {
+            XCTFail("Metadata restarted the pending text recovery deadline: \(deadlines)")
+            await clock.advance(by: .seconds(2))
+            return
+        }
+        await clock.advance(by: .seconds(1))
+        await waitForRecoveryWrites(1, repository: repository)
+
+        let records = await repository.recoveryWrites
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.unsavedText, "dirty text")
+        XCTAssertEqual(records.first?.selection, TextSelection(location: 2, length: 3))
+        XCTAssertEqual(records.first?.scrollOffsetY, 47)
+    }
+
+    func testMetadataAfterCompletedRecoverySchedulesFreshSnapshot() async throws {
+        let repository = RecoveryRepositorySpy()
+        let clock = VirtualRecoveryClock()
+        let document = DocumentSession(
+            text: "dirty text",
+            hasUnsavedChanges: true,
+            generation: 1
+        )
+        let documents = DocumentLookup([document])
+        let coordinator = RecoveryCoordinator(
+            repository: repository,
+            clock: clock,
+            documentProvider: { documents.document(id: $0) }
+        )
+
+        coordinator.scheduleRecovery(for: document)
+        guard await waitForSleeperCount(1, clock: clock) else { return }
+        await clock.advance(by: .seconds(2))
+        await waitForRecoveryWrites(1, repository: repository)
+        for _ in 0..<10 { await Task.yield() }
+
+        document.updateSelection(TextSelection(location: 4, length: 2))
+        document.updateScrollOffset(83)
+        coordinator.ensureRecoveryScheduled(for: document)
+        guard await waitForSleeperCount(1, clock: clock) else { return }
+        await clock.advance(by: .seconds(2))
+        await waitForRecoveryWrites(2, repository: repository)
+
+        let records = await repository.recoveryWrites
+        XCTAssertEqual(records.count, 2)
+        XCTAssertEqual(records.last?.selection, TextSelection(location: 4, length: 2))
+        XCTAssertEqual(records.last?.scrollOffsetY, 83)
+    }
+
     func testExplicitFlushCancelsPendingTaskAndWritesLatestText() async throws {
         let repository = RecoveryRepositorySpy()
         let clock = VirtualRecoveryClock()
@@ -488,6 +562,18 @@ final class RecoveryCoordinatorTests: XCTestCase {
 }
 
 private extension RecoveryCoordinatorTests {
+    func waitForSleeperCount(
+        _ count: Int,
+        clock: VirtualRecoveryClock
+    ) async -> Bool {
+        for _ in 0..<1_000 {
+            if await clock.activeSleeperCount == count { return true }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for \(count) virtual recovery sleeper(s)")
+        return false
+    }
+
     func waitForRecoveryWrites(
         _ count: Int,
         repository: RecoveryRepositorySpy
@@ -565,6 +651,11 @@ private actor VirtualRecoveryClock: RecoveryClock {
     private var now: Duration = .zero
     private var sleepers: [UUID: Sleeper] = [:]
     private var countWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
+
+    var activeSleeperCount: Int { sleepers.count }
+    var activeDeadlines: [Duration] {
+        sleepers.values.map(\.deadline).sorted()
+    }
 
     func sleep(for duration: Duration) async throws {
         let id = UUID()
