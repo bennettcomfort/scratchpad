@@ -6,7 +6,7 @@ Rules for every coding agent in this repository. Read this file before acting.
 
 > **Recovery Stage 3 — Data-safe persistence and lifecycle**
 >
-> **Implementation lock: OFF.** Task 3.7 is in progress. Task 3.8 remains pending controller re-review.
+> **Implementation lock: OFF.** Task 3.7 is verified. Task 3.8 is the current approved implementation task.
 
 Work only on the current stage and current task recorded in `TRACKER.md`. Never prepare, scaffold, or begin a later stage without the user's explicit approval.
 
