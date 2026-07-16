@@ -19,10 +19,12 @@ targets:
     platform: macOS
     sources:
       - path: Scratchpad/App/AppCommands.swift
+      - path: Scratchpad/App/AppDelegate.swift
       - path: Scratchpad/App/ApplicationModel.swift
       - path: Scratchpad/App/ApplicationServices.swift
       - path: Scratchpad/App/DocumentDecisionCoordinator.swift
       - path: Scratchpad/App/FilePanelProvider.swift
+      - path: Scratchpad/App/LifecycleCoordinators.swift
       - path: Scratchpad/App/MainWindowView.swift
       - path: Scratchpad/App/ScratchpadApp.swift
       - path: Scratchpad/Document/DocumentSession.swift
@@ -60,6 +62,7 @@ targets:
       - ScratchpadTests/RecoveryProjectPolicyTests.swift
       - ScratchpadTests/App/ApplicationModelTests.swift
       - ScratchpadTests/App/AppCommandsTests.swift
+      - ScratchpadTests/App/ApplicationLifecycleTests.swift
       - ScratchpadTests/App/DocumentDecisionCoordinatorTests.swift
       - ScratchpadTests/Document/DocumentStateTests.swift
       - ScratchpadTests/Document/DocumentSessionTests.swift

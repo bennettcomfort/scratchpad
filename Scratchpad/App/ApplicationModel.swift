@@ -205,6 +205,32 @@ final class ApplicationModel {
         return await requestExit(.terminateApplication, operation: .terminating)
     }
 
+    func flushLifecycleState(didCloseCleanly: Bool) async -> Bool {
+        guard launchState == .ready,
+              let dependencies = operationDependencies() else { return false }
+        let boundary = currentDocumentBoundary()
+        guard await flushRecovery(using: dependencies.recovery) else { return false }
+        do {
+            try await dependencies.recovery.flushSession(
+                for: document,
+                windowFrame: windowFrameProvider(),
+                didCloseCleanly: didCloseCleanly
+            )
+        } catch {
+            publishPersistenceBanner(error)
+            return false
+        }
+        return await revalidate(boundary, using: dependencies)
+    }
+
+    func presentPendingLifecycleFailure() {
+        banner = ErrorBanner(
+            id: UUID(),
+            message: "Scratchpad couldn't preserve the latest session state.",
+            actions: [.retry, .dismiss]
+        )
+    }
+
     // MARK: - Launch Restoration
 
     func requestLaunchRetry() {
@@ -612,21 +638,20 @@ final class ApplicationModel {
         guard let dependencies = operationDependencies() else { return false }
 
         if document.hasUnsavedChanges {
+            let decisionBoundary = currentDocumentBoundary()
+            guard decisionCoordinator.begin(decision) else { return false }
             if recoveryCleanupRequiredDocumentID == document.id {
                 recoveryCleanupRequiredDocumentID = nil
             }
-            guard await flushRecovery(using: dependencies.recovery) else { return false }
-        } else if recoveryCleanupRequiredDocumentID == document.id {
-            let cleanupBoundary = currentDocumentBoundary()
-            let deleted = await deleteRecovery(documentID: document.id, using: dependencies)
-            guard await revalidate(cleanupBoundary, using: dependencies), deleted else {
+            guard await flushRecovery(using: dependencies.recovery) else {
+                decisionCoordinator.cancelPending()
                 return false
             }
-        }
-
-        if document.hasUnsavedChanges {
-            let decisionBoundary = currentDocumentBoundary()
-            let resolution = await decisionCoordinator.request(decision)
+            guard await revalidate(decisionBoundary, using: dependencies) else {
+                decisionCoordinator.cancelPending()
+                return false
+            }
+            let resolution = await decisionCoordinator.waitForResolution()
             guard await revalidate(decisionBoundary, using: dependencies) else { return false }
             switch resolution {
             case .save:
@@ -648,7 +673,26 @@ final class ApplicationModel {
                 requestEditorFocus()
                 return false
             }
+        } else {
+            if recoveryCleanupRequiredDocumentID == document.id {
+                recoveryCleanupRequiredDocumentID = nil
+            }
+            guard await flushRecovery(using: dependencies.recovery) else { return false }
         }
+
+        let nonCleanBoundary = currentDocumentBoundary()
+        do {
+            try await dependencies.recovery.flushSession(
+                for: document,
+                windowFrame: windowFrameProvider(),
+                didCloseCleanly: false
+            )
+        } catch {
+            publishPersistenceBanner(error)
+            _ = await revalidate(nonCleanBoundary, using: dependencies)
+            return false
+        }
+        guard await revalidate(nonCleanBoundary, using: dependencies) else { return false }
 
         let sessionBoundary = currentDocumentBoundary()
         do {
