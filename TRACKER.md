@@ -62,7 +62,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 3.3 | Enable sandboxed persistent security-scoped bookmarks | verified | Expected missing-type RED plus four controller regression REDs; 11/11 focused and 78/78 full tests pass; FIFO public-operation serialization, duplicate standardized-path quarantine, warning-as-error build, exact signed entitlements, invariant, scope, and data-loss checks pass; this task commit |
 | 3.4 | Open, inspect, and atomically save UTF-8 files | verified | Coordinated conditional replacement; 18/18 Task 3.4 focused tests; three independent 96/96 suites; warning-free build; controller review approved; this task commit |
 | 3.5 | Debounce recovery per document and restore the correct source | verified | Corrected design `7a39707`; fresh stale-flush, launch-model compile, production-root policy, production edit-route, and nil-bookmark regressions; 17/17 focused and 113/113 full tests; both races 5/5; warning-as-error build; task and broad reviews clean; seeded recovery-first, clean-disk-first, and initial-focus manual checks pass; this task commit |
-| 3.6 | Serialize native panels, decisions, and destructive document operations | pending | Approved plan; awaiting explicit user approval after verified Task 3.5 |
+| 3.6 | Serialize native panels, decisions, and destructive document operations | in progress | User approved continuous execution through the end of Stage 3 on 2026-07-16 |
 | 3.7 | Monitor external changes without document-identity races | pending | Approved plan; awaiting Gate 5 implementation unlock |
 | 3.8 | Await window close and application termination | pending | Approved plan; awaiting Gate 5 implementation unlock |
 
@@ -90,7 +90,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | verified | User approved Stage 0 on 2026-07-14; commits `61be30c`, `f7c765a`, `81d0865` |
 | 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | verified | User approved Stage 1 on 2026-07-15; commits `988a539`, `3bdacc9`, `3a1e4af`, `2e8c4c7`, `2b703b5` |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | verified | User approved Stage 2 on 2026-07-15; commits `cfaed34`, `04ef7ce`, `c804391`, `9d04dc0` |
-| 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | in progress | Task 3.5 in progress; user approval required after Tasks 3.1–3.8 |
+| 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | in progress | Task 3.6 in progress; user approval required after Tasks 3.1–3.8 |
 | 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | pending | User approves visual and settings matrix |
 | 5 | Complete warning, regression, accessibility, performance, and dogfood hardening | pending | User accepts recovery milestone |
 
@@ -131,6 +131,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2026-07-15 | Place Join Lines immediately before native text-editing commands in Edit so `⌘J` wins over native Jump to Selection without removing `TextEditingCommands` or other native menus | `Scratchpad/App/AppCommands.swift`, `TRACKER.md` |
 | 2026-07-15 | User approved the complete Stage 2 responder, shortcut, Undo, native-editing, and focus matrix and authorized Recovery Stage 3 | `AGENTS.md`, `TRACKER.md` |
 | 2026-07-15 | User approved correcting Task 3.1 to inject trusted Application Support paths, reject quarantine escapes, and serialize overlapping persistence transactions | `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
+| 2026-07-16 | User approved continuous execution through the end of Stage 3; corrected stale cumulative test totals after Task 3.5 expanded the suite to 113 tests | `AGENTS.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
 
 ## Blockers
 
