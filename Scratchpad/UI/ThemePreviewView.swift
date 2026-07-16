@@ -18,17 +18,29 @@ struct ThemePreviewPresentation {
     }
 }
 
+@MainActor
 struct ThemePreviewView: View {
     let settings: EditorSettingsSnapshot
+    private let injectedEffectiveAppearance: NSAppearance?
     @Environment(\.colorScheme) private var colorScheme
 
-    var body: some View {
-        let appearanceName: NSAppearance.Name = colorScheme == .dark ? .darkAqua : .aqua
-        let effectiveAppearance = NSAppearance(named: appearanceName) ?? NSApp.effectiveAppearance
-        let presentation = ThemePreviewPresentation(
+    init(
+        settings: EditorSettingsSnapshot,
+        effectiveAppearance: NSAppearance? = nil
+    ) {
+        self.settings = settings
+        injectedEffectiveAppearance = effectiveAppearance
+    }
+
+    var presentation: ThemePreviewPresentation {
+        ThemePreviewPresentation(
             settings: settings,
             effectiveAppearance: effectiveAppearance
         )
+    }
+
+    var body: some View {
+        let presentation = presentation
 
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -66,5 +78,13 @@ struct ThemePreviewView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Theme preview")
+    }
+
+    private var effectiveAppearance: NSAppearance {
+        if let injectedEffectiveAppearance {
+            return injectedEffectiveAppearance
+        }
+        let appearanceName: NSAppearance.Name = colorScheme == .dark ? .darkAqua : .aqua
+        return NSAppearance(named: appearanceName) ?? NSApp.effectiveAppearance
     }
 }

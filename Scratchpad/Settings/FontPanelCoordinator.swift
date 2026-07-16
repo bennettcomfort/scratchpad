@@ -62,12 +62,21 @@ final class FontPanelCoordinator: NSObject {
     }
 
     func close() {
+        relinquishFontManager()
+    }
+
+    private func relinquishFontManager() {
         guard ownsFontManager else { return }
         fontManager.target = previousTarget
         fontManager.action = previousAction
         previousTarget = nil
         previousAction = NSSelectorFromString("changeFont:")
         ownsFontManager = false
+    }
+
+    isolated deinit {
+        relinquishFontManager()
+        NotificationCenter.default.removeObserver(self)
     }
 
     @objc private func fontPanelWillClose(_ notification: Notification) {

@@ -1,7 +1,33 @@
 import AppKit
 import SwiftUI
 
-enum GeneralSettingsControl: String, Equatable {
+enum SettingsTab: String, Hashable {
+    case general
+    case editor
+    case theme
+
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .editor: "Editor"
+        case .theme: "Theme"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .general: "gearshape"
+        case .editor: "textformat"
+        case .theme: "circle.lefthalf.filled"
+        }
+    }
+}
+
+struct SettingsPresentation {
+    static let tabs: [SettingsTab] = [.general, .editor, .theme]
+}
+
+enum GeneralSettingsControl: String, Hashable {
     case launchAtLogin
     case openRecoveryFolder
 }
@@ -11,7 +37,7 @@ struct GeneralSettingsPresentation {
     static let deferredControls: [String] = []
 }
 
-enum EditorSettingsControl: String, Equatable {
+enum EditorSettingsControl: String, Hashable {
     case chooseFont
     case smartSubstitutions
     case spellingAndCorrection
@@ -37,7 +63,13 @@ struct EditorSettingsPresentation {
     static let deferredControls: [String] = []
 }
 
+enum ThemeSettingsControl: String, Hashable {
+    case appearance
+    case preview
+}
+
 struct ThemeSettingsPresentation {
+    static let controls: [ThemeSettingsControl] = [.appearance, .preview]
     static let appearances: [AppearancePreference] = [.system, .light, .dark]
     static let isPreviewEditable = false
     static let deferredControls: [String] = []
@@ -58,12 +90,10 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            generalSettings
-                .tabItem { Label("General", systemImage: "gearshape") }
-            editorSettings
-                .tabItem { Label("Editor", systemImage: "textformat") }
-            themeSettings
-                .tabItem { Label("Theme", systemImage: "circle.lefthalf.filled") }
+            ForEach(SettingsPresentation.tabs, id: \.self) { tab in
+                settingsTab(tab)
+                    .tabItem { Label(tab.title, systemImage: tab.symbolName) }
+            }
         }
         .frame(width: 520, height: 390)
         .onDisappear { fontPanelCoordinator.close() }
@@ -71,15 +101,8 @@ struct SettingsView: View {
 
     private var generalSettings: some View {
         Form {
-            Toggle(
-                "Launch at Login",
-                isOn: Binding(
-                    get: { settings.launchAtLogin },
-                    set: { settings.setLaunchAtLogin($0) }
-                )
-            )
-            Button("Open Recovery Folder") {
-                _ = NSWorkspace.shared.open(recoveryFolder)
+            ForEach(GeneralSettingsPresentation.controls, id: \.self) { control in
+                generalControl(control)
             }
             if let errorMessage = settings.errorMessage {
                 Text(errorMessage)
@@ -92,9 +115,59 @@ struct SettingsView: View {
 
     private var editorSettings: some View {
         Form {
+            ForEach(EditorSettingsPresentation.controls, id: \.self) { control in
+                editorControl(control)
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    private var themeSettings: some View {
+        Form {
+            ForEach(ThemeSettingsPresentation.controls, id: \.self) { control in
+                themeControl(control)
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    @ViewBuilder
+    private func settingsTab(_ tab: SettingsTab) -> some View {
+        switch tab {
+        case .general: generalSettings
+        case .editor: editorSettings
+        case .theme: themeSettings
+        }
+    }
+
+    @ViewBuilder
+    private func generalControl(_ control: GeneralSettingsControl) -> some View {
+        switch control {
+        case .launchAtLogin:
+            Toggle(
+                "Launch at Login",
+                isOn: Binding(
+                    get: { settings.launchAtLogin },
+                    set: { settings.setLaunchAtLogin($0) }
+                )
+            )
+        case .openRecoveryFolder:
+            Button("Open Recovery Folder") {
+                _ = NSWorkspace.shared.open(recoveryFolder)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func editorControl(_ control: EditorSettingsControl) -> some View {
+        switch control {
+        case .chooseFont:
             LabeledContent("Font") {
                 Button("Choose Font") { fontPanelCoordinator.open() }
             }
+        case .smartSubstitutions:
             Toggle(
                 "Smart substitutions",
                 isOn: Binding(
@@ -102,6 +175,7 @@ struct SettingsView: View {
                     set: { settings.setSmartSubstitutionsEnabled($0) }
                 )
             )
+        case .spellingAndCorrection:
             Toggle(
                 "Spelling checking and correction",
                 isOn: Binding(
@@ -109,6 +183,7 @@ struct SettingsView: View {
                     set: { settings.setSpellingEnabled($0) }
                 )
             )
+        case .spacesInsteadOfTabs:
             Toggle(
                 "Insert spaces instead of tabs",
                 isOn: Binding(
@@ -116,6 +191,7 @@ struct SettingsView: View {
                     set: { settings.setInsertsSpaces($0) }
                 )
             )
+        case .tabWidth:
             Stepper(
                 "Tab width: \(settings.snapshot.tabWidth)",
                 value: Binding(
@@ -124,6 +200,7 @@ struct SettingsView: View {
                 ),
                 in: EditorSettingsPresentation.tabWidthRange
             )
+        case .keepIndentation:
             Toggle(
                 "Keep indentation on new lines",
                 isOn: Binding(
@@ -131,6 +208,7 @@ struct SettingsView: View {
                     set: { settings.setKeepsIndentation($0) }
                 )
             )
+        case .countWhitespace:
             Toggle(
                 "Count whitespace in characters",
                 isOn: Binding(
@@ -138,6 +216,7 @@ struct SettingsView: View {
                     set: { settings.setCountsWhitespace($0) }
                 )
             )
+        case .informationBar:
             Toggle(
                 "Information bar",
                 isOn: Binding(
@@ -146,12 +225,12 @@ struct SettingsView: View {
                 )
             )
         }
-        .formStyle(.grouped)
-        .padding()
     }
 
-    private var themeSettings: some View {
-        Form {
+    @ViewBuilder
+    private func themeControl(_ control: ThemeSettingsControl) -> some View {
+        switch control {
+        case .appearance:
             Picker(
                 "Appearance",
                 selection: Binding(
@@ -159,16 +238,23 @@ struct SettingsView: View {
                     set: { settings.setAppearance($0) }
                 )
             ) {
-                Text("System").tag(AppearancePreference.system)
-                Text("Light").tag(AppearancePreference.light)
-                Text("Dark").tag(AppearancePreference.dark)
+                ForEach(ThemeSettingsPresentation.appearances, id: \.self) { appearance in
+                    Text(appearance.title).tag(appearance)
+                }
             }
             .pickerStyle(.segmented)
-
+        case .preview:
             ThemePreviewView(settings: settings.snapshot)
         }
-        .formStyle(.grouped)
-        .padding()
     }
+}
 
+private extension AppearancePreference {
+    var title: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
 }

@@ -47,7 +47,94 @@ final class FontPanelCoordinatorTests: XCTestCase {
         XCTAssertEqual(manager.action, #selector(FontTarget.previousAction(_:)))
     }
 
+    func testFontPanelRestoresPreviousTargetAndActionWhenCoordinatorIsReleased() throws {
+        let fixture = try SettingsFixture()
+        defer { fixture.remove() }
+        let manager = FontManagerFake()
+        let priorTarget = FontTarget()
+        manager.target = priorTarget
+        manager.action = #selector(FontTarget.previousAction(_:))
+        var coordinator: FontPanelCoordinator? = FontPanelCoordinator(
+            settings: fixture.store,
+            fontManager: manager
+        )
+        weak let weakCoordinator = coordinator
+
+        coordinator?.open()
+        coordinator = nil
+
+        XCTAssertNil(weakCoordinator)
+        XCTAssertTrue(manager.target === priorTarget)
+        XCTAssertEqual(manager.action, #selector(FontTarget.previousAction(_:)))
+    }
+
+    func testRepeatedOpenCapturesOriginalTargetAndActionOnlyOnce() throws {
+        let fixture = try SettingsFixture()
+        defer { fixture.remove() }
+        let manager = FontManagerFake()
+        let originalTarget = FontTarget()
+        let interveningTarget = FontTarget()
+        manager.target = originalTarget
+        manager.action = #selector(FontTarget.previousAction(_:))
+        let coordinator = FontPanelCoordinator(settings: fixture.store, fontManager: manager)
+
+        coordinator.open()
+        manager.target = interveningTarget
+        manager.action = #selector(FontTarget.interveningAction(_:))
+        coordinator.open()
+        coordinator.close()
+
+        XCTAssertTrue(manager.target === originalTarget)
+        XCTAssertEqual(manager.action, #selector(FontTarget.previousAction(_:)))
+    }
+
+    func testCloseThenReopenRecapturesCurrentTargetAndAction() throws {
+        let fixture = try SettingsFixture()
+        defer { fixture.remove() }
+        let manager = FontManagerFake()
+        let firstTarget = FontTarget()
+        let secondTarget = FontTarget()
+        manager.target = firstTarget
+        manager.action = #selector(FontTarget.previousAction(_:))
+        let coordinator = FontPanelCoordinator(settings: fixture.store, fontManager: manager)
+
+        coordinator.open()
+        coordinator.close()
+        manager.target = secondTarget
+        manager.action = #selector(FontTarget.interveningAction(_:))
+        coordinator.open()
+        coordinator.close()
+
+        XCTAssertTrue(manager.target === secondTarget)
+        XCTAssertEqual(manager.action, #selector(FontTarget.interveningAction(_:)))
+    }
+
+    func testFontPanelCloseNotificationRestoresPreviousTargetAndAction() throws {
+        let fixture = try SettingsFixture()
+        defer { fixture.remove() }
+        let manager = FontManagerFake()
+        let priorTarget = FontTarget()
+        manager.target = priorTarget
+        manager.action = #selector(FontTarget.previousAction(_:))
+        let coordinator = FontPanelCoordinator(settings: fixture.store, fontManager: manager)
+
+        coordinator.open()
+        NotificationCenter.default.post(
+            name: NSWindow.willCloseNotification,
+            object: NSFontPanel.shared
+        )
+
+        XCTAssertTrue(manager.target === priorTarget)
+        XCTAssertEqual(manager.action, #selector(FontTarget.previousAction(_:)))
+    }
+
     func testGeneralPresentationContainsOnlyLaunchAndRecoveryFolderActions() {
+        XCTAssertEqual(SettingsPresentation.tabs, [.general, .editor, .theme])
+        XCTAssertEqual(SettingsPresentation.tabs.map(\.symbolName), [
+            "gearshape",
+            "textformat",
+            "circle.lefthalf.filled",
+        ])
         XCTAssertEqual(
             GeneralSettingsPresentation.controls,
             [.launchAtLogin, .openRecoveryFolder]
@@ -82,6 +169,7 @@ final class FontPanelCoordinatorTests: XCTestCase {
     }
 
     func testThemePresentationContainsOnlySystemLightAndDark() {
+        XCTAssertEqual(ThemeSettingsPresentation.controls, [.appearance, .preview])
         XCTAssertEqual(ThemeSettingsPresentation.appearances, [.system, .light, .dark])
         XCTAssertFalse(ThemeSettingsPresentation.isPreviewEditable)
         XCTAssertTrue(
@@ -95,18 +183,40 @@ final class FontPanelCoordinatorTests: XCTestCase {
         let fixture = try SettingsFixture()
         defer { fixture.remove() }
         let document = DocumentSession(text: "\tunchanged text")
+        let coordinator = EditorCoordinator(document: document, onEdit: { _ in })
+        let scrollView = EditorHost.makeScrollView(document: document, coordinator: coordinator)
+        let textView = try XCTUnwrap(scrollView.documentView as? ScratchTextView)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = scrollView
+        window.makeFirstResponder(textView)
+        textView.setSelectedRange(NSRange(location: 1, length: 4))
+        let undoManager = try XCTUnwrap(textView.undoManager)
+        undoManager.registerUndo(withTarget: document) { _ in }
+        undoManager.setActionName("Existing Action")
         let originalText = document.storage.string
         let originalGeneration = document.generation
+        let originalSelection = textView.selectedRange()
+        let originalUndoActionName = undoManager.undoActionName
         let originalSnapshot = fixture.store.snapshot
         let appearance = try XCTUnwrap(NSAppearance(named: .darkAqua))
 
-        _ = ThemePreviewPresentation(
+        let preview = ThemePreviewView(
             settings: fixture.store.snapshot,
             effectiveAppearance: appearance
         )
+        _ = preview.presentation
+        _ = preview.body
 
         XCTAssertEqual(document.storage.string, originalText)
         XCTAssertEqual(document.generation, originalGeneration)
+        XCTAssertEqual(textView.selectedRange(), originalSelection)
+        XCTAssertEqual(undoManager.undoActionName, originalUndoActionName)
+        XCTAssertTrue(undoManager.canUndo)
         XCTAssertEqual(fixture.store.snapshot, originalSnapshot)
     }
 }
@@ -137,6 +247,7 @@ private final class FontManagerFake: FontManaging {
 @MainActor
 private final class FontTarget: NSObject {
     @objc func previousAction(_ sender: Any?) {}
+    @objc func interveningAction(_ sender: Any?) {}
 }
 
 @MainActor
