@@ -3665,7 +3665,7 @@ git diff --check
 
 Expected: warning-free build, 195 passing tests after approved review corrections, and no whitespace errors.
 
-- [ ] **Step 4: Run the signed-sandbox manual data-loss matrix**
+- [x] **Step 4: Run the signed-sandbox manual data-loss matrix**
 
 Record evidence for every row in `TRACKER.md`:
 
@@ -3702,7 +3702,7 @@ Update the controllable file fake to accept selected URLs directly. Replace pre-
 
 Run the AtomicFileWriter, FileService, RecoveryCoordinator, DocumentDecisionCoordinator, and lifecycle focused tests; run the full suite and warning-as-error signed build; run `git diff --check`; then repeat conflict Save As to a new filename in the signed app. Required result: original disk bytes remain external, new destination bytes equal the editor snapshot, the document associates with the new bookmark only after verification, and relaunch reopens that destination without another panel.
 
-- [ ] **Step 5: Commit Stage 3 lifecycle completion**
+- [x] **Step 5: Commit Stage 3 lifecycle completion**
 
 ```sh
 git add Scratchpad/App/LifecycleCoordinators.swift Scratchpad/App/AppDelegate.swift Scratchpad/App/ScratchpadApp.swift ScratchpadTests/App/ApplicationLifecycleTests.swift project.yml TRACKER.md

@@ -4,9 +4,9 @@ Rules for every coding agent in this repository. Read this file before acting.
 
 ## Current Stage
 
-> **Recovery Stage 3 — Data-safe persistence and lifecycle**
+> **Recovery Stage 4 — Noto-inspired shell, settings, and metrics**
 >
-> **Implementation lock: OFF.** Task 3.8 remains in progress pending explicit approval of hybrid signed/manual and deterministic fault-injection evidence. Do not begin Stage 4.
+> **Implementation lock: OFF.** Stage 3 is verified and approved. Task 4.1 is the current approved implementation task; do not begin Task 4.2 or later work.
 
 Work only on the current stage and current task recorded in `TRACKER.md`. Never prepare, scaffold, or begin a later stage without the user's explicit approval.
 
