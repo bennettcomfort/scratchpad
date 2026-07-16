@@ -3939,7 +3939,7 @@ git commit -m "feat: apply fixed native editor themes"
 
 **Interfaces:** Produces `DocumentMetrics`, `DocumentMetricsCalculator`, and `MetricsCoordinator`; consumes immutable document snapshots and `countsWhitespace`.
 
-- [ ] **Step 1: Write the failing exact-definition tests**
+- [x] **Step 1: Write the failing exact-definition tests**
 
 Create tests named exactly:
 
@@ -3956,7 +3956,7 @@ func testCoordinatorDiscardsDifferentIdentityOrGenerationResult()
 
 Use `"e\u{301} 👩‍💻\nhello\tworld"` to prove grapheme and Unicode behavior. Test token byte counts 0, 1, 4, and 5, expecting 0, 1, 1, and 2.
 
-- [ ] **Step 2: Implement pure metrics and generation delivery**
+- [x] **Step 2: Implement pure metrics and generation delivery**
 
 ```swift
 struct DocumentMetrics: Equatable, Sendable {
@@ -3987,9 +3987,9 @@ final class MetricsCoordinator {
 
 Character counting iterates Swift `Character` values; excluded whitespace requires all Unicode scalars in the character to have `properties.isWhitespace`. Words are nonempty runs separated by the same predicate. Lines start at one and increment for each `"\n"`. Tokens are zero for empty data, otherwise `utf8Count / 4 + (utf8Count % 4 == 0 ? 0 : 1)` so the ceiling cannot overflow; `isEstimate` is always true. The coordinator captures immutable values, waits 75 ms, computes in `Task.detached(priority: .utility)`, and delivers only after ApplicationModel confirms document ID and generation. It retains metrics, never text.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
-Run focused tests and full suite. Expected: 8 new tests pass; cumulative suite count is 121.
+Run focused tests and full suite. Verified: 14 focused metrics tests pass; cumulative suite count is 224 after review regressions.
 
 ```sh
 git add Scratchpad/Document/DocumentMetrics.swift Scratchpad/Document/MetricsCoordinator.swift Scratchpad/Editor/EditorCoordinator.swift Scratchpad/App/ApplicationModel.swift ScratchpadTests/Document/DocumentMetricsTests.swift ScratchpadTests/Document/MetricsCoordinatorTests.swift project.yml TRACKER.md

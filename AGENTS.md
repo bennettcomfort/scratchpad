@@ -6,7 +6,7 @@ Rules for every coding agent in this repository. Read this file before acting.
 
 > **Recovery Stage 4 — Noto-inspired shell, settings, and metrics**
 >
-> **Implementation lock: OFF.** Tasks 4.1–4.2 are verified. The user authorized continuous Stage 4 execution; Task 4.3 is current. Continue in plan order through Task 4.5 unless a design decision requires user input, then stop at the Stage 4 approval gate.
+> **Implementation lock: OFF.** Tasks 4.1–4.3 are verified. The user authorized continuous Stage 4 execution; Task 4.4 is current. Continue in plan order through Task 4.5 unless a design decision requires user input, then stop at the Stage 4 approval gate.
 
 Work only on the current stage and current task recorded in `TRACKER.md`. Never prepare, scaffold, or begin a later stage without the user's explicit approval.
 
