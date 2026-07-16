@@ -208,6 +208,85 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertTrue(AppCommands.operationsEnabled(for: model))
     }
 
+    func testOpenPersistsReplacementSessionIdentityBeforeCompleting() async {
+        let repository = OperationRepositoryFake(sessionWriteSuspended: true)
+        let bookmarks = OperationBookmarkFake()
+        let oldDocument = makeCleanDocument(text: "previous document")
+        let model = makeModel(
+            document: oldDocument,
+            repository: repository,
+            bookmarks: bookmarks,
+            files: ControllableFileServiceFake(),
+            panel: OperationPanelFake(
+                openURLs: [URL(fileURLWithPath: "/tmp/replacement.md")]
+            )
+        )
+
+        let open = Task { await model.requestOpen() }
+        await repository.waitForSessionWrites(1)
+        XCTAssertTrue(model.document === oldDocument)
+        await repository.resumeSessionWrite()
+        await open.value
+
+        let session = await repository.sessionWrites.last
+        XCTAssertEqual(session?.documentID, model.document.id)
+        XCTAssertEqual(session?.fileReferenceID, model.document.fileReference?.bookmarkID)
+        XCTAssertEqual(session?.displayName, model.document.displayName)
+        XCTAssertEqual(session?.didCloseCleanly, false)
+    }
+
+    func testNewPersistsReplacementSessionIdentityBeforeCompleting() async {
+        let repository = OperationRepositoryFake(sessionWriteSuspended: true)
+        let oldDocument = makeCleanDocument(text: "previous document")
+        let model = makeModel(
+            document: oldDocument,
+            repository: repository,
+            files: ControllableFileServiceFake()
+        )
+
+        let newDocument = Task { await model.requestNewDocument() }
+        await repository.waitForSessionWrites(1)
+        XCTAssertTrue(model.document === oldDocument)
+        await repository.resumeSessionWrite()
+        await newDocument.value
+
+        let session = await repository.sessionWrites.last
+        XCTAssertFalse(model.document === oldDocument)
+        XCTAssertEqual(session?.documentID, model.document.id)
+        XCTAssertNil(session?.fileReferenceID)
+        XCTAssertEqual(session?.displayName, model.document.displayName)
+        XCTAssertEqual(session?.didCloseCleanly, false)
+    }
+
+    func testGenerationChangeDuringReplacementSessionPersistenceAbortsReplacement() async {
+        let repository = OperationRepositoryFake(sessionWriteSuspended: true)
+        let oldDocument = makeCleanDocument(text: "approved generation")
+        let model = makeModel(
+            document: oldDocument,
+            repository: repository,
+            files: ControllableFileServiceFake()
+        )
+
+        let replacement = Task { await model.requestNewDocument() }
+        await repository.waitForSessionWrites(1)
+        oldDocument.storage.setAttributedString(
+            NSAttributedString(string: "newer text during replacement persistence")
+        )
+        oldDocument.noteUserEdit()
+        model.handleCurrentDocumentEdit(oldDocument)
+        await repository.resumeSessionWrite()
+        await replacement.value
+
+        let recoveryWrites = await repository.recoveryWrites
+        let sessionWrites = await repository.sessionWrites
+        XCTAssertTrue(model.document === oldDocument)
+        XCTAssertEqual(oldDocument.storage.string, "newer text during replacement persistence")
+        XCTAssertEqual(recoveryWrites.last?.unsavedText, "newer text during replacement persistence")
+        XCTAssertEqual(sessionWrites.last?.documentID, oldDocument.id)
+        XCTAssertEqual(sessionWrites.last?.hasUnsavedChanges, true)
+        XCTAssertEqual(model.operationState, .idle)
+    }
+
     func testSaveAndCloseWaitsForVerifiedSaveResult() async {
         let repository = OperationRepositoryFake()
         let files = ControllableFileServiceFake(saveSuspended: true)

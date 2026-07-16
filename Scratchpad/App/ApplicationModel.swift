@@ -129,7 +129,10 @@ final class ApplicationModel {
             .newUntitled,
             dependencies: dependencies
         ) else { return }
-        replaceCurrentDocument(with: DocumentSession())
+        await persistAndReplaceCurrentDocument(
+            with: DocumentSession(),
+            using: dependencies
+        )
     }
 
     func requestOpen() async {
@@ -174,7 +177,7 @@ final class ApplicationModel {
             .open(reference),
             dependencies: dependencies
         ) else { return }
-        applyOpenedFile(openedFile)
+        await applyOpenedFile(openedFile, using: dependencies)
     }
 
     func save() async -> Bool {
@@ -588,6 +591,26 @@ final class ApplicationModel {
         document = replacement
     }
 
+    private func persistAndReplaceCurrentDocument(
+        with replacement: DocumentSession,
+        using dependencies: OperationDependencies
+    ) async {
+        let boundary = currentDocumentBoundary()
+        do {
+            try await dependencies.recovery.flushSession(
+                for: replacement,
+                windowFrame: windowFrameProvider(),
+                didCloseCleanly: false
+            )
+        } catch {
+            publishPersistenceBanner(error)
+            _ = await revalidate(boundary, using: dependencies)
+            return
+        }
+        guard await revalidate(boundary, using: dependencies) else { return }
+        replaceCurrentDocument(with: replacement)
+    }
+
     private func operationDependencies() -> OperationDependencies? {
         do {
             let services = try resolvedServices()
@@ -718,7 +741,10 @@ final class ApplicationModel {
         return await revalidate(sessionBoundary, using: dependencies)
     }
 
-    private func applyOpenedFile(_ result: FileOpenResult) {
+    private func applyOpenedFile(
+        _ result: FileOpenResult,
+        using dependencies: OperationDependencies
+    ) async {
         let openedDocument = DocumentSession(
             fileReference: result.reference,
             displayName: result.displayName,
@@ -733,7 +759,11 @@ final class ApplicationModel {
             source: .fileOpen,
             selection: nil
         )
-        replaceCurrentDocument(with: openedDocument)
+        await persistAndReplaceCurrentDocument(
+            with: openedDocument,
+            using: dependencies
+        )
+        guard document === openedDocument else { return }
         startExternalChangeMonitoring()
     }
 
