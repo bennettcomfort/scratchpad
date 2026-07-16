@@ -40,7 +40,11 @@ final class ApplicationModel {
     @ObservationIgnored
     private var recoveryCoordinator: RecoveryCoordinator?
     @ObservationIgnored
+    private var externalChangeMonitor: ExternalChangeMonitor?
+    @ObservationIgnored
     private var recoveryCleanupRequiredDocumentID: UUID?
+    @ObservationIgnored
+    private var idleOperationWaiters: [CheckedContinuation<Void, Never>] = []
     @ObservationIgnored
     private var startedLaunchAttempt: Int?
     @ObservationIgnored
@@ -95,11 +99,29 @@ final class ApplicationModel {
         decisionCoordinator.resolvePending(with: resolution)
     }
 
+    func startExternalChangeMonitoring() {
+        do {
+            let services = try resolvedServices()
+            let monitor = resolvedExternalChangeMonitor(services: services)
+            monitor.start(document: document) { [weak self] documentID, generation, status in
+                guard let self else { return }
+                await self.receiveExternalFileStatus(
+                    documentID: documentID,
+                    generation: generation,
+                    status: status,
+                    services: services
+                )
+            }
+        } catch {
+            publishPersistenceBanner(error)
+        }
+    }
+
     func requestNewDocument() async {
         guard launchState == .ready,
               operationState == .idle else { return }
         operationState = .closing
-        defer { operationState = .idle }
+        defer { finishOperation() }
 
         guard let dependencies = operationDependencies(),
               await flushRecovery(using: dependencies.recovery) else { return }
@@ -107,7 +129,7 @@ final class ApplicationModel {
             .newUntitled,
             dependencies: dependencies
         ) else { return }
-        document = DocumentSession()
+        replaceCurrentDocument(with: DocumentSession())
     }
 
     func requestOpen() async {
@@ -134,7 +156,7 @@ final class ApplicationModel {
         if case .opening(reference) = operationState { return }
         guard operationState == .idle else { return }
         operationState = .opening(reference)
-        defer { operationState = .idle }
+        defer { finishOperation() }
 
         let recovery = resolvedRecoveryCoordinator(services: services)
         guard await flushRecovery(using: recovery) else { return }
@@ -159,7 +181,7 @@ final class ApplicationModel {
         guard launchState == .ready,
               operationState == .idle else { return false }
         operationState = .saving(document.id)
-        defer { operationState = .idle }
+        defer { finishOperation() }
         guard let dependencies = operationDependencies() else { return false }
         return await performSave(document.snapshot(), using: dependencies)
     }
@@ -168,7 +190,7 @@ final class ApplicationModel {
         guard launchState == .ready,
               operationState == .idle else { return false }
         operationState = .saving(document.id)
-        defer { operationState = .idle }
+        defer { finishOperation() }
         guard let dependencies = operationDependencies() else { return false }
         return await performSaveAs(document.snapshot(), using: dependencies)
     }
@@ -222,6 +244,7 @@ final class ApplicationModel {
             try Task.checkCancellation()
             guard launchAttempt == attempt else { return }
             launchState = .ready
+            startExternalChangeMonitoring()
         } catch is CancellationError {
             return
         } catch {
@@ -255,6 +278,18 @@ final class ApplicationModel {
             }
         )
         recoveryCoordinator = created
+        return created
+    }
+
+    private func resolvedExternalChangeMonitor(
+        services: ApplicationServices
+    ) -> ExternalChangeMonitor {
+        if let externalChangeMonitor { return externalChangeMonitor }
+        let created = ExternalChangeMonitor(
+            fileService: services.files,
+            clock: services.recoveryClock
+        )
+        externalChangeMonitor = created
         return created
     }
 
@@ -358,7 +393,7 @@ final class ApplicationModel {
                 source: .sessionRestore,
                 selection: recovery.selection
             )
-            document = restoredDocument
+            replaceCurrentDocument(with: restoredDocument)
         case .file(let session, let reference):
             let openedFile = try await files.open(reference)
             let restoredDocument = DocumentSession(
@@ -378,9 +413,9 @@ final class ApplicationModel {
                 source: .fileOpen,
                 selection: session.selection
             )
-            document = restoredDocument
+            replaceCurrentDocument(with: restoredDocument)
         case .empty:
-            document = DocumentSession()
+            replaceCurrentDocument(with: DocumentSession())
         }
     }
 
@@ -394,6 +429,96 @@ final class ApplicationModel {
     private struct DocumentOperationBoundary: Equatable {
         let documentID: UUID
         let generation: Int
+    }
+
+    private func receiveExternalFileStatus(
+        documentID: UUID,
+        generation: Int,
+        status: ExternalFileStatus,
+        services: ApplicationServices
+    ) async {
+        guard document.id == documentID else { return }
+        await waitForIdleOperation()
+        guard !Task.isCancelled,
+              document.id == documentID else { return }
+
+        let recovery = resolvedRecoveryCoordinator(services: services)
+        switch status {
+        case .unchanged:
+            return
+        case .missing:
+            document.markDeleted()
+            recovery.scheduleRecovery(for: document)
+            if let reference = document.fileReference {
+                publishFileBanner(FileServiceError.missing, path: reference.pathHint)
+            }
+        case .readOnly:
+            document.markReadOnly()
+            if let reference = document.fileReference {
+                publishFileBanner(FileServiceError.readOnly, path: reference.pathHint)
+            }
+        case .accessRequiresReselection:
+            document.markReadOnly()
+            if let reference = document.fileReference {
+                publishFileBanner(
+                    FileServiceError.accessRequiresReselection,
+                    path: reference.pathHint
+                )
+            }
+        case .changed:
+            if document.hasUnsavedChanges {
+                document.markConflicted()
+                recovery.scheduleRecovery(for: document)
+                return
+            }
+            guard document.generation == generation,
+                  let reference = document.fileReference else { return }
+            let boundary = currentDocumentBoundary()
+            operationState = .opening(reference)
+            defer { finishOperation() }
+            do {
+                let result = try await services.files.open(reference)
+                guard document.id == boundary.documentID else { return }
+                guard document.generation == boundary.generation,
+                      !document.hasUnsavedChanges else {
+                    document.markConflicted()
+                    recovery.scheduleRecovery(for: document)
+                    return
+                }
+                document.applyOpenedFile(result, source: .confirmedDiskReload)
+            } catch let error as FileServiceError {
+                switch error {
+                case .missing:
+                    document.markDeleted()
+                    recovery.scheduleRecovery(for: document)
+                case .readOnly, .accessRequiresReselection:
+                    document.markReadOnly()
+                default:
+                    break
+                }
+                publishFileBanner(error, path: reference.pathHint)
+            } catch {
+                publishFileBanner(error, path: reference.pathHint)
+            }
+        }
+    }
+
+    private func waitForIdleOperation() async {
+        while operationState != .idle {
+            await withCheckedContinuation { idleOperationWaiters.append($0) }
+        }
+    }
+
+    private func finishOperation() {
+        operationState = .idle
+        let waiters = idleOperationWaiters
+        idleOperationWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+    }
+
+    private func replaceCurrentDocument(with replacement: DocumentSession) {
+        externalChangeMonitor?.stop()
+        document = replacement
     }
 
     private func operationDependencies() -> OperationDependencies? {
@@ -451,7 +576,7 @@ final class ApplicationModel {
     ) async -> Bool {
         guard operationState == .idle else { return false }
         operationState = operation
-        defer { operationState = .idle }
+        defer { finishOperation() }
         guard let dependencies = operationDependencies() else { return false }
 
         if document.hasUnsavedChanges {
@@ -523,7 +648,8 @@ final class ApplicationModel {
             source: .fileOpen,
             selection: nil
         )
-        document = openedDocument
+        replaceCurrentDocument(with: openedDocument)
+        startExternalChangeMonitoring()
     }
 
     private func performSave(
@@ -687,6 +813,7 @@ final class ApplicationModel {
 
         let matchesGeneration = document.generation == snapshot.generation
         document.adoptVerifiedSave(result, markClean: matchesGeneration)
+        startExternalChangeMonitoring()
         if matchesGeneration {
             recoveryCleanupRequiredDocumentID = snapshot.documentID
             return await deleteRecovery(

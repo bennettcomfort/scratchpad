@@ -36,6 +36,7 @@ targets:
       - path: Scratchpad/Editor/ScratchTextView.swift
       - path: Scratchpad/Files/FileModels.swift
       - path: Scratchpad/Files/FileResults.swift
+      - path: Scratchpad/Files/ExternalChangeMonitor.swift
       - path: Scratchpad/Files/FileService.swift
       - path: Scratchpad/Persistence/ApplicationSupportPaths.swift
       - path: Scratchpad/Persistence/AtomicFileWriter.swift
@@ -72,6 +73,7 @@ targets:
       - ScratchpadTests/Persistence/RecoveryCoordinatorTests.swift
       - ScratchpadTests/Persistence/SessionRepositoryTests.swift
       - ScratchpadTests/Files/FileServiceTests.swift
+      - ScratchpadTests/Files/ExternalChangeMonitorTests.swift
     settings:
       GENERATE_INFOPLIST_FILE: YES
     dependencies:
