@@ -18,11 +18,36 @@ struct DocumentMetrics: Equatable, Sendable {
 
 enum DocumentMetricsCalculator {
     static func calculate(text: String, countsWhitespace: Bool) -> DocumentMetrics {
+        calculate(
+            text: text,
+            countsWhitespace: countsWhitespace,
+            isCancelled: { false }
+        ) ?? .empty
+    }
+
+    static func calculateUnlessCancelled(
+        text: String,
+        countsWhitespace: Bool
+    ) -> DocumentMetrics? {
+        calculate(
+            text: text,
+            countsWhitespace: countsWhitespace,
+            isCancelled: { Task.isCancelled }
+        )
+    }
+
+    private static func calculate(
+        text: String,
+        countsWhitespace: Bool,
+        isCancelled: () -> Bool
+    ) -> DocumentMetrics? {
         var characters = 0
         var words = 0
+        var lines = 1
         var isInsideWord = false
 
         for character in text {
+            if isCancelled() { return nil }
             let isWhitespace = character.unicodeScalars.allSatisfy {
                 $0.properties.isWhitespace
             }
@@ -35,13 +60,12 @@ enum DocumentMetricsCalculator {
                 words += 1
                 isInsideWord = true
             }
-        }
-
-        let lines = text.unicodeScalars.reduce(into: 1) { count, scalar in
-            if scalar.value == 0x0A {
-                count += 1
+            for scalar in character.unicodeScalars where scalar.value == 0x0A {
+                lines += 1
             }
         }
+
+        if isCancelled() { return nil }
         let byteCount = text.utf8.count
         let estimatedTokens = byteCount == 0
             ? 0

@@ -30,6 +30,7 @@ final class ApplicationModel {
     private(set) var launchState: LaunchState
     private(set) var launchAttempt = 0
     private(set) var operationState: DocumentOperationState = .idle
+    let settings: SettingsStore
     var banner: ErrorBanner?
 
     var pendingDecision: DocumentDecision? { decisionCoordinator.pending }
@@ -66,22 +67,21 @@ final class ApplicationModel {
     private let requestEditorFocus: @MainActor () -> Void
     @ObservationIgnored
     private let metricsCoordinator: MetricsCoordinator
-    @ObservationIgnored
-    private let countsWhitespaceProvider: @MainActor () -> Bool
 
     init(
         document: DocumentSession = DocumentSession(),
+        settings: SettingsStore = SettingsStore.transient(),
         launchState: LaunchState = .ready,
         servicesFactory: (@MainActor @Sendable () throws -> ApplicationServices)? = nil,
         panelProvider: (any FilePanelProviding)? = nil,
         decisionCoordinator: DocumentDecisionCoordinator = DocumentDecisionCoordinator(),
         windowFrameProvider: @escaping @MainActor () -> CGRect = { .zero },
         requestEditorFocus: @escaping @MainActor () -> Void = {},
-        metricsCoordinator: MetricsCoordinator = MetricsCoordinator(),
-        countsWhitespaceProvider: @escaping @MainActor () -> Bool = { false }
+        metricsCoordinator: MetricsCoordinator = MetricsCoordinator()
     ) {
         self.document = document
         self.metrics = .empty
+        self.settings = settings
         self.launchState = launchState
         self.servicesFactory = servicesFactory
         self.panelProvider = panelProvider
@@ -89,12 +89,17 @@ final class ApplicationModel {
         self.windowFrameProvider = windowFrameProvider
         self.requestEditorFocus = requestEditorFocus
         self.metricsCoordinator = metricsCoordinator
-        self.countsWhitespaceProvider = countsWhitespaceProvider
         scheduleMetrics(for: document)
+        observeMetricsSettings()
     }
 
-    static func live() -> ApplicationModel {
-        ApplicationModel(
+    static func live(settings: SettingsStore? = nil) -> ApplicationModel {
+        let resolvedSettings = settings ?? SettingsStore(
+            defaults: .standard,
+            launchService: LaunchAtLoginService()
+        )
+        return ApplicationModel(
+            settings: resolvedSettings,
             launchState: .restoring,
             servicesFactory: { try ApplicationServices.live() },
             panelProvider: FilePanelProvider(),
@@ -717,13 +722,25 @@ final class ApplicationModel {
             documentID: snapshot.documentID,
             generation: snapshot.generation,
             text: snapshot.text,
-            countsWhitespace: countsWhitespaceProvider()
+            countsWhitespace: settings.snapshot.countsWhitespace
         ) { [weak self] documentID, generation, metrics in
             self?.receiveMetrics(
                 documentID: documentID,
                 generation: generation,
                 metrics: metrics
             )
+        }
+    }
+
+    private func observeMetricsSettings() {
+        withObservationTracking {
+            _ = settings.snapshot.countsWhitespace
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.observeMetricsSettings()
+                self.scheduleMetrics(for: self.document)
+            }
         }
     }
 

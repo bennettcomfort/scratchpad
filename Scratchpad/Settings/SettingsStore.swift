@@ -53,6 +53,23 @@ final class SettingsStore {
         snapshot = Self.makeSnapshot(defaults: defaults)
     }
 
+    static func transient() -> SettingsStore {
+        let suiteName = "ApplicationModel.Transient.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            return SettingsStore(
+                defaults: .standard,
+                launchService: TransientLaunchAtLoginService()
+            )
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+        let store = SettingsStore(
+            defaults: defaults,
+            launchService: TransientLaunchAtLoginService()
+        )
+        defaults.removePersistentDomain(forName: suiteName)
+        return store
+    }
+
     func setLaunchAtLogin(_ enabled: Bool) {
         do {
             try launchService.setEnabled(enabled)
@@ -177,5 +194,14 @@ final class SettingsStore {
         static let countsWhitespace = "settings.countsWhitespace"
         static let showsInformationBar = "settings.showsInformationBar"
         static let appearance = "settings.appearance"
+    }
+}
+
+@MainActor
+private final class TransientLaunchAtLoginService: LaunchAtLoginServicing {
+    var isEnabled = false
+
+    func setEnabled(_ enabled: Bool) throws {
+        isEnabled = enabled
     }
 }
