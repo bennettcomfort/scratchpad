@@ -430,7 +430,11 @@ final class RecoveryCoordinatorTests: XCTestCase {
             hasUnsavedChanges: false,
             saveState: .clean
         )
-        let recovery = makeRecovery(documentID: documentID, text: "stale recovery")
+        let recovery = makeRecovery(
+            documentID: documentID,
+            text: "stale recovery",
+            savedAt: Date(timeIntervalSince1970: 5)
+        )
         let repository = RecoveryRepositorySpy(session: session, recoveries: [recovery])
         let bookmarks = BookmarkAccessSpy(references: [bookmarkID: reference])
         let files = LaunchFileServiceSpy(
@@ -464,6 +468,81 @@ final class RecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(model.document.scrollOffsetY, session.scrollOffsetY)
         let openedReferences = await files.openedReferences
         XCTAssertEqual(openedReferences, [reference])
+    }
+
+    func testNewerMatchingRecoveryOverridesStaleCleanFileSession() async throws {
+        let documentID = UUID()
+        let staleSessionBookmarkID = UUID()
+        let recoveryBookmarkID = UUID()
+        let reference = ExternalFileReference(
+            bookmarkID: recoveryBookmarkID,
+            pathHint: "/Notes/Edited.md"
+        )
+        let cleanSession = makeSession(
+            documentID: documentID,
+            fileReferenceID: staleSessionBookmarkID,
+            hasUnsavedChanges: false,
+            saveState: .clean
+        )
+        let editedDocument = DocumentSession(
+            id: documentID,
+            text: "original disk text",
+            fileReference: reference,
+            displayName: "Edited.md",
+            saveState: .clean,
+            hasUnsavedChanges: false,
+            lastSavedHash: "base-hash",
+            lastKnownDiskMTime: Date(timeIntervalSince1970: 40)
+        )
+        editedDocument.storage.setAttributedString(
+            NSAttributedString(string: "unsaved text after replacement")
+        )
+        editedDocument.noteUserEdit()
+
+        let repository = RecoveryRepositorySpy(session: cleanSession)
+        let clock = VirtualRecoveryClock()
+        let documents = DocumentLookup([editedDocument])
+        let coordinator = RecoveryCoordinator(
+            repository: repository,
+            clock: clock,
+            documentProvider: { documents.document(id: $0) }
+        )
+        coordinator.scheduleRecovery(for: editedDocument)
+        await clock.waitForSleepers(1)
+        await clock.advance(by: .seconds(2))
+        await waitForRecoveryWrites(1, repository: repository)
+
+        let launchModel = ApplicationModel()
+        let launchCoordinator = RecoveryCoordinator(
+            repository: repository,
+            clock: VirtualRecoveryClock(),
+            documentProvider: { id in
+                launchModel.document.id == id ? launchModel.document : nil
+            }
+        )
+        let source = try await launchModel.restoreAtLaunch(
+            repository: repository,
+            bookmarks: BookmarkAccessSpy(references: [recoveryBookmarkID: reference]),
+            files: LaunchFileServiceSpy(
+                openResult: FileOpenResult(
+                    reference: reference,
+                    text: "original disk text",
+                    displayName: "Edited.md",
+                    lineEnding: .lf,
+                    contentHash: "base-hash",
+                    modificationDate: Date(timeIntervalSince1970: 40)
+                )
+            ),
+            recoveryCoordinator: launchCoordinator,
+            windowFrame: cleanSession.windowFrame
+        )
+
+        let storedRecovery = await repository.storedRecovery(documentID: documentID)
+        let recovery = try XCTUnwrap(storedRecovery)
+        XCTAssertEqual(source, .recovery(recovery))
+        XCTAssertEqual(launchModel.document.storage.string, "unsaved text after replacement")
+        XCTAssertTrue(launchModel.document.hasUnsavedChanges)
+        XCTAssertEqual(launchModel.document.fileReference, reference)
     }
 
     func testUnreadableSessionPreservesOrphanRecoveryForNextLaunch() async throws {
@@ -693,7 +772,8 @@ private extension RecoveryCoordinatorTests {
         documentID: UUID,
         fileReferenceID: UUID? = nil,
         filePathHint: String? = nil,
-        text: String
+        text: String,
+        savedAt: Date = Date(timeIntervalSince1970: 20)
     ) -> RecoveryRecord {
         RecoveryRecord(
             schemaVersion: 1,
@@ -706,7 +786,7 @@ private extension RecoveryCoordinatorTests {
             lineEnding: .lf,
             selection: TextSelection(location: 1, length: 2),
             scrollOffsetY: 31,
-            savedAt: Date(timeIntervalSince1970: 20)
+            savedAt: savedAt
         )
     }
 }

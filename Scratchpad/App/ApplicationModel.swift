@@ -344,7 +344,14 @@ final class ApplicationModel {
 
         if let session {
             recovery = try await repository.loadRecovery(documentID: session.documentID)
-            if !session.hasUnsavedChanges,
+            let recoveryWins = recovery.map {
+                RecoveryCoordinator.recoveryIsAuthoritative(
+                    session: session,
+                    recovery: $0
+                )
+            } == true
+            if !recoveryWins,
+               !session.hasUnsavedChanges,
                let bookmarkID = session.fileReferenceID {
                 cleanFileReference = try await requireReference(
                     bookmarkID: bookmarkID,
@@ -604,7 +611,15 @@ final class ApplicationModel {
             )
         } catch {
             publishPersistenceBanner(error)
-            _ = await revalidate(boundary, using: dependencies)
+            if document.id == boundary.documentID,
+               document.hasUnsavedChanges {
+                await preserveLatestDocumentState(
+                    documentID: boundary.documentID,
+                    using: dependencies
+                )
+            } else {
+                _ = await revalidate(boundary, using: dependencies)
+            }
             return
         }
         guard await revalidate(boundary, using: dependencies) else { return }
@@ -930,6 +945,19 @@ final class ApplicationModel {
         document.adoptVerifiedSave(result, markClean: matchesGeneration)
         startExternalChangeMonitoring()
         if matchesGeneration {
+            let boundary = currentDocumentBoundary()
+            do {
+                try await dependencies.recovery.flushSession(
+                    for: document,
+                    windowFrame: windowFrameProvider(),
+                    didCloseCleanly: false
+                )
+            } catch {
+                publishPersistenceBanner(error)
+                _ = await revalidate(boundary, using: dependencies)
+                return false
+            }
+            guard await revalidate(boundary, using: dependencies) else { return false }
             recoveryCleanupRequiredDocumentID = snapshot.documentID
             return await deleteRecovery(
                 documentID: snapshot.documentID,

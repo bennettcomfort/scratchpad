@@ -287,6 +287,60 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertEqual(model.operationState, .idle)
     }
 
+    func testFailedReplacementSessionAfterDiscardRecreatesOldDocumentRecovery() async {
+        let repository = OperationRepositoryFake(sessionWriteFailures: 1)
+        let oldDocument = makeEditedDocument(text: "discarded only if replacement succeeds")
+        let model = makeModel(
+            document: oldDocument,
+            repository: repository,
+            files: ControllableFileServiceFake()
+        )
+
+        let replacement = Task { await model.requestNewDocument() }
+        guard await waitUntil({ model.pendingDecision != nil }) else {
+            replacement.cancel()
+            return
+        }
+        model.resolvePendingDecision(with: .discard)
+        await replacement.value
+
+        let recoveryWrites = await repository.recoveryWrites
+        let sessionWrites = await repository.sessionWrites
+        XCTAssertTrue(model.document === oldDocument)
+        XCTAssertEqual(oldDocument.storage.string, "discarded only if replacement succeeds")
+        XCTAssertEqual(recoveryWrites.last?.documentID, oldDocument.id)
+        XCTAssertEqual(
+            recoveryWrites.last?.unsavedText,
+            "discarded only if replacement succeeds"
+        )
+        XCTAssertEqual(sessionWrites.last?.documentID, oldDocument.id)
+        XCTAssertEqual(sessionWrites.last?.hasUnsavedChanges, true)
+        XCTAssertNotNil(model.banner)
+    }
+
+    func testVerifiedSavePersistsCleanSessionBeforeDeletingRecovery() async {
+        let repository = OperationRepositoryFake(deleteSuspended: true)
+        let document = makeEditedDocument(text: "verified save")
+        let model = makeModel(
+            document: document,
+            repository: repository,
+            files: ControllableFileServiceFake()
+        )
+
+        let save = Task { await model.save() }
+        await repository.waitForDeleteCalls(1)
+
+        let session = await repository.sessionWrites.last
+        XCTAssertEqual(session?.documentID, document.id)
+        XCTAssertEqual(session?.hasUnsavedChanges, false)
+        XCTAssertEqual(session?.saveState, .clean)
+        XCTAssertEqual(session?.didCloseCleanly, false)
+
+        await repository.resumeDelete()
+        let saved = await save.value
+        XCTAssertTrue(saved)
+    }
+
     func testSaveAndCloseWaitsForVerifiedSaveResult() async {
         let repository = OperationRepositoryFake()
         let files = ControllableFileServiceFake(saveSuspended: true)
@@ -846,6 +900,7 @@ private actor OperationRepositoryFake: SessionPersisting {
     private var sessionWriteWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
     private var deleteWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
     private var remainingDeleteFailures: Int
+    private var remainingSessionWriteFailures: Int
     private var sessionWriteSuspended: Bool
     private var deleteSuspended: Bool
     private var sessionWriteContinuation: CheckedContinuation<Void, Never>?
@@ -855,11 +910,13 @@ private actor OperationRepositoryFake: SessionPersisting {
     init(
         events: OperationEventRecorder? = nil,
         deleteFailures: Int = 0,
+        sessionWriteFailures: Int = 0,
         sessionWriteSuspended: Bool = false,
         deleteSuspended: Bool = false
     ) {
         self.events = events
         self.remainingDeleteFailures = deleteFailures
+        self.remainingSessionWriteFailures = sessionWriteFailures
         self.sessionWriteSuspended = sessionWriteSuspended
         self.deleteSuspended = deleteSuspended
     }
@@ -868,6 +925,10 @@ private actor OperationRepositoryFake: SessionPersisting {
 
     func loadSession() async throws -> SessionRecord? { nil }
     func writeSession(_ record: SessionRecord) async throws {
+        if remainingSessionWriteFailures > 0 {
+            remainingSessionWriteFailures -= 1
+            throw OperationFakeError.sessionWriteFailed
+        }
         sessionWrites.append(record)
         let ready = sessionWriteWaiters.filter { sessionWrites.count >= $0.0 }
         sessionWriteWaiters.removeAll { sessionWrites.count >= $0.0 }
@@ -1142,4 +1203,5 @@ private actor SuspendingRecoveryClock: RecoveryClock {
 
 private enum OperationFakeError: Error {
     case deleteFailed
+    case sessionWriteFailed
 }

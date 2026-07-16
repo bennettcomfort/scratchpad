@@ -168,14 +168,8 @@ final class RecoveryCoordinator {
             record.documentID == session.documentID ? record : nil
         }
 
-        if session.hasUnsavedChanges,
-           let matchingRecovery {
-            return .recovery(matchingRecovery)
-        }
-
-        if session.fileReferenceID == nil,
-           let matchingRecovery,
-           !matchingRecovery.unsavedText.isEmpty {
+        if let matchingRecovery,
+           recoveryIsAuthoritative(session: session, recovery: matchingRecovery) {
             return .recovery(matchingRecovery)
         }
 
@@ -186,6 +180,17 @@ final class RecoveryCoordinator {
         }
 
         return .empty
+    }
+
+    static func recoveryIsAuthoritative(
+        session: SessionRecord,
+        recovery: RecoveryRecord
+    ) -> Bool {
+        guard recovery.documentID == session.documentID else { return false }
+        if session.hasUnsavedChanges || recovery.savedAt > session.savedAt {
+            return true
+        }
+        return session.fileReferenceID == nil && !recovery.unsavedText.isEmpty
     }
 }
 
