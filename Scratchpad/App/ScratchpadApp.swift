@@ -40,7 +40,6 @@ struct ScratchpadApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowBackgroundDragBehavior(.enabled)
         .defaultSize(width: 820, height: 640)
-        .windowResizability(.contentMinSize)
         .commands {
             TextEditingCommands()
             AppCommands(model: model)

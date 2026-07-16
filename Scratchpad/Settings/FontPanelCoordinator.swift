@@ -13,9 +13,22 @@ protocol FontManaging: AnyObject {
 extension NSFontManager: FontManaging {}
 
 @MainActor
+protocol FontPanelPresenting: AnyObject {
+    func present()
+}
+
+@MainActor
+private final class NativeFontPanelPresenter: FontPanelPresenting {
+    func present() {
+        NSFontPanel.shared.makeKeyAndOrderFront(nil)
+    }
+}
+
+@MainActor
 final class FontPanelCoordinator: NSObject {
     private let settings: SettingsStore
     private let fontManager: any FontManaging
+    private let fontPanelPresenter: any FontPanelPresenting
     private weak var previousTarget: AnyObject?
     private var previousAction = NSSelectorFromString("changeFont:")
     private var currentFont: NSFont
@@ -23,10 +36,12 @@ final class FontPanelCoordinator: NSObject {
 
     init(
         settings: SettingsStore,
-        fontManager: any FontManaging = NSFontManager.shared
+        fontManager: any FontManaging = NSFontManager.shared,
+        fontPanelPresenter: (any FontPanelPresenting)? = nil
     ) {
         self.settings = settings
         self.fontManager = fontManager
+        self.fontPanelPresenter = fontPanelPresenter ?? NativeFontPanelPresenter()
         currentFont = Self.resolveFont(settings.snapshot.font)
         super.init()
         NotificationCenter.default.addObserver(
@@ -48,6 +63,7 @@ final class FontPanelCoordinator: NSObject {
         fontManager.action = #selector(changeFont(_:))
         fontManager.setSelectedFont(currentFont, isMultiple: false)
         fontManager.orderFrontFontPanel(self)
+        fontPanelPresenter.present()
     }
 
     @objc func changeFont(_ sender: Any?) {

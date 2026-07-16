@@ -28,6 +28,22 @@ final class FontPanelCoordinatorTests: XCTestCase {
         )
     }
 
+    func testOpenExplicitlyPresentsTheNativeFontPanel() throws {
+        let fixture = try SettingsFixture()
+        defer { fixture.remove() }
+        let manager = FontManagerFake()
+        let presenter = FontPanelPresenterFake()
+        let coordinator = FontPanelCoordinator(
+            settings: fixture.store,
+            fontManager: manager,
+            fontPanelPresenter: presenter
+        )
+
+        coordinator.open()
+
+        XCTAssertEqual(presenter.presentCount, 1)
+    }
+
     func testFontPanelRestoresPreviousTargetAndActionOnClose() throws {
         let fixture = try SettingsFixture()
         defer { fixture.remove() }
@@ -241,6 +257,15 @@ private final class FontManagerFake: FontManaging {
 
     func convert(_ font: NSFont) -> NSFont {
         convertedFont
+    }
+}
+
+@MainActor
+private final class FontPanelPresenterFake: FontPanelPresenting {
+    private(set) var presentCount = 0
+
+    func present() {
+        presentCount += 1
     }
 }
 

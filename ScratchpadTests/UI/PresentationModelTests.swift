@@ -128,6 +128,26 @@ final class PresentationModelTests: XCTestCase {
         )
     }
 
+    func testWindowMinimumAppliesToTheWholeFrameNotTheContentRect() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: 640),
+            styleMask: [.titled, .resizable, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        let coordinator = WindowChromeConfigurator.Coordinator()
+
+        coordinator.configure(window, restoredFrame: nil)
+
+        XCTAssertEqual(window.minSize, WindowChromeConfiguration.minimumSize)
+        XCTAssertEqual(
+            window.contentMinSize,
+            window.contentRect(
+                forFrameRect: NSRect(origin: .zero, size: WindowChromeConfiguration.minimumSize)
+            ).size
+        )
+    }
+
     func testWindowHierarchyContainsNoDeferredChrome() {
         XCTAssertEqual(
             MainWindowPresentation(showsInformationBar: true, hasErrorBanner: true).hierarchy,

@@ -107,11 +107,14 @@ struct WindowChromeConfigurator: NSViewRepresentable {
                 appliedRestoredFrame = nil
             }
 
-            window.contentMinSize = WindowChromeConfiguration.minimumSize
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.styleMask.insert(.fullSizeContentView)
             window.isMovableByWindowBackground = true
+            window.contentMinSize = window.contentRect(
+                forFrameRect: NSRect(origin: .zero, size: WindowChromeConfiguration.minimumSize)
+            ).size
+            window.minSize = WindowChromeConfiguration.minimumSize
 
             guard !appliedFrame || restoredFrame != appliedRestoredFrame else { return }
             var screenFrames: [NSRect] = window.screen.map { [$0.visibleFrame] } ?? []

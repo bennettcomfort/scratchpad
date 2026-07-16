@@ -24,7 +24,6 @@ struct MainWindowView: View {
             await model.restoreCurrentLaunchAttempt(windowFrame: currentWindowFrame)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .frame(minWidth: 480, minHeight: 320)
     }
 
     private var theme: ThemeDefinition {
