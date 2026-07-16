@@ -3566,7 +3566,7 @@ After the explicit `.overwrite` or `.recreate` resolution, ApplicationModel call
 
 - [ ] **Step 3: Prove destructive-operation ordering and commit**
 
-Run the focused tests and full suite. Expected: 10 new tests pass; cumulative suite count is 123.
+Run the focused tests and full suite. Expected: 13 new tests pass; cumulative suite count is 126.
 
 ```sh
 git add Scratchpad/App/DocumentDecisionCoordinator.swift Scratchpad/App/FilePanelProvider.swift Scratchpad/Utilities/Log.swift Scratchpad/App/ApplicationModel.swift Scratchpad/Document/DocumentSession.swift Scratchpad/App/ScratchpadApp.swift Scratchpad/App/AppCommands.swift ScratchpadTests/App/DocumentDecisionCoordinatorTests.swift project.yml TRACKER.md
@@ -3608,7 +3608,7 @@ final class ExternalChangeMonitor {
 
 - [ ] **Step 3: Prove monitor isolation and commit**
 
-Run focused tests and the full suite. Expected: 5 new tests pass; cumulative suite count is 128.
+Run focused tests and the full suite. Expected: 5 new tests pass; cumulative suite count is 131.
 
 ```sh
 git add Scratchpad/Files/ExternalChangeMonitor.swift Scratchpad/App/ApplicationModel.swift ScratchpadTests/Files/ExternalChangeMonitorTests.swift project.yml TRACKER.md
@@ -3659,7 +3659,7 @@ xcodebuild -scheme Scratchpad -destination 'platform=macOS' test
 git diff --check
 ```
 
-Expected: warning-free build, 134 passing tests, and no whitespace errors.
+Expected: warning-free build, 137 passing tests, and no whitespace errors.
 
 - [ ] **Step 4: Run the signed-sandbox manual data-loss matrix**
 
@@ -3703,7 +3703,7 @@ After Tasks 3.1–3.8 are `verified`, stop before visual-shell work. Present fre
 | Operation ordering | Save/Discard/Cancel gates New, Open, Close, and Quit with awaited results |
 | External changes | clean reloads; dirty conflicts; missing and denied access remain explicit states |
 | Termination | one `.terminateLater` task replies exactly once and cancels quit on failure |
-| Automated gate | warning-free build and 134 passing tests |
+| Automated gate | warning-free build and 137 passing tests |
 | Manual gate | all 12 signed-sandbox data-loss scenarios are recorded as passing |
 
 The user must explicitly approve Stage 3 before `AGENTS.md` and `TRACKER.md` advance to Recovery Stage 4.
