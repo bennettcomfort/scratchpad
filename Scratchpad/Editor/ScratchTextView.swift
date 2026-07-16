@@ -3,6 +3,70 @@ import AppKit
 @MainActor
 final class ScratchTextView: NSTextView {
     var commandContext = EditorCommandContext.defaults(lineEnding: .lf)
+    private var editorSettings: EditorSettingsSnapshot?
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        guard let editorSettings else { return }
+        apply(style: ResolvedEditorStyle(
+            settings: editorSettings,
+            effectiveAppearance: effectiveAppearance
+        ))
+    }
+
+    func apply(settings: EditorSettingsSnapshot) {
+        editorSettings = settings
+        apply(style: ResolvedEditorStyle(
+            settings: settings,
+            effectiveAppearance: effectiveAppearance
+        ))
+    }
+
+    func apply(style: ResolvedEditorStyle) {
+        font = style.font
+        textColor = style.theme.editorForeground
+        backgroundColor = style.theme.editorBackground
+        drawsBackground = true
+        insertionPointColor = style.theme.caret
+        selectedTextAttributes = [
+            .backgroundColor: style.theme.selection,
+            .foregroundColor: style.selectionForeground,
+        ]
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineHeightMultiple = 1.45
+        paragraphStyle.defaultTabInterval = (" " as NSString).size(
+            withAttributes: [.font: style.font]
+        ).width * CGFloat(style.tabWidth)
+        paragraphStyle.tabStops = []
+        defaultParagraphStyle = paragraphStyle
+        typingAttributes = [
+            .font: style.font,
+            .foregroundColor: style.theme.editorForeground,
+            .paragraphStyle: paragraphStyle,
+        ]
+
+        textContainerInset = NSSize(width: 24, height: 20)
+        isHorizontallyResizable = false
+        isVerticallyResizable = true
+        textContainer?.widthTracksTextView = true
+        textContainer?.containerSize = NSSize(
+            width: 0,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        isAutomaticQuoteSubstitutionEnabled = style.smartSubstitutionsEnabled
+        isAutomaticDashSubstitutionEnabled = style.smartSubstitutionsEnabled
+        isContinuousSpellCheckingEnabled = style.spellingEnabled
+        isAutomaticSpellingCorrectionEnabled = style.spellingEnabled
+        commandContext = EditorCommandContext(
+            lineEnding: commandContext.lineEnding,
+            indentationUnit: style.insertsSpaces
+                ? String(repeating: " ", count: style.tabWidth)
+                : "\t",
+            tabWidth: style.tabWidth,
+            keepsIndentation: style.keepsIndentation
+        )
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()

@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 4 — Noto-inspired shell, settings, and metrics
 > **Current phase:** Implementation
-> **Next task:** Task 4.2 — define fixed themes and apply editor appearance safely
+> **Next task:** Task 4.3 — calculate prompt metrics off the main actor
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -71,7 +71,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
 | 4.1 | Implement typed settings and Launch at Login | verified | `c89eaa2`; missing-type compile RED; 8/8 focused tests; warning-as-error build; 203/203 full suite; independent review found no Critical or Important issues; no manual check required |
-| 4.2 | Define fixed themes and apply editor appearance safely | in progress | User authorized continuous Stage 4 execution on 2026-07-16; 203/203 baseline passes |
+| 4.2 | Define fixed themes and apply editor appearance safely | verified | Missing-theme compile RED; 7/7 focused tests; warning-as-error build; 210/210 full suite; fixed palettes, contrast, appearance resolution, style idempotence, undo/text/generation preservation, native options, and TextKit 2 scroll-layout regression verified; this task commit |
 | 4.3 | Calculate prompt metrics off the main actor | pending | Approved plan; awaits Task 4.2 verification |
 | 4.4 | Build the Noto-inspired main window | pending | Approved plan; awaits Task 4.3 verification |
 | 4.5 | Build native General, Editor, and Theme settings | pending | Approved plan; awaits Task 4.4 verification |
@@ -91,7 +91,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | verified | User approved Stage 1 on 2026-07-15; commits `988a539`, `3bdacc9`, `3a1e4af`, `2e8c4c7`, `2b703b5` |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | verified | User approved Stage 2 on 2026-07-15; commits `cfaed34`, `04ef7ce`, `c804391`, `9d04dc0` |
 | 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | verified | User approved Stage 3 on 2026-07-16, including deterministic substitution for two fault-injection-only branches; commits through `102ecc8` |
-| 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | in progress | Task 4.1 verified; Task 4.2 has not begun; user approves the completed visual and settings matrix |
+| 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | in progress | Tasks 4.1–4.2 verified; Task 4.3 is current; user approves the completed visual and settings matrix |
 | 5 | Complete warning, regression, accessibility, performance, and dogfood hardening | pending | User accepts recovery milestone |
 
 ## Known Defect Ledger
@@ -194,6 +194,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-16 | Stage 3 approval | User approved the complete data-safety evidence matrix, including the two documented deterministic fault-injection substitutions | verified | Stage 3 accepted; Stage 4 / Task 4.1 pointer authorized, with no Stage 4 implementation begun in this commit. |
 | 2026-07-16 | Task 4.1 typed settings and Launch at Login | Exact eight-test compile RED failed only for missing `SettingsStore`, `LaunchAtLoginServicing`, `FontPreference`, and related typed interfaces. Focused GREEN passed 8/8. Fresh controller gate: `xcodegen`; warning-as-error build; full suite passed 203/203. `git diff --check`, H1–H14/prohibited-scope scans, typed snapshot observation, injected-suite persistence, font fallback preservation, document-storage nonmutation, launch rollback, and independent review pass. | verified | Feature commit `c89eaa2`. Centralized scalar defaults and typed snapshots now feed later Stage 4 tasks; live launch registration uses `SMAppService.mainApp` status with throwing register/unregister calls and actual-status rereads. No manual check required; Task 4.2 was not begun in this task. |
 | 2026-07-16 | Stage 4 continuous execution authorization | User authorized Tasks 4.2–4.5 to proceed in approved plan order without per-task pauses unless a design decision is required. Fresh `/tmp` DerivedData baseline passed 203/203 tests. | in progress | Task 4.2 is current; stop at the Stage 4 approval gate before Stage 5. |
+| 2026-07-16 | Task 4.2 fixed native editor themes | Exact seven-test compile RED failed for missing `ThemeDefinition`, `ResolvedEditorStyle`, and `apply(style:)`; focused GREEN passed 7/7. The first full suite exposed a line-height scroll-clamp regression (`1273.5` versus final maximum `1387.0`); the existing focused regression passed after TextKit 2 document-range layout was ensured before clamping. | verified | Fixed device-RGB Light and Dark palettes; System follows effective appearance while fixed themes do not; native resolved selected-text pair passes contrast checks; style application preserves text, generation, selection, and undo; warning-as-error build succeeds; fresh full suite passes 210/210; H1–H14, scope, data-loss, and whitespace review pass; no manual check required. |
 
 ## Current Manual Acceptance Matrix
 

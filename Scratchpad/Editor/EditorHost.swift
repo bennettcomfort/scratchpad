@@ -15,6 +15,10 @@ private final class RestoringScrollView: NSScrollView {
               contentView.bounds.width > 0,
               contentView.bounds.height > 0,
               let documentView else { return }
+        if let textView = documentView as? NSTextView,
+           let textLayoutManager = textView.textLayoutManager {
+            textLayoutManager.ensureLayout(for: textLayoutManager.documentRange)
+        }
         documentView.layoutSubtreeIfNeeded()
         let maximumOffset = max(
             0,
@@ -33,6 +37,7 @@ private final class RestoringScrollView: NSScrollView {
 @MainActor
 struct EditorHost: NSViewRepresentable {
     let document: DocumentSession
+    var settings = EditorSettingsSnapshot.editorDefaults
     var onEdit: @MainActor (DocumentSession) -> Void = { _ in }
     var onStateChange: @MainActor (DocumentSession) -> Void = { _ in }
     var isEditable = true
@@ -51,6 +56,7 @@ struct EditorHost: NSViewRepresentable {
         Self.makeScrollView(
             document: document,
             coordinator: context.coordinator,
+            settings: settings,
             isEditable: isEditable
         )
     }
@@ -64,6 +70,7 @@ struct EditorHost: NSViewRepresentable {
         precondition(textView.textStorage === document.storage)
         textView.isEditable = isEditable
         textView.commandContext = .defaults(lineEnding: document.lineEnding)
+        context.coordinator.apply(settings: settings, to: textView)
     }
 
     static func dismantleNSView(
@@ -79,6 +86,7 @@ struct EditorHost: NSViewRepresentable {
     static func makeScrollView(
         document: DocumentSession,
         coordinator: EditorCoordinator,
+        settings: EditorSettingsSnapshot = .editorDefaults,
         isEditable: Bool = true
     ) -> NSScrollView {
         let scrollView = RestoringScrollView()
@@ -105,9 +113,6 @@ struct EditorHost: NSViewRepresentable {
         textView.allowsUndo = true
         textView.usesFindBar = true
         textView.isIncrementalSearchingEnabled = true
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isContinuousSpellCheckingEnabled = false
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
@@ -123,6 +128,7 @@ struct EditorHost: NSViewRepresentable {
             width: 0,
             height: CGFloat.greatestFiniteMagnitude
         )
+        coordinator.apply(settings: settings, to: textView)
 
         scrollView.documentView = textView
         textView.setSelectedRange(document.selection.nsRange)

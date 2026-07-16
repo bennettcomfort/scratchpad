@@ -32,6 +32,10 @@ final class EditorCoordinator: NSObject, NSTextViewDelegate {
         )
     }
 
+    func apply(settings: EditorSettingsSnapshot, to textView: ScratchTextView) {
+        textView.apply(settings: settings)
+    }
+
     func detach() {
         NotificationCenter.default.removeObserver(self)
     }
