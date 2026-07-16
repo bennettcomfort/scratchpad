@@ -66,6 +66,104 @@ final class ExternalChangeMonitorTests: XCTestCase {
         XCTAssertEqual(openCount, 0)
     }
 
+    func testRestartCancelsDeliveryWaitingForActiveOperation() async throws {
+        let clock = ExternalMonitorVirtualClock()
+        let files = ExternalMonitorFileServiceFake(suspendSaveCount: 1)
+        let document = makeFileBackedDocument(text: "base")
+        let model = makeModel(document: document, files: files, clock: clock)
+
+        model.startExternalChangeMonitoring()
+        await clock.waitForSleepers(1)
+        let save = Task { await model.save() }
+        await files.waitForSaveEntries(1)
+        await clock.advance(by: .seconds(1))
+        await files.waitForInspectEntries(1)
+        await waitForIdleWaiterCount(1, in: model)
+        XCTAssertEqual(idleWaiterCount(in: model), 1)
+
+        model.startExternalChangeMonitoring()
+        await waitForIdleWaiterCount(0, in: model)
+        XCTAssertEqual(idleWaiterCount(in: model), 0)
+        await clock.waitForSleepers(1)
+        let inspectCount = await files.inspectCount
+        XCTAssertEqual(inspectCount, 1)
+
+        await files.releaseNextSave()
+        _ = await save.value
+    }
+
+    func testRestartCancelsSuspendedCleanReloadBeforeMutation() async throws {
+        let clock = ExternalMonitorVirtualClock()
+        let reference = makeReference()
+        let files = ExternalMonitorFileServiceFake(
+            suspendInspectCount: 1,
+            suspendOpenCount: 1,
+            openResult: FileOpenResult(
+                reference: reference,
+                text: "stale external text",
+                displayName: "note.md",
+                lineEnding: .lf,
+                contentHash: "external-hash",
+                modificationDate: Date(timeIntervalSince1970: 2)
+            )
+        )
+        let document = makeFileBackedDocument(text: "base", reference: reference)
+        let model = makeModel(document: document, files: files, clock: clock)
+
+        model.startExternalChangeMonitoring()
+        await clock.waitForSleepers(1)
+        await clock.advance(by: .seconds(1))
+        await files.waitForInspectEntries(1)
+        await files.releaseNextInspect(
+            with: .changed(
+                contentHash: "external-hash",
+                modificationDate: Date(timeIntervalSince1970: 2)
+            )
+        )
+        await files.waitForOpenEntries(1)
+
+        model.startExternalChangeMonitoring()
+        await clock.waitForSleepers(1)
+        await files.releaseNextOpen()
+        await waitForOperationState(.idle, in: model)
+
+        XCTAssertEqual(model.operationState, .idle)
+        XCTAssertEqual(document.storage.string, "base")
+        XCTAssertEqual(document.saveState, .clean)
+        XCTAssertFalse(document.hasUnsavedChanges)
+        XCTAssertEqual(document.lastSavedHash, "base-hash")
+    }
+
+    func testOpeningFileStartsMonitoringAutomatically() async throws {
+        let clock = ExternalMonitorVirtualClock()
+        let reference = makeReference()
+        let files = ExternalMonitorFileServiceFake(
+            openResult: FileOpenResult(
+                reference: reference,
+                text: "opened",
+                displayName: "note.md",
+                lineEnding: .lf,
+                contentHash: "base-hash",
+                modificationDate: Date(timeIntervalSince1970: 1)
+            )
+        )
+        let model = makeModel(
+            document: DocumentSession(),
+            files: files,
+            clock: clock,
+            panelProvider: ExternalMonitorPanelFake()
+        )
+
+        await model.requestOpen()
+        await clock.waitForSleepers(1)
+        await clock.advance(by: .seconds(1))
+        await files.waitForInspectEntries(1)
+
+        XCTAssertEqual(model.document.storage.string, "opened")
+        let inspectCount = await files.inspectCount
+        XCTAssertEqual(inspectCount, 1)
+    }
+
     func testCleanChangedFileReloadsThroughWholeTextReplacement() async throws {
         let clock = ExternalMonitorVirtualClock()
         let reference = makeReference()
@@ -107,9 +205,20 @@ final class ExternalChangeMonitorTests: XCTestCase {
 
     func testEditedChangedFileEntersConflictWithoutReplacingText() async throws {
         let clock = ExternalMonitorVirtualClock()
-        let files = ExternalMonitorFileServiceFake(suspendInspectCount: 1)
-        let document = makeFileBackedDocument(text: "local edits")
-        document.noteUserEdit()
+        let reference = makeReference()
+        let files = ExternalMonitorFileServiceFake(
+            suspendInspectCount: 1,
+            suspendOpenCount: 1,
+            openResult: FileOpenResult(
+                reference: reference,
+                text: "external text",
+                displayName: "note.md",
+                lineEnding: .lf,
+                contentHash: "external-hash",
+                modificationDate: Date(timeIntervalSince1970: 2)
+            )
+        )
+        let document = makeFileBackedDocument(text: "base", reference: reference)
         let model = makeModel(document: document, files: files, clock: clock)
 
         model.startExternalChangeMonitoring()
@@ -122,13 +231,17 @@ final class ExternalChangeMonitorTests: XCTestCase {
                 modificationDate: Date(timeIntervalSince1970: 2)
             )
         )
+        await files.waitForOpenEntries(1)
+        document.storage.setAttributedString(NSAttributedString(string: "local edits"))
+        document.noteUserEdit()
+        await files.releaseNextOpen()
         await clock.waitForSleepers(1)
 
         XCTAssertEqual(document.storage.string, "local edits")
         XCTAssertEqual(document.saveState, .conflicted)
         XCTAssertTrue(document.hasUnsavedChanges)
         let openCount = await files.openCount
-        XCTAssertEqual(openCount, 0)
+        XCTAssertEqual(openCount, 1)
     }
 
     func testMissingAndDeniedStatusesMapToDeletedAndReadOnlyStates() async throws {
@@ -164,7 +277,8 @@ private func makeModel(
     document: DocumentSession,
     files: ExternalMonitorFileServiceFake,
     repository: ExternalMonitorRepositoryFake = ExternalMonitorRepositoryFake(),
-    clock: ExternalMonitorVirtualClock
+    clock: ExternalMonitorVirtualClock,
+    panelProvider: (any FilePanelProviding)? = nil
 ) -> ApplicationModel {
     ApplicationModel(
         document: document,
@@ -175,8 +289,35 @@ private func makeModel(
                 files: files,
                 recoveryClock: clock
             )
-        }
+        },
+        panelProvider: panelProvider
     )
+}
+
+@MainActor
+private func idleWaiterCount(in model: ApplicationModel) -> Int {
+    let child = Mirror(reflecting: model).children.first {
+        $0.label?.hasSuffix("idleOperationWaiters") == true
+    }
+    guard let child else { return -1 }
+    return Mirror(reflecting: child.value).children.count
+}
+
+@MainActor
+private func waitForIdleWaiterCount(_ count: Int, in model: ApplicationModel) async {
+    for _ in 0..<100 where idleWaiterCount(in: model) != count {
+        await Task.yield()
+    }
+}
+
+@MainActor
+private func waitForOperationState(
+    _ state: DocumentOperationState,
+    in model: ApplicationModel
+) async {
+    for _ in 0..<100 where model.operationState != state {
+        await Task.yield()
+    }
 }
 
 @MainActor
@@ -274,17 +415,29 @@ private actor ExternalMonitorVirtualClock: RecoveryClock {
 
 private actor ExternalMonitorFileServiceFake: FileServicing {
     private var suspendedInspects: Int
+    private var suspendedOpens: Int
+    private var suspendedSaves: Int
     private var inspectEntries = 0
     private var inspectWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
     private var inspectContinuations: [CheckedContinuation<ExternalFileStatus, Never>] = []
+    private var openEntries = 0
+    private var openWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    private var openContinuations: [CheckedContinuation<Void, Never>] = []
+    private var saveEntries = 0
+    private var saveWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    private var saveContinuations: [CheckedContinuation<Void, Never>] = []
     private let configuredOpenResult: FileOpenResult?
     private(set) var openCount = 0
 
     init(
         suspendInspectCount: Int = 0,
+        suspendOpenCount: Int = 0,
+        suspendSaveCount: Int = 0,
         openResult: FileOpenResult? = nil
     ) {
         self.suspendedInspects = suspendInspectCount
+        self.suspendedOpens = suspendOpenCount
+        self.suspendedSaves = suspendSaveCount
         self.configuredOpenResult = openResult
     }
 
@@ -292,11 +445,23 @@ private actor ExternalMonitorFileServiceFake: FileServicing {
 
     func open(_ reference: ExternalFileReference) async throws -> FileOpenResult {
         openCount += 1
+        openEntries += 1
+        resumeSatisfiedOpenWaiters()
+        if suspendedOpens > 0 {
+            suspendedOpens -= 1
+            await withCheckedContinuation { openContinuations.append($0) }
+        }
         guard let configuredOpenResult else { throw ExternalMonitorFakeError.unconfigured }
         return configuredOpenResult
     }
 
     func save(_ snapshot: DocumentSnapshot) async throws -> FileSaveResult {
+        saveEntries += 1
+        resumeSatisfiedSaveWaiters()
+        if suspendedSaves > 0 {
+            suspendedSaves -= 1
+            await withCheckedContinuation { saveContinuations.append($0) }
+        }
         throw ExternalMonitorFakeError.unconfigured
     }
 
@@ -325,11 +490,52 @@ private actor ExternalMonitorFileServiceFake: FileServicing {
         inspectContinuations.removeFirst().resume(returning: status)
     }
 
+    func waitForOpenEntries(_ count: Int) async {
+        guard openEntries < count else { return }
+        await withCheckedContinuation { openWaiters.append((count, $0)) }
+    }
+
+    func releaseNextOpen() {
+        guard !openContinuations.isEmpty else { return }
+        openContinuations.removeFirst().resume()
+    }
+
+    func waitForSaveEntries(_ count: Int) async {
+        guard saveEntries < count else { return }
+        await withCheckedContinuation { saveWaiters.append((count, $0)) }
+    }
+
+    func releaseNextSave() {
+        guard !saveContinuations.isEmpty else { return }
+        saveContinuations.removeFirst().resume()
+    }
+
     private func resumeSatisfiedInspectWaiters() {
         let ready = inspectWaiters.filter { inspectEntries >= $0.0 }
         inspectWaiters.removeAll { inspectEntries >= $0.0 }
         for waiter in ready { waiter.1.resume() }
     }
+
+    private func resumeSatisfiedOpenWaiters() {
+        let ready = openWaiters.filter { openEntries >= $0.0 }
+        openWaiters.removeAll { openEntries >= $0.0 }
+        for waiter in ready { waiter.1.resume() }
+    }
+
+    private func resumeSatisfiedSaveWaiters() {
+        let ready = saveWaiters.filter { saveEntries >= $0.0 }
+        saveWaiters.removeAll { saveEntries >= $0.0 }
+        for waiter in ready { waiter.1.resume() }
+    }
+}
+
+@MainActor
+private final class ExternalMonitorPanelFake: FilePanelProviding {
+    func selectFileToOpen() async -> URL? {
+        URL(fileURLWithPath: "/tmp/note.md")
+    }
+
+    func selectSaveDestination(suggestedName: String) async -> URL? { nil }
 }
 
 private actor ExternalMonitorRepositoryFake: SessionPersisting {

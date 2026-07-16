@@ -44,7 +44,7 @@ final class ApplicationModel {
     @ObservationIgnored
     private var recoveryCleanupRequiredDocumentID: UUID?
     @ObservationIgnored
-    private var idleOperationWaiters: [CheckedContinuation<Void, Never>] = []
+    private var idleOperationWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
     @ObservationIgnored
     private var startedLaunchAttempt: Int?
     @ObservationIgnored
@@ -438,7 +438,11 @@ final class ApplicationModel {
         services: ApplicationServices
     ) async {
         guard document.id == documentID else { return }
-        await waitForIdleOperation()
+        do {
+            try await waitForIdleOperation()
+        } catch {
+            return
+        }
         guard !Task.isCancelled,
               document.id == documentID else { return }
 
@@ -478,6 +482,7 @@ final class ApplicationModel {
             defer { finishOperation() }
             do {
                 let result = try await services.files.open(reference)
+                try Task.checkCancellation()
                 guard document.id == boundary.documentID else { return }
                 guard document.generation == boundary.generation,
                       !document.hasUnsavedChanges else {
@@ -486,7 +491,10 @@ final class ApplicationModel {
                     return
                 }
                 document.applyOpenedFile(result, source: .confirmedDiskReload)
+            } catch is CancellationError {
+                return
             } catch let error as FileServiceError {
+                guard !Task.isCancelled else { return }
                 switch error {
                 case .missing:
                     document.markDeleted()
@@ -498,20 +506,44 @@ final class ApplicationModel {
                 }
                 publishFileBanner(error, path: reference.pathHint)
             } catch {
+                guard !Task.isCancelled else { return }
                 publishFileBanner(error, path: reference.pathHint)
             }
         }
     }
 
-    private func waitForIdleOperation() async {
+    private func waitForIdleOperation() async throws {
         while operationState != .idle {
-            await withCheckedContinuation { idleOperationWaiters.append($0) }
+            let waiterID = UUID()
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<Void, Error>) in
+                    if Task.isCancelled {
+                        continuation.resume(throwing: CancellationError())
+                    } else if operationState == .idle {
+                        continuation.resume()
+                    } else {
+                        idleOperationWaiters[waiterID] = continuation
+                    }
+                }
+            } onCancel: {
+                Task { @MainActor [weak self] in
+                    self?.cancelIdleOperationWaiter(waiterID)
+                }
+            }
         }
+        try Task.checkCancellation()
+    }
+
+    private func cancelIdleOperationWaiter(_ waiterID: UUID) {
+        idleOperationWaiters.removeValue(forKey: waiterID)?.resume(
+            throwing: CancellationError()
+        )
     }
 
     private func finishOperation() {
         operationState = .idle
-        let waiters = idleOperationWaiters
+        let waiters = Array(idleOperationWaiters.values)
         idleOperationWaiters.removeAll()
         for waiter in waiters { waiter.resume() }
     }

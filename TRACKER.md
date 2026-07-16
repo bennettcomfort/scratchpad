@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 3 — Data-safe persistence and lifecycle
 > **Current phase:** Implementation
-> **Next task:** Task 3.8 — await window close and application termination
+> **Next task:** Task 3.7 — correct monitor cancellation and complete controller re-review
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -63,8 +63,8 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 3.4 | Open, inspect, and atomically save UTF-8 files | verified | Coordinated conditional replacement; 18/18 Task 3.4 focused tests; three independent 96/96 suites; warning-free build; controller review approved; this task commit |
 | 3.5 | Debounce recovery per document and restore the correct source | verified | Corrected design `7a39707`; fresh stale-flush, launch-model compile, production-root policy, production edit-route, and nil-bookmark regressions; 17/17 focused and 113/113 full tests; both races 5/5; warning-as-error build; task and broad reviews clean; seeded recovery-first, clean-disk-first, and initial-focus manual checks pass; this task commit |
 | 3.6 | Serialize native panels, decisions, and destructive document operations | verified | Feature `c72680c`; generation-race fix `b3dc20d`; 13/13 focused and 126/126 full tests; warning-as-error build and independent review pass |
-| 3.7 | Monitor external changes without document-identity races | verified | Genuine missing-monitor RED; 5/5 focused and 131/131 full tests pass; warning-as-error build, identity/generation, invariant, scope, and whitespace checks pass; this task commit |
-| 3.8 | Await window close and application termination | in progress | Task 3.7 verified; continuous Stage 3 approval remains active |
+| 3.7 | Monitor external changes without document-identity races | in progress | Feature `8e5a018`; controller review found cancellation defects in idle-waiter removal and suspended clean reload; correction and re-review required |
+| 3.8 | Await window close and application termination | pending | Approved plan; awaiting verified completion of Task 3.7 |
 
 ### Stage 4 Task Ledger
 
@@ -90,7 +90,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | verified | User approved Stage 0 on 2026-07-14; commits `61be30c`, `f7c765a`, `81d0865` |
 | 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | verified | User approved Stage 1 on 2026-07-15; commits `988a539`, `3bdacc9`, `3a1e4af`, `2e8c4c7`, `2b703b5` |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | verified | User approved Stage 2 on 2026-07-15; commits `cfaed34`, `04ef7ce`, `c804391`, `9d04dc0` |
-| 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | in progress | Task 3.8 in progress; user approval required after Tasks 3.1–3.8 |
+| 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | in progress | Task 3.7 correction in progress; user approval required after Tasks 3.1–3.8 |
 | 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | pending | User approves visual and settings matrix |
 | 5 | Complete warning, regression, accessibility, performance, and dogfood hardening | pending | User accepts recovery milestone |
 
@@ -180,6 +180,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-16 | Task 3.5 manual launch acceptance and broad review | Sandboxed built app launched against preserved/temporary fixture state, then the original container was restored. Nonempty untitled recovery displayed `RECOVERY-FIRST-CONTENT` as the first editable text; clean file-backed state displayed `DISK-FIRST-CONTENT` while stale recovery remained absent; the text entry was initial first responder in both launches. An invalid command-line bookmark also exercised the fail-closed Retry surface before an app-generated bookmark completed the clean-file check. | verified | Fresh task re-review and whole-task broad review reported no Critical, Important, or Minor findings; manual fixtures and results were moved out of Application Support, and the original sandbox session was restored before commit. |
 | 2026-07-16 | Task 3.6 serialized document decisions | Missing-`FilePanelProviding` compile RED; exact coordinator case 1/1 GREEN; native-panel filename-tag RED corrected with an exact delegate and post-selection validator. Review REDs then reproduced launch-gate mutation, invalid-file recovery deletion, stale cleanup canceling a newer recovery flush, and three suspended destructive-boundary generation races. Corrected 13/13 focused tests pass; warning-as-error build; 126/126 full suite; H1–H14, operation, Save As, logging, deferred-scope, generated-source, and whitespace review; no separate manual check required | verified | Feature `c72680c` plus generation-race fix `b3dc20d`; one checked-continuation decision source; awaited New/Open/Save/Save As/Close/Quit; stable identity-plus-generation checkpoints preserve newest recovery and abort stale replacement, exit, and Reload operations; final independent review reported no findings |
 | 2026-07-16 | Task 3.7 external-change monitor | Exact focused compile RED failed only for missing `ExternalChangeMonitor` and `startExternalChangeMonitoring`; 5/5 focused GREEN; warning-as-error build; 131/131 full suite; virtual one-second cadence, suspended-inspect replacement isolation, clean reload, edited conflict, missing, read-only, and reselection mappings covered; H1–H14, no-event-monitor, no-wall-clock-test-sleep, generated-source, scope, and whitespace checks pass; no separate manual check required | verified | One main-actor cancellable monitor captures immutable snapshots, serializes delivery behind document operations, stops before replacement, and retains independent save-time staleness checks; this task commit |
+| 2026-07-16 | Task 3.7 cancellation correction | Controller-review RED retained one idle-operation waiter after monitor restart and allowed a cancelled suspended clean reload to replace text and advance the saved hash. Added automatic open-lifecycle monitoring and edit-during-suspended-reload coverage. | in progress | Cancellation now removes and fails the exact waiter, stale reloads check cancellation before mutation, 8/8 focused tests and 134/134 full tests pass, warning-as-error build and `git diff --check` pass. Separate fix commit and controller re-review remain required. |
 
 ## Current Manual Acceptance Matrix
 
