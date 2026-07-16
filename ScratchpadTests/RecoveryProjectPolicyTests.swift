@@ -57,13 +57,15 @@ final class RecoveryProjectPolicyTests: XCTestCase {
         XCTAssertTrue(app.contains("ApplicationModel.live()"))
         XCTAssertTrue(window.contains(".task(id: model.launchAttempt)"))
 
-        let restoring = try XCTUnwrap(window.range(of: "case .restoring:"))
-        let failed = try XCTUnwrap(window.range(of: "case .failed"))
-        let ready = try XCTUnwrap(window.range(of: "case .ready:"))
-        let task = try XCTUnwrap(window.range(of: ".task(id: model.launchAttempt)"))
-        let restoringSlice = window[restoring.lowerBound..<failed.lowerBound]
-        let failedSlice = window[failed.lowerBound..<ready.lowerBound]
-        let readySlice = window[ready.lowerBound..<task.lowerBound]
+        let editorRegion = try XCTUnwrap(window.range(of: "case .editor:"))
+        let bannerRegion = try XCTUnwrap(window.range(of: "case .errorBanner:"))
+        let editorSlice = window[editorRegion.lowerBound..<bannerRegion.lowerBound]
+        let restoring = try XCTUnwrap(editorSlice.range(of: "case .restoring:"))
+        let failed = try XCTUnwrap(editorSlice.range(of: "case .failed"))
+        let ready = try XCTUnwrap(editorSlice.range(of: "case .ready:"))
+        let restoringSlice = editorSlice[restoring.lowerBound..<failed.lowerBound]
+        let failedSlice = editorSlice[failed.lowerBound..<ready.lowerBound]
+        let readySlice = editorSlice[ready.lowerBound..<editorSlice.endIndex]
         XCTAssertFalse(restoringSlice.contains("EditorHost"))
         XCTAssertFalse(failedSlice.contains("EditorHost"))
         XCTAssertTrue(readySlice.contains("EditorHost"))

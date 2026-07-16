@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-enum WindowRegion: Equatable {
+enum WindowRegion: CaseIterable, Equatable, Hashable {
     case titleRegion
     case editor
     case errorBanner
@@ -10,8 +10,6 @@ enum WindowRegion: Equatable {
 }
 
 struct MainWindowPresentation: Equatable {
-    static let deferredChrome: [WindowRegion] = []
-
     let titleRegionHeight: CGFloat = 44
     let separatorHeight: CGFloat = 1
     let informationBarHeight: CGFloat

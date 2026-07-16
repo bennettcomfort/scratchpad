@@ -61,6 +61,27 @@ final class ApplicationModelTests: XCTestCase {
         XCTAssertTrue(writes.allSatisfy { !$0.didCloseCleanly })
     }
 
+    func testLaunchContainmentFlushPreservesLoadedSessionFrame() async throws {
+        let savedFrame = CGRect(x: 173, y: 91, width: 930, height: 711)
+        let preRestorationFrame = CGRect(x: 0, y: 0, width: 820, height: 640)
+        let session = DocumentSession().sessionRecord(
+            windowFrame: savedFrame,
+            didCloseCleanly: true
+        )
+        let repository = LaunchRepositoryFake(session: session)
+        let model = ApplicationModel(
+            launchState: .restoring,
+            servicesFactory: { makeLaunchServices(repository: repository) }
+        )
+
+        await model.restoreCurrentLaunchAttempt(windowFrame: preRestorationFrame)
+
+        let writes = await repository.sessionWrites
+        XCTAssertEqual(writes.count, 1)
+        XCTAssertEqual(writes.first?.windowFrame, savedFrame)
+        XCTAssertEqual(model.restoredWindowFrame, savedFrame)
+    }
+
     func testCurrentDocumentEditSchedulesRecoveryThroughLaunchCoordinator() async throws {
         let repository = LaunchRepositoryFake()
         let model = ApplicationModel(

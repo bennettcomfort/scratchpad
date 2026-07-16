@@ -22,11 +22,35 @@ final class PresentationModelTests: XCTestCase {
             "prompt.md — Edited"
         )
 
-        let deletedContent = DocumentTitlePresentation(
+        let deletedDocument = DocumentSession(
+            text: "retained local text",
             displayName: "prompt.md",
+            saveState: .clean,
+            hasUnsavedChanges: false
+        )
+        deletedDocument.markDeleted()
+        let deletedContent = DocumentTitlePresentation(document: deletedDocument)
+        XCTAssertEqual(deletedContent.title, "prompt.md — Edited")
+        XCTAssertEqual(deletedContent.accessibilityValue, "Edited")
+    }
+
+    func testLongTitleReservesSymmetricTrafficLightSpaceAndTruncates() {
+        let presentation = DocumentTitlePresentation(
+            displayName: String(repeating: "long-filename-", count: 20) + ".md",
             hasUnsavedChanges: true
         )
-        XCTAssertEqual(deletedContent.accessibilityValue, "Edited")
+        let theme = ThemeDefinition.resolve(
+            .light,
+            effectiveAppearance: NSAppearance(named: .aqua) ?? NSApp.effectiveAppearance
+        )
+        let titleView = DocumentTitleView(presentation: presentation, theme: theme)
+        let titleFrame = titleView.layout.titleFrame(containerWidth: 480)
+
+        XCTAssertEqual(titleFrame.minX, 80)
+        XCTAssertEqual(480 - titleFrame.maxX, 80)
+        XCTAssertEqual(titleFrame.width, 320)
+        XCTAssertEqual(titleView.layout.lineLimit, 1)
+        XCTAssertEqual(titleView.layout.truncationMode, .tail)
     }
 
     func testInformationBarFormatsRequiredMetricsAndUTF8Label() {
@@ -88,6 +112,20 @@ final class PresentationModelTests: XCTestCase {
             ),
             NSRect(x: 310, y: 130, width: 820, height: 640)
         )
+        XCTAssertEqual(
+            WindowChromeConfiguration.targetFrame(
+                restoredFrame: NSRect(x: CGFloat.nan, y: 100, width: 900, height: 700),
+                currentScreenFrames: [screen]
+            ),
+            NSRect(x: 310, y: 130, width: 820, height: 640)
+        )
+        XCTAssertEqual(
+            WindowChromeConfiguration.targetFrame(
+                restoredFrame: NSRect(x: 100, y: 100, width: 0, height: 700),
+                currentScreenFrames: [screen]
+            ),
+            NSRect(x: 310, y: 130, width: 820, height: 640)
+        )
     }
 
     func testWindowHierarchyContainsNoDeferredChrome() {
@@ -95,6 +133,9 @@ final class PresentationModelTests: XCTestCase {
             MainWindowPresentation(showsInformationBar: true, hasErrorBanner: true).hierarchy,
             [.titleRegion, .editor, .errorBanner, .separator, .informationBar]
         )
-        XCTAssertTrue(MainWindowPresentation.deferredChrome.isEmpty)
+        XCTAssertEqual(
+            WindowRegion.allCases,
+            [.titleRegion, .editor, .errorBanner, .separator, .informationBar]
+        )
     }
 }

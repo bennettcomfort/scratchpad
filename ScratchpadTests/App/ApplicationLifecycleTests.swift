@@ -239,6 +239,57 @@ final class ApplicationLifecycleTests: XCTestCase {
         XCTAssertEqual(presentationCount, 1)
     }
 
+    func testPersistenceRetryPreservesStateWithoutInvokingFileSaveOrSaveAs() async {
+        let repository = RetryLifecycleRepository()
+        let files = RetryFileService()
+        let document = DocumentSession(
+            text: "latest recovery text",
+            fileReference: ExternalFileReference(
+                bookmarkID: UUID(),
+                pathHint: "/tmp/retry.md"
+            ),
+            displayName: "retry.md",
+            saveState: .edited,
+            hasUnsavedChanges: true,
+            generation: 1
+        )
+        let model = ApplicationModel(
+            document: document,
+            servicesFactory: {
+                ApplicationServices(
+                    repository: repository,
+                    bookmarks: LifecycleBookmarkStore(),
+                    files: files,
+                    recoveryClock: LifecycleClock()
+                )
+            },
+            windowFrameProvider: { CGRect(x: 20, y: 30, width: 820, height: 640) }
+        )
+
+        let initialFlushSucceeded = await model.flushLifecycleState(didCloseCleanly: false)
+        XCTAssertFalse(initialFlushSucceeded)
+        XCTAssertEqual(
+            model.banner?.actions,
+            [
+                .retry(.preserveCurrentDocument),
+                .openRecoveryFolder,
+                .dismiss,
+            ]
+        )
+
+        await model.retryBannerOperation(.preserveCurrentDocument)
+
+        let recoveryWriteCount = await repository.recoveryWriteCount
+        let sessionWriteCount = await repository.sessionWriteCount
+        let saveCallCount = await files.saveCallCount
+        let saveAsCallCount = await files.saveAsCallCount
+        XCTAssertEqual(recoveryWriteCount, 2)
+        XCTAssertEqual(sessionWriteCount, 2)
+        XCTAssertEqual(saveCallCount, 0)
+        XCTAssertEqual(saveAsCallCount, 0)
+        XCTAssertNil(model.banner)
+    }
+
     private func waitUntil(_ condition: @escaping @MainActor () -> Bool) async -> Bool {
         for _ in 0..<1_000 {
             if condition() { return true }
@@ -437,4 +488,59 @@ private actor LifecycleFileService: FileServicing {
 
 private actor LifecycleClock: RecoveryClock {
     func sleep(for duration: Duration) async throws {}
+}
+
+private actor RetryLifecycleRepository: SessionPersisting {
+    private(set) var recoveryWriteCount = 0
+    private(set) var sessionWriteCount = 0
+
+    func loadSession() async throws -> SessionRecord? { nil }
+
+    func writeSession(_ record: SessionRecord) async throws {
+        sessionWriteCount += 1
+        if sessionWriteCount == 1 {
+            throw LifecycleFailure.nonCleanSession
+        }
+    }
+
+    func loadRecovery(documentID: UUID) async throws -> RecoveryRecord? { nil }
+    func loadAllRecovery() async throws -> [RecoveryRecord] { [] }
+    func writeRecovery(_ record: RecoveryRecord) async throws {
+        recoveryWriteCount += 1
+    }
+    func deleteRecovery(documentID: UUID) async throws {}
+}
+
+private actor RetryFileService: FileServicing {
+    private(set) var saveCallCount = 0
+    private(set) var saveAsCallCount = 0
+
+    func open(_ reference: ExternalFileReference) async throws -> FileOpenResult {
+        throw LifecycleFailure.recovery
+    }
+
+    func save(_ snapshot: DocumentSnapshot) async throws -> FileSaveResult {
+        saveCallCount += 1
+        throw LifecycleFailure.recovery
+    }
+
+    func saveAs(
+        _ snapshot: DocumentSnapshot,
+        to reference: ExternalFileReference
+    ) async throws -> FileSaveResult {
+        saveAsCallCount += 1
+        throw LifecycleFailure.recovery
+    }
+
+    func saveAs(
+        _ snapshot: DocumentSnapshot,
+        toSelectedURL url: URL
+    ) async throws -> FileSaveResult {
+        saveAsCallCount += 1
+        throw LifecycleFailure.recovery
+    }
+
+    func inspect(_ snapshot: DocumentSnapshot) async throws -> ExternalFileStatus {
+        .unchanged
+    }
 }

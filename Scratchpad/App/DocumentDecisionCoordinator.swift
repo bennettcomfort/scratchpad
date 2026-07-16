@@ -7,9 +7,14 @@ struct ErrorBanner: Identifiable, Equatable {
     let actions: [BannerAction]
 }
 
+enum BannerRetryOperation: Equatable {
+    case preserveCurrentDocument
+    case saveCurrentDocument
+}
+
 enum BannerAction: Equatable {
     case dismiss
-    case retry
+    case retry(BannerRetryOperation)
     case saveAs
     case reselectFile
     case openRecoveryFolder

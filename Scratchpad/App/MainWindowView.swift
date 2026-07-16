@@ -6,50 +6,14 @@ struct MainWindowView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        let presentation = MainWindowPresentation(
+            showsInformationBar: model.settings.snapshot.showsInformationBar,
+            hasErrorBanner: model.banner != nil
+        )
+
         VStack(spacing: 0) {
-            DocumentTitleView(
-                presentation: DocumentTitlePresentation(
-                    displayName: model.document.displayName,
-                    hasUnsavedChanges: model.document.hasUnsavedChanges
-                ),
-                theme: theme
-            )
-            .frame(height: 44)
-
-            switch model.launchState {
-            case .restoring:
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .failed(let message):
-                launchFailureView(message: message)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .ready:
-                EditorHost(
-                    document: model.document,
-                    settings: model.settings.snapshot,
-                    onEdit: model.handleCurrentDocumentEdit,
-                    onStateChange: model.handleCurrentDocumentStateChange,
-                    isEditable: model.allowsDocumentEditing,
-                    canEdit: { model.allowsDocumentEditing }
-                )
-                    .id(model.document.id)
-            }
-
-            if let banner = model.banner {
-                ErrorBannerView(banner: banner, theme: theme) { action in
-                    handleBannerAction(action)
-                }
-            }
-
-            Color(nsColor: theme.separator)
-                .frame(height: 1)
-
-            if model.settings.snapshot.showsInformationBar {
-                InformationBarView(
-                    presentation: InformationBarPresentation(metrics: model.metrics),
-                    theme: theme
-                )
-                .frame(height: 28)
+            ForEach(presentation.hierarchy, id: \.self) { region in
+                regionView(region)
             }
         }
         .background(
@@ -98,14 +62,61 @@ struct MainWindowView: View {
         switch action {
         case .dismiss:
             model.banner = nil
-        case .retry:
-            Task { _ = await model.save() }
+        case .retry(let operation):
+            Task { await model.retryBannerOperation(operation) }
         case .saveAs:
             Task { _ = await model.saveAs() }
         case .reselectFile:
             Task { await model.requestOpen() }
         case .openRecoveryFolder:
             openRecoveryFolder()
+        }
+    }
+
+    @ViewBuilder
+    private func regionView(_ region: WindowRegion) -> some View {
+        switch region {
+        case .titleRegion:
+            DocumentTitleView(
+                presentation: DocumentTitlePresentation(document: model.document),
+                theme: theme
+            )
+            .frame(height: 44)
+        case .editor:
+            switch model.launchState {
+            case .restoring:
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .failed(let message):
+                launchFailureView(message: message)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .ready:
+                EditorHost(
+                    document: model.document,
+                    settings: model.settings.snapshot,
+                    onEdit: model.handleCurrentDocumentEdit,
+                    onStateChange: model.handleCurrentDocumentStateChange,
+                    isEditable: model.allowsDocumentEditing,
+                    canEdit: { model.allowsDocumentEditing }
+                )
+                .id(model.document.id)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        case .errorBanner:
+            if let banner = model.banner {
+                ErrorBannerView(banner: banner, theme: theme) { action in
+                    handleBannerAction(action)
+                }
+            }
+        case .separator:
+            Color(nsColor: theme.separator)
+                .frame(height: 1)
+        case .informationBar:
+            InformationBarView(
+                presentation: InformationBarPresentation(metrics: model.metrics),
+                theme: theme
+            )
+            .frame(height: 28)
         }
     }
 

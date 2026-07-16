@@ -255,8 +255,18 @@ final class ApplicationModel {
         banner = ErrorBanner(
             id: UUID(),
             message: "Scratchpad couldn't preserve the latest session state.",
-            actions: [.retry, .dismiss]
+            actions: [.retry(.preserveCurrentDocument), .dismiss]
         )
+    }
+
+    func retryBannerOperation(_ operation: BannerRetryOperation) async {
+        banner = nil
+        switch operation {
+        case .preserveCurrentDocument:
+            _ = await flushLifecycleState(didCloseCleanly: false)
+        case .saveCurrentDocument:
+            _ = await save()
+        }
     }
 
     // MARK: - Launch Restoration
@@ -430,7 +440,7 @@ final class ApplicationModel {
         )
         try await recoveryCoordinator.flushSession(
             for: document,
-            windowFrame: windowFrame,
+            windowFrame: session?.windowFrame ?? windowFrame,
             didCloseCleanly: false
         )
         return source
@@ -1003,14 +1013,26 @@ final class ApplicationModel {
                 )
             case .readOnly:
                 document.markReadOnly()
-                publishFileBanner(error, path: reference.pathHint)
+                publishFileBanner(
+                    error,
+                    path: reference.pathHint,
+                    retryOperation: .saveCurrentDocument
+                )
                 return false
             default:
-                publishFileBanner(error, path: reference.pathHint)
+                publishFileBanner(
+                    error,
+                    path: reference.pathHint,
+                    retryOperation: .saveCurrentDocument
+                )
                 return false
             }
         } catch {
-            publishFileBanner(error, path: reference.pathHint)
+            publishFileBanner(
+                error,
+                path: reference.pathHint,
+                retryOperation: .saveCurrentDocument
+            )
             return false
         }
     }
@@ -1314,7 +1336,11 @@ final class ApplicationModel {
 
     // MARK: - Error Presentation
 
-    private func publishFileBanner(_ error: Error, path: String) {
+    private func publishFileBanner(
+        _ error: Error,
+        path: String,
+        retryOperation: BannerRetryOperation? = nil
+    ) {
         let category: String
         let message: String
         let actions: [BannerAction]
@@ -1338,15 +1364,18 @@ final class ApplicationModel {
         case .verificationFailed:
             category = "FileServiceError.verificationFailed"
             message = "The save could not be verified. Your text remains open."
-            actions = [.retry, .saveAs, .dismiss]
+            actions = retryOperation.map { [.retry($0), .saveAs, .dismiss] }
+                ?? [.saveAs, .dismiss]
         case let typed?:
             category = "FileServiceError.\(String(describing: typed))"
             message = "The file operation failed. Your text remains open."
-            actions = [.retry, .saveAs, .dismiss]
+            actions = retryOperation.map { [.retry($0), .saveAs, .dismiss] }
+                ?? [.saveAs, .dismiss]
         case nil:
             category = String(describing: type(of: error))
             message = "The file operation failed. Your text remains open."
-            actions = [.retry, .saveAs, .dismiss]
+            actions = retryOperation.map { [.retry($0), .saveAs, .dismiss] }
+                ?? [.saveAs, .dismiss]
         }
         AppLog.files.error(
             "File operation failed: \(category, privacy: .public); path: \(path, privacy: .private)"
@@ -1388,7 +1417,7 @@ final class ApplicationModel {
         banner = ErrorBanner(
             id: UUID(),
             message: "Scratchpad couldn't update recovery safely. Your text remains open.",
-            actions: [.retry, .openRecoveryFolder, .dismiss]
+            actions: [.retry(.preserveCurrentDocument), .openRecoveryFolder, .dismiss]
         )
     }
 
