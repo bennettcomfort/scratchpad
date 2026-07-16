@@ -70,7 +70,17 @@ final class ApplicationLifecycleTests: XCTestCase {
     func testTerminationFailureRepliesFalseAndKeepsAppOpen() async {
         for (failure, expected) in [
             (LifecycleFailure.recovery, ["decision", "recovery flush", "reply(false)"]),
-            (.nonCleanSession, ["decision", "recovery flush", "session(false)", "reply(false)"])
+            (
+                .nonCleanSession,
+                ["decision", "recovery flush", "session(false) failed", "reply(false)"]
+            ),
+            (
+                .cleanSession,
+                [
+                    "decision", "recovery flush", "session(false)",
+                    "session(true) failed", "reply(false)"
+                ]
+            )
         ] {
             let recorder = LifecycleEventRecorder()
             let model = makeLifecycleModel(recorder: recorder, failure: failure)
@@ -122,6 +132,71 @@ final class ApplicationLifecycleTests: XCTestCase {
         XCTAssertEqual(events.filter { $0.hasPrefix("reply") }, ["reply(true)"])
     }
 
+    func testTerminationWaitsForActiveResignFlushThatIgnoresCancellation() async {
+        let resignGate = LifecycleGate()
+        var events: [String] = []
+        let delegate = AppDelegate(
+            terminationReply: { _, result in events.append("reply(\(result))") }
+        )
+        delegate.attachLifecycle(
+            requestTermination: {
+                events.append("termination")
+                return true
+            },
+            requestResignActiveFlush: { _ in
+                events.append("resign-start")
+                await resignGate.wait()
+                events.append("session(false)")
+                return true
+            },
+            presentResignActiveFailure: {}
+        )
+
+        delegate.applicationDidResignActive(
+            Notification(name: NSApplication.didResignActiveNotification)
+        )
+        await resignGate.waitUntilEntered()
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateLater)
+        await Task.yield()
+        XCTAssertEqual(events, ["resign-start"])
+
+        resignGate.resume()
+        await waitUntil { events.last == "reply(true)" }
+        XCTAssertEqual(events, ["resign-start", "session(false)", "termination", "reply(true)"])
+    }
+
+    func testResignActiveDoesNotStartWhileTerminationIsActive() async {
+        let terminationGate = LifecycleGate()
+        var events: [String] = []
+        let delegate = AppDelegate(
+            terminationReply: { _, result in events.append("reply(\(result))") }
+        )
+        delegate.attachLifecycle(
+            requestTermination: {
+                events.append("termination")
+                await terminationGate.wait()
+                return true
+            },
+            requestResignActiveFlush: { _ in
+                events.append("resign")
+                return true
+            },
+            presentResignActiveFailure: {}
+        )
+
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateLater)
+        await terminationGate.waitUntilEntered()
+        delegate.applicationDidResignActive(
+            Notification(name: NSApplication.didResignActiveNotification)
+        )
+        await Task.yield()
+        XCTAssertEqual(events, ["termination"])
+
+        terminationGate.resume()
+        await waitUntil { events.last == "reply(true)" }
+        XCTAssertEqual(events, ["termination", "reply(true)"])
+    }
+
     func testResignActiveFlushUsesDidCloseCleanlyFalse() async {
         var cleanValues: [Bool] = []
         var presentationCount = 0
@@ -147,7 +222,11 @@ final class ApplicationLifecycleTests: XCTestCase {
     }
 
     private func waitUntil(_ condition: @escaping @MainActor () -> Bool) async {
-        while !condition() { await Task.yield() }
+        for _ in 0..<1_000 {
+            if condition() { return }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for deterministic lifecycle condition")
     }
 
     private func makeLifecycleModel(
@@ -200,9 +279,20 @@ private final class WindowCloseHarness {
 @MainActor
 private final class LifecycleGate {
     private var continuation: CheckedContinuation<Void, Never>?
+    private var entryContinuations: [CheckedContinuation<Void, Never>] = []
+    private var didEnter = false
 
     func wait() async {
+        didEnter = true
+        let entries = entryContinuations
+        entryContinuations.removeAll()
+        entries.forEach { $0.resume() }
         await withCheckedContinuation { continuation = $0 }
+    }
+
+    func waitUntilEntered() async {
+        guard !didEnter else { return }
+        await withCheckedContinuation { entryContinuations.append($0) }
     }
 
     func resume() {
@@ -214,6 +304,7 @@ private final class LifecycleGate {
 private enum LifecycleFailure: Error {
     case recovery
     case nonCleanSession
+    case cleanSession
 }
 
 private final class LifecycleEventRecorder: @unchecked Sendable {
@@ -239,10 +330,15 @@ private actor LifecycleRepository: SessionPersisting {
     func loadSession() async throws -> SessionRecord? { nil }
 
     func writeSession(_ record: SessionRecord) async throws {
-        recorder.append("session(\(record.didCloseCleanly))")
+        if failure == .cleanSession, record.didCloseCleanly {
+            recorder.append("session(true) failed")
+            throw LifecycleFailure.cleanSession
+        }
         if failure == .nonCleanSession, !record.didCloseCleanly {
+            recorder.append("session(false) failed")
             throw LifecycleFailure.nonCleanSession
         }
+        recorder.append("session(\(record.didCloseCleanly))")
     }
 
     func loadRecovery(documentID: UUID) async throws -> RecoveryRecord? { nil }

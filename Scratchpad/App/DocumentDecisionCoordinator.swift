@@ -50,14 +50,21 @@ enum DocumentDecisionResolution: Equatable {
 @MainActor
 @Observable
 final class DocumentDecisionCoordinator {
+    private struct ResolutionWaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<DocumentDecisionResolution, Never>
+    }
+
     private(set) var pending: DocumentDecision?
 
     @ObservationIgnored
     private let onBegin: @MainActor (DocumentDecision) -> Void
     @ObservationIgnored
-    private var continuation: CheckedContinuation<DocumentDecisionResolution, Never>?
+    private var waiter: ResolutionWaiter?
     @ObservationIgnored
     private var queuedResolution: DocumentDecisionResolution?
+
+    var hasActiveWaiter: Bool { waiter != nil }
 
     init(onBegin: @escaping @MainActor (DocumentDecision) -> Void = { _ in }) {
         self.onBegin = onBegin
@@ -70,7 +77,7 @@ final class DocumentDecisionCoordinator {
 
     func begin(_ decision: DocumentDecision) -> Bool {
         guard pending == nil,
-              continuation == nil,
+              waiter == nil,
               queuedResolution == nil else { return false }
         onBegin(decision)
         pending = decision
@@ -78,34 +85,62 @@ final class DocumentDecisionCoordinator {
     }
 
     func waitForResolution() async -> DocumentDecisionResolution {
-        guard pending != nil else { return .cancel }
+        guard pending != nil,
+              waiter == nil else { return .cancel }
+        guard !Task.isCancelled else {
+            cancelPending()
+            return .cancel
+        }
         if let queuedResolution {
             pending = nil
             self.queuedResolution = nil
             return queuedResolution
         }
-        return await withCheckedContinuation { continuation in
-            self.continuation = continuation
+        let waiterID = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard pending != nil,
+                      waiter == nil else {
+                    continuation.resume(returning: .cancel)
+                    return
+                }
+                waiter = ResolutionWaiter(id: waiterID, continuation: continuation)
+                if Task.isCancelled {
+                    cancelWaiter(id: waiterID)
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.cancelWaiter(id: waiterID)
+            }
         }
     }
 
     func resolvePending(with resolution: DocumentDecisionResolution) {
         guard pending != nil else { return }
-        guard let continuation else {
-            queuedResolution = resolution
+        guard let waiter else {
+            if queuedResolution == nil {
+                queuedResolution = resolution
+            }
             return
         }
         pending = nil
-        self.continuation = nil
-        continuation.resume(returning: resolution)
+        queuedResolution = nil
+        self.waiter = nil
+        waiter.continuation.resume(returning: resolution)
     }
 
     func cancelPending() {
         guard pending != nil else { return }
         pending = nil
         queuedResolution = nil
-        let continuation = continuation
-        self.continuation = nil
-        continuation?.resume(returning: .cancel)
+        let waiter = waiter
+        self.waiter = nil
+        waiter?.continuation.resume(returning: .cancel)
+    }
+
+    private func cancelWaiter(id: UUID) {
+        guard waiter?.id == id else { return }
+        cancelPending()
     }
 }

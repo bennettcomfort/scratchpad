@@ -60,7 +60,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let requestTermination else { return .terminateCancel }
         guard terminationTask == nil else { return .terminateLater }
 
+        let activeResignTask = resignActiveTask
         terminationTask = Task { [weak self] in
+            if let activeResignTask {
+                activeResignTask.cancel()
+                await activeResignTask.value
+            }
             let result = await requestTermination()
             guard let self else { return }
             terminationReply(sender, result)
@@ -72,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidResignActive(_ notification: Notification) {
         isApplicationActive = false
         guard resignActiveTask == nil,
+              terminationTask == nil,
               let requestResignActiveFlush else { return }
 
         resignActiveTask = Task { [weak self] in

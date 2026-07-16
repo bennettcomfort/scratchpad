@@ -24,6 +24,64 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.pending)
     }
 
+    func testCancellationWhileWaitingClearsOnlyTheMatchingWaiter() async {
+        let coordinator = DocumentDecisionCoordinator()
+        XCTAssertTrue(coordinator.begin(.closeWindow))
+        let cancelled = Task { await coordinator.waitForResolution() }
+        await waitUntil { coordinator.hasActiveWaiter }
+
+        cancelled.cancel()
+        let cancelledResolution = await cancelled.value
+        XCTAssertEqual(cancelledResolution, .cancel)
+        XCTAssertNil(coordinator.pending)
+
+        let replacement = Task { await coordinator.request(.terminateApplication) }
+        await waitUntil { coordinator.hasActiveWaiter }
+        coordinator.resolvePending(with: .save)
+        let replacementResolution = await replacement.value
+        XCTAssertEqual(replacementResolution, .save)
+    }
+
+    func testSecondWaitAttemptCannotOverwriteSuspendedWaiter() async {
+        let coordinator = DocumentDecisionCoordinator()
+        XCTAssertTrue(coordinator.begin(.closeWindow))
+        let first = Task { await coordinator.waitForResolution() }
+        await waitUntil { coordinator.hasActiveWaiter }
+
+        let secondResolution = await coordinator.waitForResolution()
+        XCTAssertEqual(secondResolution, .cancel)
+        XCTAssertNotNil(coordinator.pending)
+        coordinator.resolvePending(with: .discard)
+        let firstResolution = await first.value
+        XCTAssertEqual(firstResolution, .discard)
+        XCTAssertNil(coordinator.pending)
+    }
+
+    func testRepeatedEarlyResolutionKeepsFirstAcceptedResolution() async {
+        let coordinator = DocumentDecisionCoordinator()
+        XCTAssertTrue(coordinator.begin(.closeWindow))
+
+        coordinator.resolvePending(with: .save)
+        coordinator.resolvePending(with: .discard)
+
+        let resolution = await coordinator.waitForResolution()
+        XCTAssertEqual(resolution, .save)
+        XCTAssertNil(coordinator.pending)
+    }
+
+    func testDuplicateBeginAndRequestCannotReplacePendingDecision() async {
+        let coordinator = DocumentDecisionCoordinator()
+        XCTAssertTrue(coordinator.begin(.closeWindow))
+        XCTAssertFalse(coordinator.begin(.terminateApplication))
+        let duplicateRequestResolution = await coordinator.request(.terminateApplication)
+        XCTAssertEqual(duplicateRequestResolution, .cancel)
+
+        coordinator.resolvePending(with: .discard)
+        let resolution = await coordinator.waitForResolution()
+        XCTAssertEqual(resolution, .discard)
+        XCTAssertNil(coordinator.pending)
+    }
+
     func testCancelLeavesDocumentAndRecoveryUnchanged() async {
         let repository = OperationRepositoryFake()
         let files = ControllableFileServiceFake()
@@ -520,7 +578,11 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
     }
 
     private func waitUntil(_ condition: @escaping @MainActor () -> Bool) async {
-        while !condition() { await Task.yield() }
+        for _ in 0..<1_000 {
+            if condition() { return }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for deterministic decision condition")
     }
 
     private func waitUntilOrTimeout(

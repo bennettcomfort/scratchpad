@@ -69,4 +69,22 @@ final class RecoveryProjectPolicyTests: XCTestCase {
         XCTAssertTrue(readySlice.contains("EditorHost"))
         XCTAssertTrue(readySlice.contains("onEdit: model.handleCurrentDocumentEdit"))
     }
+
+    func testProductionPresentsEveryDocumentDecisionThroughOneSheet() throws {
+        let app = try contents(at: "Scratchpad/App/ScratchpadApp.swift")
+
+        XCTAssertTrue(app.contains(".sheet("))
+        XCTAssertTrue(app.contains("model.pendingDecision"))
+        XCTAssertTrue(app.contains("model.resolvePendingDecision"))
+        XCTAssertTrue(app.contains("case .replaceCurrentDocument, .closeWindow, .terminateApplication:"))
+        XCTAssertTrue(app.contains("Button(\"Save\")"))
+        XCTAssertTrue(app.contains("Button(\"Discard\", role: .destructive)"))
+        XCTAssertTrue(app.contains("case .resolveConflict:"))
+        XCTAssertTrue(app.contains("Button(\"Overwrite\", role: .destructive)"))
+        XCTAssertTrue(app.contains("Button(\"Reload\")"))
+        XCTAssertTrue(app.contains("Button(\"Save As\")"))
+        XCTAssertTrue(app.contains("case .recreateDeletedFile:"))
+        XCTAssertTrue(app.contains("Button(\"Recreate\", role: .destructive)"))
+        XCTAssertTrue(app.contains("Button(\"Cancel\", role: .cancel)"))
+    }
 }
