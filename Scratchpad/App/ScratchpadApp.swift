@@ -4,6 +4,17 @@ import SwiftUI
 struct ScratchpadApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = ApplicationModel.live()
+    private let applicationSupportPaths: ApplicationSupportPaths
+
+    init() {
+        let applicationSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first ?? FileManager.default.homeDirectoryForCurrentUser
+        applicationSupportPaths = ApplicationSupportPaths(
+            root: applicationSupport.appending(path: "Scratchpad", directoryHint: .isDirectory)
+        )
+    }
 
     var body: some Scene {
         Window("Untitled", id: "main") {
@@ -33,6 +44,13 @@ struct ScratchpadApp: App {
         .commands {
             TextEditingCommands()
             AppCommands(model: model)
+        }
+
+        Settings {
+            SettingsView(
+                settings: model.settings,
+                recoveryFolder: applicationSupportPaths.recoveryDirectory
+            )
         }
     }
 }

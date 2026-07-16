@@ -49,11 +49,14 @@ targets:
       - path: Scratchpad/Persistence/RecoveryCoordinator.swift
       - path: Scratchpad/Persistence/SessionRepository.swift
       - path: Scratchpad/Settings/LaunchAtLoginService.swift
+      - path: Scratchpad/Settings/FontPanelCoordinator.swift
       - path: Scratchpad/Settings/SettingsStore.swift
+      - path: Scratchpad/Settings/SettingsView.swift
       - path: Scratchpad/Settings/ThemeDefinition.swift
       - path: Scratchpad/UI/DocumentTitleView.swift
       - path: Scratchpad/UI/ErrorBannerView.swift
       - path: Scratchpad/UI/InformationBarView.swift
+      - path: Scratchpad/UI/ThemePreviewView.swift
       - path: Scratchpad/UI/WindowChromeConfigurator.swift
       - path: Scratchpad/Utilities/ContentHash.swift
       - path: Scratchpad/Utilities/Log.swift
@@ -88,6 +91,7 @@ targets:
       - ScratchpadTests/Persistence/SessionRepositoryTests.swift
       - ScratchpadTests/Settings/SettingsStoreTests.swift
       - ScratchpadTests/Settings/ThemeDefinitionTests.swift
+      - ScratchpadTests/Settings/FontPanelCoordinatorTests.swift
       - ScratchpadTests/UI/PresentationModelTests.swift
       - ScratchpadTests/Files/FileServiceTests.swift
       - ScratchpadTests/Files/ExternalChangeMonitorTests.swift

@@ -74,7 +74,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 4.2 | Define fixed themes and apply editor appearance safely | verified | `cc663bb`; missing-theme compile RED; 7/7 focused tests; warning-as-error build; 210/210 full suite; independent review found no issues; fixed palettes, contrast, style idempotence, and TextKit 2 scroll-layout regression verified |
 | 4.3 | Calculate prompt metrics off the main actor | verified | `1c87027`, `63a1135`; missing-metrics and review-regression REDs; 14/14 focused tests; warning-as-error build; 224/224 full suite; independent re-review approved cancellation, retention, and typed-setting integration |
 | 4.4 | Build the Noto-inspired main window | verified | `9a4e153`, `b5ee934`; missing-presentation and four review-regression REDs; 15/15 focused tests; warning-as-error build; 233/233 full suite; independent re-review approved frame preservation, typed retry, safe title geometry, and rendered hierarchy |
-| 4.5 | Build native General, Editor, and Theme settings | in progress | Authorized after verified Task 4.4; 233/233 baseline passes |
+| 4.5 | Build native General, Editor, and Theme settings | in progress | Exact six-test compile RED; 6/6 focused GREEN; Stage 4 automated gate build succeeded and 239/239 tests pass; manual visual/settings matrix remains pending |
 
 ### Stage 5 Task Ledger
 
@@ -196,6 +196,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-16 | Stage 4 continuous execution authorization | User authorized Tasks 4.2–4.5 to proceed in approved plan order without per-task pauses unless a design decision is required. Fresh `/tmp` DerivedData baseline passed 203/203 tests. | in progress | Task 4.2 is current; stop at the Stage 4 approval gate before Stage 5. |
 | 2026-07-16 | Task 4.2 fixed native editor themes | Exact seven-test compile RED failed for missing `ThemeDefinition`, `ResolvedEditorStyle`, and `apply(style:)`; focused GREEN passed 7/7. The first full suite exposed a line-height scroll-clamp regression (`1273.5` versus final maximum `1387.0`); the existing focused regression passed after TextKit 2 document-range layout was ensured before clamping. Controller reran the warning-as-error build, focused 7/7, and full 210/210 suite; independent review reported no findings. | verified | Feature commit `cc663bb`. Fixed device-RGB Light and Dark palettes; System follows effective appearance while fixed themes do not; native selected-text pair passes contrast checks; style application preserves text, generation, selection, and undo; H1–H14, scope, data-loss, and whitespace review pass; no manual check required. |
 | 2026-07-16 | Task 4.3 prompt document metrics | Exact eight-test compile RED failed only for missing `DocumentMetrics`; review-correction compile RED then proved missing cancellation hooks and settings injection. Final focused GREEN passed 14/14; controller warning-as-error build and full 224/224 suite passed; independent re-review approved with no findings. `git diff --check`, exact-test-name, H1–H14, concurrency, prohibited-scope, and data-loss review pass. | verified | Feature `1c87027`; correction `63a1135`. Swift `Character` metrics use the required all-scalars whitespace predicate; cancellation propagates into detached calculation and promptly releases stale captures; superseded work cannot deliver; typed settings reschedule character metrics without mutating text, selection, generation, or undo; no manual check required. |
+| 2026-07-16 | Task 4.5 native settings automated gate | Exact six-test compile RED failed on the absent `FontManaging` and settings-presentation interfaces; focused GREEN passed 6/6. Fresh Stage 4 gate used `xcodegen`, `/tmp/ScratchpadStage4`, a warning-as-error build, and the full 239/239 suite. `git diff --check`, exact control inventory, H1-H14, scope, deferred-feature, settings-persistence, preview-nonmutation, and data-loss review pass. | in progress | One native Settings scene now contains only General, Editor, and Theme tabs; font-manager prior target/action ownership is weak/restored; recovery opening is a direct button action. The ten-row visual/settings matrix and screenshots were not performed and remain pending; Stage 5 is not authorized. |
 
 ## Current Manual Acceptance Matrix
 
@@ -237,6 +238,23 @@ The automated fixtures never read, replace, or delete the user's real Applicatio
 | Bookmark relaunch | verified | Clean signed quit persisted bookmark `9FD8D9F9-C300-4CAF-860C-DD090E418901`; relaunch reopened `copy-save-as-fixed.md` without a panel and a subsequent edit/save succeeded. |
 | Repeated Quit | verified | Three rapid `⌘Q` invocations produced one decision sheet; one Save wrote `ROW11-REPEATED-QUIT`, one clean session, and one process exit. |
 | Corrupt JSON | verified | Signed launch moved malformed session bytes unchanged to `quarantine/2026-07-16T16:45:11Z-latest-session.json` and opened safely; the user approved deterministic failure evidence from `testQuarantineFailurePreservesOriginalAndThrows`, which retains original bytes. |
+
+### Recovery Stage 4 Visual and Settings Matrix
+
+No row below is verified by the automated Task 4.5 gate. The controller must record direct observations and attach the required 820 by 640 light/dark and 480 by 320 narrow screenshots before Task 4.5 or Stage 4 becomes `verified`.
+
+| Check | State | Required evidence |
+|---|---|---|
+| Window structure | pending | Traffic lights occupy the title region; title, editor, banner, and information bar never overlap. |
+| Noto visual match | pending | Restrained centered title, generous editor padding, and quiet status surface. |
+| Explicit absence | pending | No tabs, sidebar, toolbar controls, line numbers, syntax colors, HUD, or welcome screen. |
+| Light/Dark/System | pending | Fixed appearances remain fixed; System follows effective appearance. |
+| Editor readability | pending | Text, caret, selection, muted metrics, and banner remain legible. |
+| Metrics | pending | Exact definitions, mandatory token `~`, help text, and update under 150 ms. |
+| Editor settings | pending | Each control updates future behavior without rewriting text or undo. |
+| Font panel | pending | Native panel changes editor and preview font, then releases target ownership. |
+| General settings | pending | Launch at Login reports actual status; recovery folder opens correctly. |
+| Window frame | pending | Default, minimum, restored, and off-screen fallback behavior pass. |
 
 ## Update Protocol
 
