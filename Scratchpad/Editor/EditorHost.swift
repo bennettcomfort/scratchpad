@@ -2,6 +2,35 @@ import AppKit
 import SwiftUI
 
 @MainActor
+private final class RestoringScrollView: NSScrollView {
+    var restoredScrollOffsetY: Double?
+
+    override func layout() {
+        super.layout()
+        applyRestoredScrollOffsetIfPossible()
+    }
+
+    func applyRestoredScrollOffsetIfPossible() {
+        guard let restoredScrollOffsetY,
+              contentView.bounds.width > 0,
+              contentView.bounds.height > 0,
+              let documentView else { return }
+        documentView.layoutSubtreeIfNeeded()
+        let maximumOffset = max(
+            0,
+            documentView.bounds.height - contentView.bounds.height
+        )
+        let clampedOffset = min(max(0, restoredScrollOffsetY), maximumOffset)
+        let postsBoundsChanges = contentView.postsBoundsChangedNotifications
+        contentView.postsBoundsChangedNotifications = false
+        contentView.scroll(to: NSPoint(x: 0, y: clampedOffset))
+        reflectScrolledClipView(contentView)
+        contentView.postsBoundsChangedNotifications = postsBoundsChanges
+        self.restoredScrollOffsetY = nil
+    }
+}
+
+@MainActor
 struct EditorHost: NSViewRepresentable {
     let document: DocumentSession
     var onEdit: @MainActor (DocumentSession) -> Void = { _ in }
@@ -43,7 +72,7 @@ struct EditorHost: NSViewRepresentable {
         document: DocumentSession,
         coordinator: EditorCoordinator
     ) -> NSScrollView {
-        let scrollView = NSScrollView()
+        let scrollView = RestoringScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
@@ -61,11 +90,6 @@ struct EditorHost: NSViewRepresentable {
         precondition(textView.textLayoutManager != nil)
         precondition(textView.textStorage === document.storage)
 
-        coordinator.attach(to: scrollView, textView: textView)
-        textView.setSelectedRange(document.selection.nsRange)
-        scrollView.contentView.scroll(
-            to: NSPoint(x: 0, y: document.scrollOffsetY)
-        )
         textView.isRichText = false
         textView.importsGraphics = false
         textView.allowsUndo = true
@@ -91,6 +115,11 @@ struct EditorHost: NSViewRepresentable {
         )
 
         scrollView.documentView = textView
+        textView.setSelectedRange(document.selection.nsRange)
+        scrollView.restoredScrollOffsetY = document.scrollOffsetY
+        coordinator.attach(to: scrollView, textView: textView)
+        scrollView.layoutSubtreeIfNeeded()
+        scrollView.applyRestoredScrollOffsetIfPossible()
         return scrollView
     }
 }
