@@ -339,6 +339,129 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertEqual(deletedDocumentIDs, [])
     }
 
+    func testGenerationChangeDuringDiscardReplacementPreservesLatestRecoveryAndAborts() async {
+        let repository = OperationRepositoryFake(deleteSuspended: true)
+        let document = makeEditedDocument(text: "approved generation")
+        let model = makeModel(
+            document: document,
+            repository: repository,
+            files: ControllableFileServiceFake()
+        )
+
+        let replacement = Task { await model.requestNewDocument() }
+        await waitUntil { model.pendingDecision != nil }
+        model.resolvePendingDecision(with: .discard)
+        await repository.waitForDeleteCalls(1)
+
+        document.storage.setAttributedString(NSAttributedString(string: "newer unapproved text"))
+        document.noteUserEdit()
+        model.handleCurrentDocumentEdit(document)
+        await repository.resumeDelete()
+        await replacement.value
+
+        let recoveryWrites = await repository.recoveryWrites
+        XCTAssertTrue(model.document === document)
+        XCTAssertEqual(document.storage.string, "newer unapproved text")
+        XCTAssertEqual(recoveryWrites.last?.unsavedText, "newer unapproved text")
+        XCTAssertEqual(model.operationState, .idle)
+
+        let closeRepository = OperationRepositoryFake(deleteSuspended: true)
+        let closeDocument = makeEditedDocument(text: "approved discard generation")
+        let closeModel = makeModel(
+            document: closeDocument,
+            repository: closeRepository,
+            files: ControllableFileServiceFake()
+        )
+        let close = Task { await closeModel.requestClose() }
+        await waitUntil { closeModel.pendingDecision != nil }
+        closeModel.resolvePendingDecision(with: .discard)
+        await closeRepository.waitForDeleteCalls(1)
+
+        closeDocument.storage.setAttributedString(
+            NSAttributedString(string: "newer text during discard deletion")
+        )
+        closeDocument.noteUserEdit()
+        closeModel.handleCurrentDocumentEdit(closeDocument)
+        await closeRepository.resumeDelete()
+        let closeResult = await close.value
+
+        let closeRecoveryWrites = await closeRepository.recoveryWrites
+        XCTAssertFalse(closeResult)
+        XCTAssertEqual(closeDocument.storage.string, "newer text during discard deletion")
+        XCTAssertEqual(
+            closeRecoveryWrites.last?.unsavedText,
+            "newer text during discard deletion"
+        )
+    }
+
+    func testGenerationChangeDuringExitSessionFlushPreservesLatestRecoveryAndAborts() async {
+        for startsDirty in [false, true] {
+            let repository = OperationRepositoryFake(sessionWriteSuspended: true)
+            let document = startsDirty
+                ? makeEditedDocument(text: "approved exit generation")
+                : makeCleanDocument(text: "clean exit generation")
+            let model = makeModel(
+                document: document,
+                repository: repository,
+                files: ControllableFileServiceFake()
+            )
+
+            let close = Task { await model.requestClose() }
+            if startsDirty {
+                await waitUntil { model.pendingDecision != nil }
+                model.resolvePendingDecision(with: .discard)
+            }
+            await repository.waitForSessionWrites(1)
+
+            document.storage.setAttributedString(NSAttributedString(string: "edit during session write"))
+            document.noteUserEdit()
+            model.handleCurrentDocumentEdit(document)
+            await repository.resumeSessionWrite()
+            let closeResult = await close.value
+
+            let recoveryWrites = await repository.recoveryWrites
+            let sessionWrites = await repository.sessionWrites
+            XCTAssertFalse(closeResult)
+            XCTAssertEqual(document.storage.string, "edit during session write")
+            XCTAssertEqual(recoveryWrites.last?.unsavedText, "edit during session write")
+            XCTAssertEqual(sessionWrites.last?.hasUnsavedChanges, true)
+            XCTAssertEqual(sessionWrites.last?.didCloseCleanly, false)
+        }
+    }
+
+    func testGenerationChangeDuringReloadPreservesLatestRecoveryAndAborts() async {
+        let repository = OperationRepositoryFake()
+        let files = ControllableFileServiceFake(
+            openSuspended: true,
+            saveError: .conflict(
+                contentHash: "changed-disk-hash",
+                modificationDate: Date(timeIntervalSince1970: 50)
+            )
+        )
+        let document = makeEditedDocument(text: "conflicted generation")
+        let model = makeModel(document: document, repository: repository, files: files)
+
+        let save = Task { await model.save() }
+        await waitUntil {
+            if case .resolveConflict = model.pendingDecision { return true }
+            return false
+        }
+        model.resolvePendingDecision(with: .reloadFromDisk)
+        await files.waitForOpenCalls(1)
+
+        document.storage.setAttributedString(NSAttributedString(string: "edit during reload"))
+        document.noteUserEdit()
+        model.handleCurrentDocumentEdit(document)
+        await files.resumeOpenSuccessfully()
+        let saveResult = await save.value
+
+        let recoveryWrites = await repository.recoveryWrites
+        XCTAssertFalse(saveResult)
+        XCTAssertEqual(document.storage.string, "edit during reload")
+        XCTAssertTrue(document.hasUnsavedChanges)
+        XCTAssertEqual(recoveryWrites.last?.unsavedText, "edit during reload")
+    }
+
     private func makeModel(
         document: DocumentSession,
         launchState: LaunchState = .ready,
@@ -374,6 +497,22 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
             displayName: "original.md",
             saveState: .edited,
             hasUnsavedChanges: true,
+            generation: 4,
+            lastSavedHash: "base-hash",
+            lastKnownDiskMTime: Date(timeIntervalSince1970: 10)
+        )
+    }
+
+    private func makeCleanDocument(text: String) -> DocumentSession {
+        DocumentSession(
+            text: text,
+            fileReference: ExternalFileReference(
+                bookmarkID: UUID(),
+                pathHint: "/tmp/original.md"
+            ),
+            displayName: "original.md",
+            saveState: .clean,
+            hasUnsavedChanges: false,
             generation: 4,
             lastSavedHash: "base-hash",
             lastKnownDiskMTime: Date(timeIntervalSince1970: 10)
@@ -433,17 +572,40 @@ private actor OperationRepositoryFake: SessionPersisting {
     private(set) var sessionWrites: [SessionRecord] = []
     private(set) var deletedDocumentIDs: [UUID] = []
     private var recoveryWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    private var sessionWriteWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    private var deleteWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
     private var remainingDeleteFailures: Int
+    private var sessionWriteSuspended: Bool
+    private var deleteSuspended: Bool
+    private var sessionWriteContinuation: CheckedContinuation<Void, Never>?
+    private var deleteContinuation: CheckedContinuation<Void, Never>?
+    private(set) var deleteCallCount = 0
 
-    init(events: OperationEventRecorder? = nil, deleteFailures: Int = 0) {
+    init(
+        events: OperationEventRecorder? = nil,
+        deleteFailures: Int = 0,
+        sessionWriteSuspended: Bool = false,
+        deleteSuspended: Bool = false
+    ) {
         self.events = events
         self.remainingDeleteFailures = deleteFailures
+        self.sessionWriteSuspended = sessionWriteSuspended
+        self.deleteSuspended = deleteSuspended
     }
 
     var sessionWriteCount: Int { sessionWrites.count }
 
     func loadSession() async throws -> SessionRecord? { nil }
-    func writeSession(_ record: SessionRecord) async throws { sessionWrites.append(record) }
+    func writeSession(_ record: SessionRecord) async throws {
+        sessionWrites.append(record)
+        let ready = sessionWriteWaiters.filter { sessionWrites.count >= $0.0 }
+        sessionWriteWaiters.removeAll { sessionWrites.count >= $0.0 }
+        for waiter in ready { waiter.1.resume() }
+        if sessionWriteSuspended {
+            sessionWriteSuspended = false
+            await withCheckedContinuation { sessionWriteContinuation = $0 }
+        }
+    }
     func loadRecovery(documentID: UUID) async throws -> RecoveryRecord? { nil }
     func loadAllRecovery() async throws -> [RecoveryRecord] { [] }
     func writeRecovery(_ record: RecoveryRecord) async throws {
@@ -453,6 +615,14 @@ private actor OperationRepositoryFake: SessionPersisting {
         for waiter in ready { waiter.1.resume() }
     }
     func deleteRecovery(documentID: UUID) async throws {
+        deleteCallCount += 1
+        let ready = deleteWaiters.filter { deleteCallCount >= $0.0 }
+        deleteWaiters.removeAll { deleteCallCount >= $0.0 }
+        for waiter in ready { waiter.1.resume() }
+        if deleteSuspended {
+            deleteSuspended = false
+            await withCheckedContinuation { deleteContinuation = $0 }
+        }
         if remainingDeleteFailures > 0 {
             remainingDeleteFailures -= 1
             throw OperationFakeError.deleteFailed
@@ -463,6 +633,26 @@ private actor OperationRepositoryFake: SessionPersisting {
     func waitForRecoveryWrites(_ count: Int) async {
         guard recoveryWrites.count < count else { return }
         await withCheckedContinuation { recoveryWaiters.append((count, $0)) }
+    }
+
+    func waitForSessionWrites(_ count: Int) async {
+        guard sessionWrites.count < count else { return }
+        await withCheckedContinuation { sessionWriteWaiters.append((count, $0)) }
+    }
+
+    func waitForDeleteCalls(_ count: Int) async {
+        guard deleteCallCount < count else { return }
+        await withCheckedContinuation { deleteWaiters.append((count, $0)) }
+    }
+
+    func resumeSessionWrite() {
+        sessionWriteContinuation?.resume()
+        sessionWriteContinuation = nil
+    }
+
+    func resumeDelete() {
+        deleteContinuation?.resume()
+        deleteContinuation = nil
     }
 }
 

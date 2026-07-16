@@ -391,6 +391,11 @@ final class ApplicationModel {
         let recovery: RecoveryCoordinator
     }
 
+    private struct DocumentOperationBoundary: Equatable {
+        let documentID: UUID
+        let generation: Int
+    }
+
     private func operationDependencies() -> OperationDependencies? {
         do {
             let services = try resolvedServices()
@@ -408,21 +413,29 @@ final class ApplicationModel {
         _ replacement: PendingReplacement,
         dependencies: OperationDependencies
     ) async -> Bool {
+        let boundary = currentDocumentBoundary()
         guard document.hasUnsavedChanges else {
-            return await deleteRecovery(
+            let deleted = await deleteRecovery(
                 documentID: document.id,
                 using: dependencies
             )
+            guard await revalidate(boundary, using: dependencies) else { return false }
+            return deleted
         }
-        switch await decisionCoordinator.request(.replaceCurrentDocument(replacement)) {
+        let resolution = await decisionCoordinator.request(.replaceCurrentDocument(replacement))
+        guard await revalidate(boundary, using: dependencies) else { return false }
+        switch resolution {
         case .save:
-            return await performSave(document.snapshot(), using: dependencies)
-                && !document.hasUnsavedChanges
+            let saved = await performSave(document.snapshot(), using: dependencies)
+            guard await revalidate(boundary, using: dependencies) else { return false }
+            return saved && !document.hasUnsavedChanges
         case .discard:
-            return await deleteRecovery(
+            let deleted = await deleteRecovery(
                 documentID: document.id,
                 using: dependencies
             )
+            guard await revalidate(boundary, using: dependencies) else { return false }
+            return deleted
         case .cancel:
             requestEditorFocus()
             return false
@@ -446,21 +459,31 @@ final class ApplicationModel {
                 recoveryCleanupRequiredDocumentID = nil
             }
             guard await flushRecovery(using: dependencies.recovery) else { return false }
-        } else if recoveryCleanupRequiredDocumentID == document.id,
-                  !(await deleteRecovery(documentID: document.id, using: dependencies)) {
-            return false
+        } else if recoveryCleanupRequiredDocumentID == document.id {
+            let cleanupBoundary = currentDocumentBoundary()
+            let deleted = await deleteRecovery(documentID: document.id, using: dependencies)
+            guard await revalidate(cleanupBoundary, using: dependencies), deleted else {
+                return false
+            }
         }
 
         if document.hasUnsavedChanges {
-            switch await decisionCoordinator.request(decision) {
+            let decisionBoundary = currentDocumentBoundary()
+            let resolution = await decisionCoordinator.request(decision)
+            guard await revalidate(decisionBoundary, using: dependencies) else { return false }
+            switch resolution {
             case .save:
-                guard await performSave(document.snapshot(), using: dependencies),
+                let saved = await performSave(document.snapshot(), using: dependencies)
+                guard await revalidate(decisionBoundary, using: dependencies),
+                      saved,
                       !document.hasUnsavedChanges else { return false }
             case .discard:
-                guard await deleteRecovery(
+                let deleted = await deleteRecovery(
                     documentID: document.id,
                     using: dependencies
-                ) else { return false }
+                )
+                guard await revalidate(decisionBoundary, using: dependencies),
+                      deleted else { return false }
             case .cancel:
                 requestEditorFocus()
                 return false
@@ -470,17 +493,19 @@ final class ApplicationModel {
             }
         }
 
+        let sessionBoundary = currentDocumentBoundary()
         do {
             try await dependencies.recovery.flushSession(
                 for: document,
                 windowFrame: windowFrameProvider(),
                 didCloseCleanly: true
             )
-            return true
         } catch {
             publishPersistenceBanner(error)
+            _ = await revalidate(sessionBoundary, using: dependencies)
             return false
         }
+        return await revalidate(sessionBoundary, using: dependencies)
     }
 
     private func applyOpenedFile(_ result: FileOpenResult) {
@@ -584,10 +609,16 @@ final class ApplicationModel {
                 using: dependencies
             )
         case .reloadFromDisk:
+            let reloadBoundary = DocumentOperationBoundary(
+                documentID: context.documentID,
+                generation: context.initiatingGeneration
+            )
+            guard await revalidate(reloadBoundary, using: dependencies) else { return false }
             guard await flushRecovery(using: dependencies.recovery) else { return false }
+            guard await revalidate(reloadBoundary, using: dependencies) else { return false }
             do {
                 let result = try await dependencies.services.files.open(context.fileReference)
-                guard document.id == context.documentID else { return false }
+                guard await revalidate(reloadBoundary, using: dependencies) else { return false }
                 document.applyOpenedFile(result, source: .confirmedDiskReload)
             } catch {
                 publishFileBanner(error, path: context.fileReference.pathHint)
@@ -691,6 +722,52 @@ final class ApplicationModel {
         } catch {
             publishPersistenceBanner(error)
             return false
+        }
+    }
+
+    private func currentDocumentBoundary() -> DocumentOperationBoundary {
+        DocumentOperationBoundary(
+            documentID: document.id,
+            generation: document.generation
+        )
+    }
+
+    private func revalidate(
+        _ boundary: DocumentOperationBoundary,
+        using dependencies: OperationDependencies
+    ) async -> Bool {
+        guard document.id == boundary.documentID else { return false }
+        guard document.generation != boundary.generation else { return true }
+        await preserveLatestDocumentState(
+            documentID: boundary.documentID,
+            using: dependencies
+        )
+        requestEditorFocus()
+        return false
+    }
+
+    private func preserveLatestDocumentState(
+        documentID: UUID,
+        using dependencies: OperationDependencies
+    ) async {
+        while document.id == documentID {
+            let generation = document.generation
+            if recoveryCleanupRequiredDocumentID == documentID {
+                recoveryCleanupRequiredDocumentID = nil
+            }
+            guard await flushRecovery(using: dependencies.recovery) else { return }
+            do {
+                try await dependencies.recovery.flushSession(
+                    for: document,
+                    windowFrame: windowFrameProvider(),
+                    didCloseCleanly: false
+                )
+            } catch {
+                publishPersistenceBanner(error)
+                return
+            }
+            guard document.id == documentID,
+                  document.generation != generation else { return }
         }
     }
 
