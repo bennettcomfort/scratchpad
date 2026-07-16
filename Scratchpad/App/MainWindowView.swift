@@ -14,7 +14,8 @@ struct MainWindowView: View {
             case .ready:
                 EditorHost(
                     document: model.document,
-                    onEdit: model.handleCurrentDocumentEdit
+                    onEdit: model.handleCurrentDocumentEdit,
+                    onStateChange: model.handleCurrentDocumentStateChange
                 )
                     .id(model.document.id)
             }

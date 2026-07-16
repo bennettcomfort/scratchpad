@@ -161,7 +161,10 @@ final class ApplicationLifecycleTests: XCTestCase {
         delegate.applicationDidResignActive(
             Notification(name: NSApplication.didResignActiveNotification)
         )
-        await resignGate.waitUntilEntered()
+        guard await resignGate.waitUntilEntered() else {
+            resignGate.resume()
+            return
+        }
         XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateLater)
         await Task.yield()
         XCTAssertEqual(events, ["resign-start"])
@@ -191,7 +194,10 @@ final class ApplicationLifecycleTests: XCTestCase {
         )
 
         XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateLater)
-        await terminationGate.waitUntilEntered()
+        guard await terminationGate.waitUntilEntered() else {
+            terminationGate.resume()
+            return
+        }
         delegate.applicationDidResignActive(
             Notification(name: NSApplication.didResignActiveNotification)
         )
@@ -286,25 +292,34 @@ private final class WindowCloseHarness {
 @MainActor
 private final class LifecycleGate {
     private var continuation: CheckedContinuation<Void, Never>?
-    private var entryContinuations: [CheckedContinuation<Void, Never>] = []
     private var didEnter = false
+    private var shouldProceed = false
 
     func wait() async {
         didEnter = true
-        let entries = entryContinuations
-        entryContinuations.removeAll()
-        entries.forEach { $0.resume() }
+        guard !shouldProceed else {
+            shouldProceed = false
+            return
+        }
         await withCheckedContinuation { continuation = $0 }
     }
 
-    func waitUntilEntered() async {
-        guard !didEnter else { return }
-        await withCheckedContinuation { entryContinuations.append($0) }
+    func waitUntilEntered() async -> Bool {
+        for _ in 0..<1_000 {
+            if didEnter { return true }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for lifecycle gate entry")
+        return false
     }
 
     func resume() {
-        continuation?.resume()
-        continuation = nil
+        guard let continuation else {
+            shouldProceed = true
+            return
+        }
+        self.continuation = nil
+        continuation.resume()
     }
 }
 

@@ -68,6 +68,9 @@ final class RecoveryProjectPolicyTests: XCTestCase {
         XCTAssertFalse(failedSlice.contains("EditorHost"))
         XCTAssertTrue(readySlice.contains("EditorHost"))
         XCTAssertTrue(readySlice.contains("onEdit: model.handleCurrentDocumentEdit"))
+        XCTAssertTrue(
+            readySlice.contains("onStateChange: model.handleCurrentDocumentStateChange")
+        )
     }
 
     func testProductionPresentsEveryDocumentDecisionThroughOneSheet() throws {

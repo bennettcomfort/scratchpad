@@ -82,6 +82,56 @@ final class ApplicationModelTests: XCTestCase {
         let writes = await repository.recoveryWrites
         XCTAssertEqual(writes.map(\.unsavedText), ["typed in production editor"])
     }
+
+    func testDirtyDocumentStateChangeReschedulesRecoveryWithLatestMetadata() async throws {
+        let repository = LaunchRepositoryFake()
+        let model = ApplicationModel(
+            launchState: .restoring,
+            servicesFactory: { makeLaunchServices(repository: repository) }
+        )
+        await model.restoreCurrentLaunchAttempt(
+            windowFrame: CGRect(x: 0, y: 0, width: 820, height: 640)
+        )
+
+        model.document.storage.setAttributedString(NSAttributedString(string: "dirty recovery"))
+        model.document.noteUserEdit()
+        model.handleCurrentDocumentEdit(model.document)
+        await repository.waitForRecoveryWrites(1)
+        let generationAfterEdit = model.document.generation
+
+        model.document.updateSelection(TextSelection(location: 5, length: 3))
+        model.document.updateScrollOffset(91)
+        model.handleCurrentDocumentStateChange(model.document)
+        await repository.waitForRecoveryWrites(2)
+
+        let writes = await repository.recoveryWrites
+        XCTAssertEqual(writes.last?.unsavedText, "dirty recovery")
+        XCTAssertEqual(writes.last?.selection, TextSelection(location: 5, length: 3))
+        XCTAssertEqual(writes.last?.scrollOffsetY, 91)
+        XCTAssertEqual(model.document.generation, generationAfterEdit)
+        XCTAssertTrue(model.document.hasUnsavedChanges)
+    }
+
+    func testCleanDocumentStateChangeDoesNotCreateRecovery() async throws {
+        let repository = LaunchRepositoryFake()
+        let model = ApplicationModel(
+            launchState: .restoring,
+            servicesFactory: { makeLaunchServices(repository: repository) }
+        )
+        await model.restoreCurrentLaunchAttempt(
+            windowFrame: CGRect(x: 0, y: 0, width: 820, height: 640)
+        )
+
+        model.document.updateSelection(TextSelection(location: 0, length: 0))
+        model.document.updateScrollOffset(17)
+        model.handleCurrentDocumentStateChange(model.document)
+        for _ in 0..<100 { await Task.yield() }
+
+        let writes = await repository.recoveryWrites
+        XCTAssertEqual(writes, [])
+        XCTAssertEqual(model.document.generation, 0)
+        XCTAssertFalse(model.document.hasUnsavedChanges)
+    }
 }
 
 @MainActor

@@ -6,10 +6,15 @@ import XCTest
 final class EditorCoordinatorTests: XCTestCase {
     private func assembly(
         text: String = "alpha",
+        onStateChange: @escaping @MainActor (DocumentSession) -> Void = { _ in },
         onEdit: @escaping @MainActor (DocumentSession) -> Void
     ) throws -> (DocumentSession, EditorCoordinator, NSWindow, NSScrollView, ScratchTextView) {
         let document = DocumentSession(text: text)
-        let coordinator = EditorCoordinator(document: document, onEdit: onEdit)
+        let coordinator = EditorCoordinator(
+            document: document,
+            onEdit: onEdit,
+            onStateChange: onStateChange
+        )
         let scrollView = EditorHost.makeScrollView(
             document: document,
             coordinator: coordinator
@@ -48,7 +53,13 @@ final class EditorCoordinatorTests: XCTestCase {
     }
 
     func testSelectionAndScrollAreCapturedAndClamped() throws {
-        let (document, coordinator, _, scrollView, textView) = try assembly { _ in }
+        var editCount = 0
+        var stateChangeCount = 0
+        let (document, coordinator, _, scrollView, textView) = try assembly(
+            onStateChange: { _ in stateChangeCount += 1 },
+            onEdit: { _ in editCount += 1 }
+        )
+        let initialGeneration = document.generation
         textView.setSelectedRange(NSRange(location: 2, length: 2))
         coordinator.textViewDidChangeSelection(
             Notification(name: NSTextView.didChangeSelectionNotification, object: textView)
@@ -61,6 +72,10 @@ final class EditorCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(document.selection, TextSelection(location: 2, length: 2))
         XCTAssertEqual(document.scrollOffsetY, 42)
+        XCTAssertEqual(document.generation, initialGeneration)
+        XCTAssertFalse(document.hasUnsavedChanges)
+        XCTAssertEqual(editCount, 0)
+        XCTAssertEqual(stateChangeCount, 2)
     }
 
     func testWholeReplacementDoesNotEmitUserEditCallback() throws {

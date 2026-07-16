@@ -5,9 +5,14 @@ import SwiftUI
 struct EditorHost: NSViewRepresentable {
     let document: DocumentSession
     var onEdit: @MainActor (DocumentSession) -> Void = { _ in }
+    var onStateChange: @MainActor (DocumentSession) -> Void = { _ in }
 
     func makeCoordinator() -> EditorCoordinator {
-        EditorCoordinator(document: document, onEdit: onEdit)
+        EditorCoordinator(
+            document: document,
+            onEdit: onEdit,
+            onStateChange: onStateChange
+        )
     }
 
     func makeNSView(context: Context) -> NSScrollView {

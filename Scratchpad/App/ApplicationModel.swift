@@ -250,6 +250,15 @@ final class ApplicationModel {
         recoveryCoordinator.scheduleRecovery(for: editedDocument)
     }
 
+    func handleCurrentDocumentStateChange(_ changedDocument: DocumentSession) {
+        guard launchState == .ready,
+              changedDocument === document,
+              changedDocument.id == document.id,
+              changedDocument.hasUnsavedChanges,
+              let recoveryCoordinator else { return }
+        recoveryCoordinator.scheduleRecovery(for: changedDocument)
+    }
+
     func restoreCurrentLaunchAttempt(windowFrame: CGRect) async {
         let attempt = launchAttempt
         guard launchState == .restoring,
