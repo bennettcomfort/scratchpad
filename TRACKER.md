@@ -70,8 +70,8 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 4.1 | Implement typed settings and Launch at Login | pending | Approved plan; current task after Stage 3 approval |
-| 4.2 | Define fixed themes and apply editor appearance safely | pending | Approved plan; awaits Task 4.1 verification |
+| 4.1 | Implement typed settings and Launch at Login | verified | Missing-type compile RED; 8/8 focused tests; warning-as-error build; 203/203 full suite; scope, invariant, data-loss, and whitespace review pass; no manual check required; this task commit |
+| 4.2 | Define fixed themes and apply editor appearance safely | pending | Approved plan; Task 4.1 verified, but Task 4.2 has not begun |
 | 4.3 | Calculate prompt metrics off the main actor | pending | Approved plan; awaits Task 4.2 verification |
 | 4.4 | Build the Noto-inspired main window | pending | Approved plan; awaits Task 4.3 verification |
 | 4.5 | Build native General, Editor, and Theme settings | pending | Approved plan; awaits Task 4.4 verification |
@@ -91,7 +91,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | verified | User approved Stage 1 on 2026-07-15; commits `988a539`, `3bdacc9`, `3a1e4af`, `2e8c4c7`, `2b703b5` |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | verified | User approved Stage 2 on 2026-07-15; commits `cfaed34`, `04ef7ce`, `c804391`, `9d04dc0` |
 | 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | verified | User approved Stage 3 on 2026-07-16, including deterministic substitution for two fault-injection-only branches; commits through `102ecc8` |
-| 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | in progress | Task 4.1 is next; user approves the completed visual and settings matrix |
+| 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | in progress | Task 4.1 verified; Task 4.2 has not begun; user approves the completed visual and settings matrix |
 | 5 | Complete warning, regression, accessibility, performance, and dogfood hardening | pending | User accepts recovery milestone |
 
 ## Known Defect Ledger
@@ -192,6 +192,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-16 | Task 3.8 AppKit scroll-restoration correction | Signed rerun persisted and restored selection `3725/24` and recovery scroll `1796`, but the visible clip view remained at top because scrolling preceded `documentView` attachment. Real AppKit RED retained out-of-range offset `100000` instead of clamping to maximum `840`; the signed lifecycle supplied the attachment-reset reproduction. A layout-aware scroll view now attaches/configures TextKit 2 storage first, waits for a nonzero viewport, clamps and restores once with bounds notifications suppressed, and reflects the scroller. Focused editor/recovery/manual-correction suite passed 44/44; warning-as-error build succeeded; full suite passed 158/158; whitespace and invariant scans pass. | in progress | Fixture preserved at `/tmp/scratchpad-stage3-manual-20260716/failed-scroll-restore-rerun`; user Application Support is restored. Row 1 awaits another signed rerun; matrix remains 0/12; Stage 4 is not authorized. |
 | 2026-07-16 | Task 3.8 final signed matrix and selected-URL Save As correction | Clean REDs proved the missing selected-URL API and old pre-bookmark app ordering. Commit `bed9a49` writes and verifies panel-selected bytes before bookmark creation, promotes recovery before association adoption, and preserves original dirty recovery on every failure boundary. Review added selected-URL reread-mismatch/no-bookmark and application preservation regressions in `102ecc8`. Focused review tests pass 2/2; fresh full suite passes 195/195; build and whitespace gates pass. | verified | Ten signed rows pass; the user approved deterministic substitution for suspended-Save timing and quarantine-move failure. Save As bytes, bookmark relaunch, repeated Quit, and corrupt-session quarantine passed. Isolated results were archived and original Application Support hash `96a00d8e3c79536334e66c743d9c4eea0490729073232713c86a4b8c15eb47b8` was restored. |
 | 2026-07-16 | Stage 3 approval | User approved the complete data-safety evidence matrix, including the two documented deterministic fault-injection substitutions | verified | Stage 3 accepted; Stage 4 / Task 4.1 pointer authorized, with no Stage 4 implementation begun in this commit. |
+| 2026-07-16 | Task 4.1 typed settings and Launch at Login | Exact eight-test compile RED failed only for missing `SettingsStore`, `LaunchAtLoginServicing`, `FontPreference`, and related typed interfaces. Focused GREEN passed 8/8. `xcodegen`; warning-as-error build; full suite passed 203/203. `git diff --check`, H1–H14/prohibited-scope scans, typed snapshot observation, injected-suite persistence, font fallback preservation, document-storage nonmutation, and launch rollback review pass. | verified | Centralized scalar defaults and typed snapshots now feed later Stage 4 tasks; live launch registration uses `SMAppService.mainApp` status with throwing register/unregister calls and actual-status rereads. No manual check required; Task 4.2 was not begun. |
 
 ## Current Manual Acceptance Matrix
 
