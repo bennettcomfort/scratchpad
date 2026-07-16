@@ -124,6 +124,88 @@ final class RecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(records.last?.scrollOffsetY, 83)
     }
 
+    func testMetadataDuringSuspendedWriteSchedulesExactlyOneFreshFollowUp() async throws {
+        let repository = RecoveryRepositorySpy(suspendedRecoveryWriteCount: 1)
+        let clock = VirtualRecoveryClock()
+        let document = DocumentSession(
+            text: "dirty text",
+            hasUnsavedChanges: true,
+            generation: 1
+        )
+        let documents = DocumentLookup([document])
+        let coordinator = RecoveryCoordinator(
+            repository: repository,
+            clock: clock,
+            documentProvider: { documents.document(id: $0) }
+        )
+
+        coordinator.scheduleRecovery(for: document)
+        guard await waitForSleeperCount(1, clock: clock) else { return }
+        await clock.advance(by: .seconds(2))
+        await repository.waitForRecoveryWriteEntries(1)
+
+        document.updateSelection(TextSelection(location: 2, length: 1))
+        coordinator.ensureRecoveryScheduled(for: document)
+        document.updateSelection(TextSelection(location: 6, length: 2))
+        document.updateScrollOffset(119)
+        coordinator.ensureRecoveryScheduled(for: document)
+        coordinator.ensureRecoveryScheduled(for: document)
+
+        await repository.releaseNextRecoveryWrite()
+        await waitForRecoveryWrites(1, repository: repository)
+        guard await waitForSleeperCount(1, clock: clock) else { return }
+        await clock.advance(by: .seconds(2))
+        await waitForRecoveryWrites(2, repository: repository)
+
+        let records = await repository.recoveryWrites
+        let finalRecord = await repository.storedRecovery(documentID: document.id)
+        let remainingSleeperCount = await clock.activeSleeperCount
+        XCTAssertEqual(records.count, 2)
+        XCTAssertEqual(records.first?.selection, TextSelection(location: 0, length: 0))
+        XCTAssertEqual(records.first?.scrollOffsetY, 0)
+        XCTAssertEqual(records.last?.selection, TextSelection(location: 6, length: 2))
+        XCTAssertEqual(records.last?.scrollOffsetY, 119)
+        XCTAssertEqual(finalRecord, records.last)
+        XCTAssertEqual(remainingSleeperCount, 0)
+    }
+
+    func testExplicitFlushClearsMetadataFollowUpAndFinishesNewest() async throws {
+        let repository = RecoveryRepositorySpy(suspendedRecoveryWriteCount: 1)
+        let clock = VirtualRecoveryClock()
+        let document = DocumentSession(
+            text: "dirty text",
+            hasUnsavedChanges: true,
+            generation: 1
+        )
+        let documents = DocumentLookup([document])
+        let coordinator = RecoveryCoordinator(
+            repository: repository,
+            clock: clock,
+            documentProvider: { documents.document(id: $0) }
+        )
+
+        coordinator.scheduleRecovery(for: document)
+        guard await waitForSleeperCount(1, clock: clock) else { return }
+        await clock.advance(by: .seconds(2))
+        await repository.waitForRecoveryWriteEntries(1)
+
+        document.updateSelection(TextSelection(location: 4, length: 3))
+        document.updateScrollOffset(71)
+        coordinator.ensureRecoveryScheduled(for: document)
+        let flush = Task { try await coordinator.flushRecovery(for: document) }
+        await repository.releaseNextRecoveryWrite()
+        try await flush.value
+
+        let records = await repository.recoveryWrites
+        let finalRecord = await repository.storedRecovery(documentID: document.id)
+        let remainingSleeperCount = await clock.activeSleeperCount
+        XCTAssertEqual(records.count, 2)
+        XCTAssertEqual(records.last?.selection, TextSelection(location: 4, length: 3))
+        XCTAssertEqual(records.last?.scrollOffsetY, 71)
+        XCTAssertEqual(finalRecord, records.last)
+        XCTAssertEqual(remainingSleeperCount, 0)
+    }
+
     func testExplicitFlushCancelsPendingTaskAndWritesLatestText() async throws {
         let repository = RecoveryRepositorySpy()
         let clock = VirtualRecoveryClock()

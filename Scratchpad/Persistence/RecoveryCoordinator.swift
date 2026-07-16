@@ -27,6 +27,8 @@ final class RecoveryCoordinator {
     private let clock: any RecoveryClock
     private let documentProvider: @MainActor @Sendable (UUID) -> DocumentSession?
     private var pendingRecoveries: [UUID: PendingRecovery] = [:]
+    private var snapshotCapturedTokens: [UUID: UUID] = [:]
+    private var metadataFollowUpDocumentIDs: Set<UUID> = []
     private var activeWriteDocumentIDs: Set<UUID> = []
     private var writeWaiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
 
@@ -53,31 +55,43 @@ final class RecoveryCoordinator {
                 return
             }
             guard !Task.isCancelled else { return }
-            guard let currentDocument = documentProvider(documentID) else { return }
+            guard pendingRecoveries[documentID]?.token == token else { return }
+            snapshotCapturedTokens[documentID] = token
+            guard let currentDocument = documentProvider(documentID) else {
+                snapshotCapturedTokens[documentID] = nil
+                return
+            }
             let record = currentDocument.recoverySnapshot()
             await acquireWriteGate(documentID: documentID)
             defer { releaseWriteGate(documentID: documentID) }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                clearSnapshotState(documentID: documentID, token: token)
+                return
+            }
             do {
                 try await repository.writeRecovery(record)
             } catch {
+                clearSnapshotState(documentID: documentID, token: token)
                 return
             }
-            if pendingRecoveries[documentID]?.token == token {
-                pendingRecoveries[documentID] = nil
-            }
+            completeRecovery(documentID: documentID, token: token)
         }
         pendingRecoveries[documentID] = PendingRecovery(token: token, task: task)
     }
 
     func ensureRecoveryScheduled(for document: DocumentSession) {
-        guard pendingRecoveries[document.id] == nil else { return }
+        if let pendingRecovery = pendingRecoveries[document.id] {
+            if snapshotCapturedTokens[document.id] == pendingRecovery.token {
+                metadataFollowUpDocumentIDs.insert(document.id)
+            }
+            return
+        }
         scheduleRecovery(for: document)
     }
 
     func flushRecovery(for document: DocumentSession) async throws {
         let documentID = document.id
-        pendingRecoveries.removeValue(forKey: documentID)?.task.cancel()
+        cancelRecovery(documentID: documentID)
         let record = document.recoverySnapshot()
         await acquireWriteGate(documentID: documentID)
         defer { releaseWriteGate(documentID: documentID) }
@@ -99,6 +113,28 @@ final class RecoveryCoordinator {
 
     func cancelRecovery(documentID: UUID) {
         pendingRecoveries.removeValue(forKey: documentID)?.task.cancel()
+        snapshotCapturedTokens[documentID] = nil
+        metadataFollowUpDocumentIDs.remove(documentID)
+    }
+
+    private func clearSnapshotState(documentID: UUID, token: UUID) {
+        guard snapshotCapturedTokens[documentID] == token else { return }
+        snapshotCapturedTokens[documentID] = nil
+        metadataFollowUpDocumentIDs.remove(documentID)
+    }
+
+    private func completeRecovery(documentID: UUID, token: UUID) {
+        guard pendingRecoveries[documentID]?.token == token else {
+            clearSnapshotState(documentID: documentID, token: token)
+            return
+        }
+        pendingRecoveries[documentID] = nil
+        snapshotCapturedTokens[documentID] = nil
+        let requiresFollowUp = metadataFollowUpDocumentIDs.remove(documentID) != nil
+        guard requiresFollowUp,
+              let currentDocument = documentProvider(documentID),
+              currentDocument.hasUnsavedChanges else { return }
+        scheduleRecovery(for: currentDocument)
     }
 
     private func acquireWriteGate(documentID: UUID) async {
