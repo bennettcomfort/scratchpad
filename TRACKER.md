@@ -1,8 +1,8 @@
 # TRACKER.md — Scratchpad Recovery
 
-> **Current stage:** Recovery Stage 4 — Noto-inspired shell, settings, and metrics
+> **Current stage:** Recovery Stage 5 — Accessibility, performance, and release proof
 > **Current phase:** Implementation
-> **Next task:** Stage 4 approval gate
+> **Next task:** Task 5.1 — prove accessibility and keyboard-only operation
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -80,7 +80,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 5.1 | Prove accessibility and keyboard-only operation | pending | Approved plan; awaits Stage 4 verification and approval |
+| 5.1 | Prove accessibility and keyboard-only operation | in progress | Approved plan; Stage 4 approved by user; implementation begins from a clean 245/245 baseline |
 | 5.2 | Measure the published performance budgets | pending | Approved plan; awaits Task 5.1 verification |
 | 5.3 | Automate the final source and release audit | pending | Approved plan; awaits Task 5.2 verification |
 | 5.4 | Complete dogfood and destructive failure injection | pending | Approved plan; awaits Task 5.3 verification |
@@ -91,7 +91,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | verified | User approved Stage 1 on 2026-07-15; commits `988a539`, `3bdacc9`, `3a1e4af`, `2e8c4c7`, `2b703b5` |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | verified | User approved Stage 2 on 2026-07-15; commits `cfaed34`, `04ef7ce`, `c804391`, `9d04dc0` |
 | 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | verified | User approved Stage 3 on 2026-07-16, including deterministic substitution for two fault-injection-only branches; commits through `102ecc8` |
-| 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | in progress | Tasks 4.1–4.5 and the ten-row matrix are verified; awaiting explicit user approval before Stage 5 |
+| 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | verified | User approved Stage 4 on 2026-07-16; Tasks 4.1–4.5, 245/245 tests, independent review, and ten-row visual/settings matrix accepted |
 | 5 | Complete warning, regression, accessibility, performance, and dogfood hardening | pending | User accepts recovery milestone |
 
 ## Known Defect Ledger
@@ -136,6 +136,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2026-07-16 | Task 3.7 controller review added three cancellation and lifecycle regressions; updated the remaining cumulative targets from 131/137 to 134/140 | `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
 | 2026-07-16 | User approved correcting signed Save As so a panel-selected nonexistent URL is atomically written and verified before its durable bookmark is created; original dirty recovery remains authoritative until promotion | `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
 | 2026-07-16 | User approved deterministic fault-injection evidence for suspended-Save timing and quarantine-move failure, accepted the complete Stage 3 matrix, and authorized the pointer advance to Stage 4 | `AGENTS.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
+| 2026-07-16 | User approved the complete Stage 4 code and visual/settings matrix; Stage 5 Task 5.1 is authorized | `AGENTS.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
 
 ## Blockers
 

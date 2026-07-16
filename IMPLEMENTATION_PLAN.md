@@ -4170,7 +4170,7 @@ Use stable identifiers `editor`, `document-title`, `information-bar`, `error-ban
 
 - [ ] **Step 3: Verify and commit**
 
-Run the UI test target. Expected: 8 UI tests pass; cumulative test count is 141.
+Run the UI test target. Expected: 8 UI tests pass; cumulative test count is 253.
 
 ```sh
 git add ScratchpadUITests/AccessibilityUITests.swift Scratchpad/UI/DocumentTitleView.swift Scratchpad/UI/InformationBarView.swift Scratchpad/UI/ErrorBannerView.swift Scratchpad/Settings/SettingsView.swift Scratchpad/App/MainWindowView.swift Scratchpad/Editor/EditorHost.swift project.yml TRACKER.md
@@ -4210,7 +4210,7 @@ Launch begins before model restoration and ends only after restored storage is a
 
 - [ ] **Step 3: Verify and commit**
 
-Expected: 4 new performance tests pass; cumulative count is 145. Record median launch under 400 ms for 1 MB, metrics under 150 ms for 2 MB, recovery at 2.0–2.5 seconds, and no recorded hitches during the 120 Hz typing trace.
+Expected: 4 new performance tests pass; cumulative count is 257. Record median launch under 400 ms for 1 MB, metrics under 150 ms for 2 MB, recovery at 2.0–2.5 seconds, and no recorded hitches during the 120 Hz typing trace.
 
 ```sh
 git add Scratchpad/Utilities/PerformanceProbe.swift Scratchpad/App/ScratchpadApp.swift Scratchpad/Document/MetricsCoordinator.swift Scratchpad/Persistence/RecoveryCoordinator.swift ScratchpadTests/Performance/PerformanceBudgetTests.swift ScratchpadUITests/PerformanceUITests.swift project.yml TRACKER.md
@@ -4301,7 +4301,7 @@ git commit -m "test: record recovery milestone acceptance"
 Stop with the app still single-document. Present:
 
 - clean `Scripts/verify_recovery_release.sh` output;
-- 149 passing tests and zero warnings;
+- 261 passing tests and zero warnings;
 - signed sandbox entitlement evidence;
 - accessibility and performance `.xcresult` paths;
 - Stage 4 screenshots;

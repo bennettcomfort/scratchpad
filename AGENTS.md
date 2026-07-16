@@ -4,9 +4,9 @@ Rules for every coding agent in this repository. Read this file before acting.
 
 ## Current Stage
 
-> **Recovery Stage 4 — Noto-inspired shell, settings, and metrics**
+> **Recovery Stage 5 — Accessibility, performance, and release proof**
 >
-> **Implementation lock: OFF.** Tasks 4.1–4.5 and the Stage 4 verification matrix are verified. Stop at the Stage 4 approval gate; do not begin Stage 5 without the user's explicit approval.
+> **Implementation lock: OFF.** Stage 4 is approved. Task 5.1 is current; do not begin Task 5.2 until Task 5.1 is verified.
 
 Work only on the current stage and current task recorded in `TRACKER.md`. Never prepare, scaffold, or begin a later stage without the user's explicit approval.
 
