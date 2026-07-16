@@ -3625,7 +3625,7 @@ git commit -m "feat: monitor external document changes"
 
 **Interfaces:** Consumes `ApplicationModel.requestClose()` and `requestTermination()`. Produces a window-close retry guard and exactly one `.terminateLater` task.
 
-- [ ] **Step 1: Write the failing lifecycle tests**
+- [x] **Step 1: Write the failing lifecycle tests**
 
 Create tests named exactly:
 
@@ -3646,7 +3646,7 @@ decision -> recovery flush -> session(false) -> session(true) -> reply(true)
 
 On any failure, expected order ends with `reply(false)` and contains no clean-session write after the failed step.
 
-- [ ] **Step 2: Implement the lifecycle handshakes**
+- [x] **Step 2: Implement the lifecycle handshakes**
 
 `WindowCloseCoordinator.windowShouldClose()` returns `false`, starts one task, awaits `requestClose`, and on success invokes a guarded second close that bypasses interception exactly once.
 
@@ -3654,7 +3654,7 @@ On any failure, expected order ends with `reply(false)` and contains no clean-se
 
 The final `didCloseCleanly = true` session write occurs only after decision resolution, recovery flush, and the non-clean session write have all succeeded. Close, quit, New, and Open all reuse `DocumentDecisionCoordinator`; no view owns save-and-close branching.
 
-- [ ] **Step 3: Run the complete automated Stage 3 gate**
+- [x] **Step 3: Run the complete automated Stage 3 gate**
 
 ```sh
 xcodegen
@@ -3663,7 +3663,7 @@ xcodebuild -scheme Scratchpad -destination 'platform=macOS' test
 git diff --check
 ```
 
-Expected: warning-free build, 140 passing tests, and no whitespace errors.
+Expected: warning-free build, 195 passing tests after approved review corrections, and no whitespace errors.
 
 - [ ] **Step 4: Run the signed-sandbox manual data-loss matrix**
 
@@ -3686,19 +3686,19 @@ Record evidence for every row in `TRACKER.md`:
 
 Signed-sandbox correction approved on 2026-07-16: Save As must not create a security-scoped bookmark for a nonexistent panel URL. Add a selected-URL file-service path that atomically writes and verifies first, persists the bookmark second, promotes recovery third, and adopts the new association last. A failure at any boundary preserves the original association and dirty recovery; direct path fallback remains forbidden.
 
-- [ ] **Correction step A: Add failing selected-URL service tests**
+- [x] **Correction step A: Add failing selected-URL service tests**
 
 Add `FileServicing.saveAs(_:toSelectedURL:)`. In `FileServiceTests`, record writer and bookmark events and add `testSaveAsSelectedURLWritesBeforeCreatingBookmark` plus `testSaveAsSelectedURLBookmarkFailureLeavesVerifiedBytesButReturnsFailure`. The first must expect `write -> verify read -> bookmark`; the second must expect exact destination bytes to remain while the operation throws and returns no `FileSaveResult`. Run only those tests and record the missing-method compile failure.
 
-- [ ] **Correction step B: Add failing application-ordering tests**
+- [x] **Correction step B: Add failing application-ordering tests**
 
 Update the controllable file fake to accept selected URLs directly. Replace pre-write pending-journal assertions with: recovery for the original association is durable before the file call; the selected-URL result supplies the durable destination reference; promoted destination recovery is durable before session-cleaning or association adoption; write/bookmark failure retains the original association and dirty recovery; and a concurrent edit remains dirty with its latest generation. Run the focused application tests and record the old pre-bookmark flow failure.
 
-- [ ] **Correction step C: Implement the minimum selected-URL pipeline**
+- [x] **Correction step C: Implement the minimum selected-URL pipeline**
 
 `FileService.saveAs(_:toSelectedURL:)` serializes with other file operations, calls `AtomicFileWriting.writeSecurityScoped`, verifies exact bytes/hash/mtime through `FileSystemAccessing`, calls `BookmarkAccessing.storeSelection` only after verification, and returns `FileSaveResult`. `ApplicationModel.performSaveAs` flushes original recovery, calls the selected-URL method, writes `snapshot.recoveryRecord(verifiedSaveAs:)`, and only then calls `applySaveResult`. On failure it preserves the latest document recovery/session when generation advanced and otherwise leaves the original association dirty. It never constructs an `ExternalFileReference` from a path.
 
-- [ ] **Correction step D: Verify and resume the signed row**
+- [x] **Correction step D: Verify and resume the signed row**
 
 Run the AtomicFileWriter, FileService, RecoveryCoordinator, DocumentDecisionCoordinator, and lifecycle focused tests; run the full suite and warning-as-error signed build; run `git diff --check`; then repeat conflict Save As to a new filename in the signed app. Required result: original disk bytes remain external, new destination bytes equal the editor snapshot, the document associates with the new bookmark only after verification, and relaunch reopens that destination without another panel.
 
@@ -3725,7 +3725,7 @@ After Tasks 3.1–3.8 are `verified`, stop before visual-shell work. Present fre
 | Operation ordering | Save/Discard/Cancel gates New, Open, Close, and Quit with awaited results |
 | External changes | clean reloads; dirty conflicts; missing and denied access remain explicit states |
 | Termination | one `.terminateLater` task replies exactly once and cancels quit on failure |
-| Automated gate | warning-free build and 140 passing tests |
+| Automated gate | warning-free build and 195 passing tests |
 | Manual gate | all 12 signed-sandbox data-loss scenarios are recorded as passing |
 
 The user must explicitly approve Stage 3 before `AGENTS.md` and `TRACKER.md` advance to Recovery Stage 4.

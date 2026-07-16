@@ -580,6 +580,31 @@ final class DocumentDecisionCoordinatorTests: XCTestCase {
         XCTAssertEqual(deletedDocumentIDs, [])
     }
 
+    func testSelectedURLVerificationFailureKeepsOriginalRecoveryAndAssociation() async throws {
+        let repository = OperationRepositoryFake()
+        let files = ControllableFileServiceFake(saveAsError: .verificationFailed)
+        let destinationURL = URL(fileURLWithPath: "/tmp/unverified-save-as.md")
+        let document = makeEditedDocument(text: "local text remains authoritative")
+        let originalReference = document.fileReference
+        let model = makeModel(
+            document: document,
+            repository: repository,
+            files: files,
+            panel: OperationPanelFake(saveURLs: [destinationURL])
+        )
+
+        let saved = await model.saveAs()
+
+        XCTAssertFalse(saved)
+        XCTAssertEqual(document.fileReference, originalReference)
+        XCTAssertTrue(document.hasUnsavedChanges)
+        let recoveryWrites = await repository.recoveryWrites
+        let recovery = try XCTUnwrap(recoveryWrites.last)
+        XCTAssertEqual(recovery.fileReferenceID, originalReference?.bookmarkID)
+        XCTAssertEqual(recovery.unsavedText, "local text remains authoritative")
+        XCTAssertNil(recovery.pendingSaveAs)
+    }
+
     func testFailedSelectedURLSaveAsKeepsOriginalRecoveryAssociation() async throws {
         let repository = OperationRepositoryFake()
         let files = ControllableFileServiceFake(saveAsError: .writeFailed)

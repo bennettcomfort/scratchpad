@@ -241,6 +241,35 @@ final class FileServiceTests: XCTestCase {
         XCTAssertEqual(verifiedBytes, snapshot.persistedBytes)
     }
 
+    func testSaveAsSelectedURLVerificationMismatchDoesNotCreateBookmark() async {
+        let events = SelectedURLEventRecorder()
+        let fileSystem = SelectedURLFileSystemSpy(
+            events: events,
+            verificationReplacement: Data("mismatched reread".utf8)
+        )
+        let writer = SelectedURLWriterSpy(fileSystem: fileSystem, events: events)
+        let bookmarks = SelectedURLBookmarkSpy(events: events)
+        let service = FileService(
+            bookmarks: bookmarks,
+            writer: writer,
+            fileSystem: fileSystem
+        )
+        let destination = URL(fileURLWithPath: "/panel/VerificationFailure.md")
+        let snapshot = makeSnapshot(
+            reference: nil,
+            hash: nil,
+            mtime: nil,
+            text: "must verify before bookmark"
+        )
+
+        await XCTAssertFileServiceThrows(.verificationFailed) {
+            _ = try await service.saveAs(snapshot, toSelectedURL: destination)
+        }
+
+        let recordedEvents = await events.snapshot()
+        XCTAssertEqual(recordedEvents, ["write", "verify"])
+    }
+
     func testSaveVerificationFailureThrowsAfterRereadMismatch() async throws {
         let base = Data("base".utf8)
         let fixture = await makeFixture(
@@ -1120,17 +1149,22 @@ private actor SelectedURLBookmarkSpy: BookmarkAccessing {
 
 private actor SelectedURLFileSystemSpy: FileSystemAccessing {
     private let events: SelectedURLEventRecorder
+    private let verificationReplacement: Data?
     private var storedBytes: [URL: Data] = [:]
 
-    init(events: SelectedURLEventRecorder) {
+    init(
+        events: SelectedURLEventRecorder,
+        verificationReplacement: Data? = nil
+    ) {
         self.events = events
+        self.verificationReplacement = verificationReplacement
     }
 
     func read(_ url: URL) async throws -> FileReadSnapshot {
         await events.append("verify")
         guard let data = storedBytes[url] else { throw FileSystemAccessError.missing }
         return FileReadSnapshot(
-            data: data,
+            data: verificationReplacement ?? data,
             modificationDate: Date(timeIntervalSince1970: 4_000),
             isWritable: true
         )

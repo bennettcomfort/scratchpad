@@ -1,8 +1,8 @@
 # TRACKER.md — Scratchpad Recovery
 
 > **Current stage:** Recovery Stage 3 — Data-safe persistence and lifecycle
-> **Current phase:** Implementation
-> **Next task:** Task 3.8 — await window close and application termination
+> **Current phase:** Implementation review
+> **Next task:** User decision on hybrid evidence for two fault-injection-only matrix branches
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -64,7 +64,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 3.5 | Debounce recovery per document and restore the correct source | verified | Corrected design `7a39707`; fresh stale-flush, launch-model compile, production-root policy, production edit-route, and nil-bookmark regressions; 17/17 focused and 113/113 full tests; both races 5/5; warning-as-error build; task and broad reviews clean; seeded recovery-first, clean-disk-first, and initial-focus manual checks pass; this task commit |
 | 3.6 | Serialize native panels, decisions, and destructive document operations | verified | Feature `c72680c`; generation-race fix `b3dc20d`; 13/13 focused and 126/126 full tests; warning-as-error build and independent review pass |
 | 3.7 | Monitor external changes without document-identity races | verified | Feature `8e5a018`; cancellation fix `9ff333e`; 8/8 focused and 134/134 full tests; warning-as-error build and independent review pass |
-| 3.8 | Await window close and application termination | in progress | Automated gate verified at 158/158 after AppKit scroll-restoration correction; signed-sandbox row 1 awaits another rerun; 0/12 rows verified |
+| 3.8 | Await window close and application termination | in progress | Save As correction `bed9a49`; warning-as-error build; 195/195 tests; 10 signed rows pass; suspended-Save and quarantine-failure deterministic substitutions await explicit approval |
 
 ### Stage 4 Task Ledger
 
@@ -90,7 +90,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 0 | Preserve baseline, remove deferred surfaces from the active target, and lock known failures with regressions | verified | User approved Stage 0 on 2026-07-14; commits `61be30c`, `f7c765a`, `81d0865` |
 | 1 | Establish one `DocumentSession`, one TextKit 2 editor attachment, and correct text ownership | verified | User approved Stage 1 on 2026-07-15; commits `988a539`, `3bdacc9`, `3a1e4af`, `2e8c4c7`, `2b703b5` |
 | 2 | Route native and fixed Sublime-style commands once, with correct selections and undo | verified | User approved Stage 2 on 2026-07-15; commits `cfaed34`, `04ef7ce`, `c804391`, `9d04dc0` |
-| 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | in progress | Task 3.8 in progress; user approval required after Tasks 3.1–3.8 |
+| 3 | Make recovery, bookmarks, sandboxed file access, saves, conflicts, close, and quit data-safe | in progress | Task 3.8 awaits an evidence-method decision before the Stage 3 approval gate |
 | 4 | Build the approved Noto-inspired shell, fixed themes, information bar, token estimate, and settings | pending | User approves visual and settings matrix |
 | 5 | Complete warning, regression, accessibility, performance, and dogfood hardening | pending | User accepts recovery milestone |
 
@@ -100,9 +100,9 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 |---|---|---|---|
 | Editor coordinator remains bound to the first buffer; tabs can show or edit the wrong text | Reduce to one document, then prove editor identity before multi-document returns | 0–1 | pending |
 | Concurrent open paths and double activation can create duplicate tabs | Remove from recovery target; retain a regression requirement for the later tabs stage | 0 / deferred | pending |
-| Save-and-Close closes before an asynchronous save finishes | Replace with an awaited decision transaction that remains open on failure | 3 | pending |
-| Global recovery debounce lets one buffer cancel another and quit can miss the latest edit | Use per-document recovery scheduling and an awaited termination flush | 3 | pending |
-| Clean restoration can produce empty text; dirty restoration lacks complete save metadata | Persist explicit session/recovery records and restore from the correct source | 3 | pending |
+| Save-and-Close closes before an asynchronous save finishes | Replace with an awaited decision transaction that remains open on failure | 3 | verified |
+| Global recovery debounce lets one buffer cancel another and quit can miss the latest edit | Use per-document recovery scheduling and an awaited termination flush | 3 | verified |
+| Clean restoration can produce empty text; dirty restoration lacks complete save metadata | Persist explicit session/recovery records and restore from the correct source | 3 | verified |
 | App Sandbox and persistent security-scoped bookmarks are absent | Enable the real sandbox and persist refreshed bookmarks atomically | 3 | verified |
 | Competing local key monitors mutate storage directly and commands fire unreliably | Replace with responder-chain actions and one typed command router | 2 | pending |
 | Sidebar divider shakes because drag geometry moves under the pointer and writes defaults continuously | Remove from recovery target; require native split view when workspace returns | 0 / deferred | pending |
@@ -134,6 +134,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2026-07-16 | User approved continuous execution through the end of Stage 3; corrected stale cumulative test totals after Task 3.5 expanded the suite to 113 tests | `AGENTS.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
 | 2026-07-16 | Task 3.6 controller review added three suspended-boundary generation regressions; updated the remaining cumulative targets from 123/128/134 to 126/131/137 | `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
 | 2026-07-16 | Task 3.7 controller review added three cancellation and lifecycle regressions; updated the remaining cumulative targets from 131/137 to 134/140 | `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
+| 2026-07-16 | User approved correcting signed Save As so a panel-selected nonexistent URL is atomically written and verified before its durable bookmark is created; original dirty recovery remains authoritative until promotion | `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
 
 ## Blockers
 
@@ -188,6 +189,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-16 | Task 3.8 recovery-metadata timer correction | Compile RED proved the metadata-specific ensure-scheduled API was absent. Repeated metadata updates now retain an existing dirty-text recovery token and its original two-second deadline; the deadline writes one snapshot with current text, selection, and scroll. Metadata after that write completes schedules a fresh recovery. Text-edit debounce replacement and explicit-flush ordering are unchanged. Focused recovery/editor/model/lifecycle/policy suite passed 38/38; warning-as-error build succeeded; full suite passed 154/154; whitespace and invariant scans pass. | in progress | Manual row 1 still awaits signed-app rerun; matrix remains 0/12; user Application Support remains restored; Stage 4 is not authorized. |
 | 2026-07-16 | Task 3.8 post-snapshot metadata correction | Suspended-write RED reached the old recovery snapshot/write, applied a burst of newer selection/scroll updates, released the write, and timed out waiting for a follow-up sleeper. Token-scoped snapshot phase plus one coalesced metadata-follow-up now writes the old captured record, then exactly one fresh record with latest metadata. Explicit flush clears the follow-up, waits FIFO behind the old write, and remains final; cancellation/text rescheduling clear stale follow-up state. Focused recovery/editor/model/lifecycle/policy suite passed 40/40; warning-as-error build succeeded; full suite passed 156/156; whitespace and invariant scans pass. | in progress | Manual row 1 still awaits signed-app rerun; matrix remains 0/12; user Application Support remains restored; Stage 4 is not authorized. |
 | 2026-07-16 | Task 3.8 AppKit scroll-restoration correction | Signed rerun persisted and restored selection `3725/24` and recovery scroll `1796`, but the visible clip view remained at top because scrolling preceded `documentView` attachment. Real AppKit RED retained out-of-range offset `100000` instead of clamping to maximum `840`; the signed lifecycle supplied the attachment-reset reproduction. A layout-aware scroll view now attaches/configures TextKit 2 storage first, waits for a nonzero viewport, clamps and restores once with bounds notifications suppressed, and reflects the scroller. Focused editor/recovery/manual-correction suite passed 44/44; warning-as-error build succeeded; full suite passed 158/158; whitespace and invariant scans pass. | in progress | Fixture preserved at `/tmp/scratchpad-stage3-manual-20260716/failed-scroll-restore-rerun`; user Application Support is restored. Row 1 awaits another signed rerun; matrix remains 0/12; Stage 4 is not authorized. |
+| 2026-07-16 | Task 3.8 final signed matrix and selected-URL Save As correction | Clean REDs proved the missing selected-URL API and old pre-bookmark app ordering. Commit `bed9a49` writes and verifies panel-selected bytes before bookmark creation, promotes recovery before association adoption, and preserves original dirty recovery on every failure boundary. Review added selected-URL reread-mismatch/no-bookmark and application preservation regressions. Focused review tests pass 2/2; fresh full suite passes 195/195; build and whitespace gates pass. | in progress | Ten signed rows pass. Save As created exact `copy-save-as-fixed.md` bytes, bookmark relaunch used no panel, repeated Quit coalesced, corrupt session bytes were quarantined unchanged, isolated results were archived, and original Application Support hash `96a00d8e3c79536334e66c743d9c4eea0490729073232713c86a4b8c15eb47b8` was restored. User must approve deterministic substitution for suspended-Save timing and quarantine-move failure before Task 3.8 can be verified. |
 
 ## Current Manual Acceptance Matrix
 
@@ -217,18 +219,18 @@ The automated fixtures never read, replace, or delete the user's real Applicatio
 
 | Scenario | State | Controller fixture/action and required evidence |
 |---|---|---|
-| Untitled crash/relaunch | failed; correction awaiting rerun | Isolated run restored text but recovery retained pre-navigation `selection.location = 4999`, length 0, and `scrollOffsetY = 0` after native Find selected line 150 and scrolled near line 128. Automated metadata correction passes; rerun required. |
-| File-backed edited crash/relaunch | pending manual | Open a temporary `.md`, edit without saving, force-kill, relaunch; recovery text must appear edited with the same file association. |
-| Clean relaunch after external edit | pending manual | Save and quit a temporary file, mutate its bytes externally, relaunch; disk bytes must appear and stale recovery text must not. |
-| Save then immediate Close | pending manual | Edit a temporary file, choose Save and immediately close; window must await the verified write and reopened bytes must match. |
-| Failed Save then Close/Quit | pending manual | Make the selected temporary destination fail a coordinated write, then Close and Quit; each operation must cancel while text stays open, edited, and recoverable. |
-| Edit while Save is suspended | pending manual | Suspend the temporary-file write after snapshot capture, type a unique suffix, resume; disk must contain the captured snapshot while the suffix remains edited and recoverable. |
-| External edit while clean/dirty | pending manual | Externally mutate once while clean and once after a local edit; clean must reload, dirty must enter conflict without replacing local text. |
-| Delete or revoke access | pending manual | Delete the selected temporary file, then separately revoke its bookmark access; show deleted/read-only state with no recreation or path fallback. |
-| Overwrite/Reload/Save As/Cancel | pending manual | Seed a dirty conflict four times and exercise each action; verify overwrite bytes, disk reload, independent Save As bytes/association, and unchanged local text on Cancel. |
-| Bookmark relaunch | pending manual | Select a file outside the container, quit cleanly, relaunch, edit, and save; the same file must reopen and accept a sandboxed save. |
-| Repeated Quit | pending manual | With an edited document, invoke Quit repeatedly before resolving once; observe one decision, one flush sequence, and one termination reply. |
-| Corrupt JSON | pending manual | Seed corrupt isolated session/recovery JSON, relaunch, and inspect quarantine; successful quarantine moves the file, while an injected quarantine failure leaves original bytes untouched. |
+| Untitled crash/relaunch | verified | Signed force-kill/relaunch restored the latest debounced text, selection, and nonzero visible scroll after the metadata and AppKit attachment corrections. |
+| File-backed edited crash/relaunch | verified | Signed force-kill restored local dirty text as edited and retained the same bookmark-backed file association. |
+| Clean relaunch after external edit | verified | After a clean quit and external byte change, signed relaunch displayed current disk bytes rather than stale recovery. |
+| Save then immediate Close | verified | Close waited for Save; the window closed only after verification and reopened bytes matched the captured editor snapshot. |
+| Failed Save then Close/Quit | verified | Coordinated write failure cancelled both Close and Quit; local text stayed open, edited, and present in recovery. |
+| Edit while Save is suspended | awaiting evidence approval | Deterministic production-model integration test `testGenerationChangeDuringSaveRemainsEditedAndReschedulesRecovery` suspended after snapshot capture: disk result used generation N while N+1 stayed edited and recoverable. The signed production app intentionally has no debug suspension hook. |
+| External edit while clean/dirty | verified | Signed clean external mutation reloaded; dirty external mutation preserved local text and entered conflict. |
+| Delete or revoke access | verified | Signed deletion/reselection checks preserved local text, exposed missing/reselection state, and neither recreated the file nor used a path fallback. |
+| Overwrite/Reload/Save As/Cancel | verified | Signed conflict runs proved Cancel preserved local text, Reload used disk, Overwrite wrote local bytes, and corrected Save As wrote `copy-save-as-fixed.md` while leaving original external bytes intact. |
+| Bookmark relaunch | verified | Clean signed quit persisted bookmark `9FD8D9F9-C300-4CAF-860C-DD090E418901`; relaunch reopened `copy-save-as-fixed.md` without a panel and a subsequent edit/save succeeded. |
+| Repeated Quit | verified | Three rapid `⌘Q` invocations produced one decision sheet; one Save wrote `ROW11-REPEATED-QUIT`, one clean session, and one process exit. |
+| Corrupt JSON | awaiting evidence approval | Signed launch moved malformed session bytes unchanged to `quarantine/2026-07-16T16:45:11Z-latest-session.json` and opened safely; focused `testQuarantineFailurePreservesOriginalAndThrows` proved injected move failure retains original bytes. Approval is required to accept the deterministic failure half. |
 
 ## Update Protocol
 
