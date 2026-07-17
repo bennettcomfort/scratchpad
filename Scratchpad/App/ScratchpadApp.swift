@@ -1,15 +1,29 @@
+import AppKit
 import Foundation
+import OSLog
 import SwiftUI
 
 @main
 struct ScratchpadApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model: ApplicationModel
+    @State private var launchSignpostID: OSSignpostID?
+    #if DEBUG
+    @State private var launchStartedAt: ContinuousClock.Instant?
+    @State private var launchDurationMilliseconds: Double?
+    #endif
     private let applicationSupportPaths: ApplicationSupportPaths
 
     init() {
+        #if DEBUG
+        let launchStartedAt = ContinuousClock.now
+        _launchStartedAt = State(initialValue: launchStartedAt)
+        #endif
         let resolvedPaths = Self.resolveApplicationSupportPaths()
         applicationSupportPaths = resolvedPaths
+        _launchSignpostID = State(
+            initialValue: PerformanceProbe.begin(PerformanceProbe.launchToEditorReady)
+        )
         #if DEBUG
         if let root = ProcessInfo.processInfo.environment["SCRATCHPAD_UI_TEST_ROOT"],
            !root.isEmpty {
@@ -24,6 +38,49 @@ struct ScratchpadApp: App {
         }
         #else
         _model = State(initialValue: ApplicationModel.live())
+        #endif
+    }
+
+    private func finishLaunchProbeWhenEditorIsReady() {
+        Task { @MainActor in
+            for _ in 0..<1_000 {
+                if NSApp.keyWindow?.firstResponder is ScratchTextView,
+                   let launchSignpostID {
+                    #if DEBUG
+                    if let launchStartedAt {
+                        let elapsed = launchStartedAt.duration(to: .now).components
+                        launchDurationMilliseconds = Double(elapsed.seconds) * 1_000
+                            + Double(elapsed.attoseconds) / 1_000_000_000_000_000
+                        self.launchStartedAt = nil
+                    }
+                    #endif
+                    PerformanceProbe.end(
+                        PerformanceProbe.launchToEditorReady,
+                        id: launchSignpostID
+                    )
+                    self.launchSignpostID = nil
+                    return
+                }
+                await Task.yield()
+            }
+        }
+    }
+
+    private func seedPerformanceDocumentIfRequested() {
+        #if DEBUG
+        guard let value = ProcessInfo.processInfo.environment[
+            "SCRATCHPAD_UI_TEST_SEED_DOCUMENT_BYTES"
+        ],
+        let byteCount = Int(value),
+        (1...2_000_000).contains(byteCount) else { return }
+
+        model.document.replaceEntireContents(
+            String(repeating: "a", count: byteCount),
+            source: .sessionRestore,
+            selection: TextSelection(location: 0, length: 0)
+        )
+        model.document.noteUserEdit()
+        model.handleCurrentDocumentEdit(model.document)
         #endif
     }
 
@@ -52,8 +109,27 @@ struct ScratchpadApp: App {
         Window("Untitled", id: "main") {
             MainWindowView()
                 .environment(model)
+                .overlay(alignment: .topLeading) {
+                    #if DEBUG
+                    if ProcessInfo.processInfo.environment["SCRATCHPAD_UI_TEST_ROOT"] != nil,
+                       let launchDurationMilliseconds {
+                        Text("Launch duration")
+                            .frame(width: 1, height: 1)
+                            .opacity(0.01)
+                            .accessibilityIdentifier("launch-duration")
+                            .accessibilityValue(
+                                String(format: "%.3f", launchDurationMilliseconds)
+                            )
+                    }
+                    #endif
+                }
                 .background(WindowLifecycleInstaller(model: model))
                 .onAppear { appDelegate.attach(model: model) }
+                .onChange(of: model.launchState) { _, launchState in
+                    guard launchState == .ready else { return }
+                    finishLaunchProbeWhenEditorIsReady()
+                    seedPerformanceDocumentIfRequested()
+                }
                 .sheet(
                     isPresented: Binding(
                         get: { model.pendingDecision != nil },

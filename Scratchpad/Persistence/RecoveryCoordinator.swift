@@ -69,7 +69,7 @@ final class RecoveryCoordinator {
                 return
             }
             do {
-                try await repository.writeRecovery(record)
+                try await writeRecovery(record)
             } catch {
                 clearSnapshotState(documentID: documentID, token: token)
                 return
@@ -99,7 +99,7 @@ final class RecoveryCoordinator {
         await acquireWriteGate(documentID: documentID)
         defer { releaseWriteGate(documentID: documentID) }
         try Task.checkCancellation()
-        try await repository.writeRecovery(record)
+        try await writeRecovery(record)
     }
 
     func flushSession(
@@ -159,6 +159,17 @@ final class RecoveryCoordinator {
         let next = waiters.removeFirst()
         writeWaiters[documentID] = waiters.isEmpty ? nil : waiters
         next.resume()
+    }
+
+    private func writeRecovery(_ record: RecoveryRecord) async throws {
+        let signpostID = PerformanceProbe.begin(PerformanceProbe.recoveryWrite)
+        defer {
+            PerformanceProbe.end(
+                PerformanceProbe.recoveryWrite,
+                id: signpostID
+            )
+        }
+        try await repository.writeRecovery(record)
     }
 
     static func restoreSource(

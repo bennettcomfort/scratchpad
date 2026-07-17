@@ -49,7 +49,16 @@ final class MetricsCoordinator {
             guard !Task.isCancelled else { return }
 
             let calculation = Task.detached(priority: .utility) {
-                DocumentMetricsCalculator.calculateUnlessCancelled(
+                let signpostID = PerformanceProbe.begin(
+                    PerformanceProbe.metricsCalculation
+                )
+                defer {
+                    PerformanceProbe.end(
+                        PerformanceProbe.metricsCalculation,
+                        id: signpostID
+                    )
+                }
+                return DocumentMetricsCalculator.calculateUnlessCancelled(
                     text: text,
                     countsWhitespace: countsWhitespace
                 )
