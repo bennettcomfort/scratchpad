@@ -94,7 +94,10 @@ final class ApplicationModel {
         observeMetricsSettings()
     }
 
-    static func live(settings: SettingsStore? = nil) -> ApplicationModel {
+    static func live(
+        settings: SettingsStore? = nil,
+        applicationSupportPaths: ApplicationSupportPaths? = nil
+    ) -> ApplicationModel {
         let resolvedSettings = settings ?? SettingsStore(
             defaults: .standard,
             launchService: LaunchAtLoginService()
@@ -102,7 +105,9 @@ final class ApplicationModel {
         return ApplicationModel(
             settings: resolvedSettings,
             launchState: .restoring,
-            servicesFactory: { try ApplicationServices.live() },
+            servicesFactory: {
+                try ApplicationServices.live(paths: applicationSupportPaths)
+            },
             panelProvider: FilePanelProvider(),
             windowFrameProvider: {
                 NSApp.keyWindow?.frame

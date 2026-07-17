@@ -29,7 +29,10 @@ struct InformationBarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: theme.informationBar))
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("information-bar")
         .accessibilityLabel("Document information")
-        .accessibilityValue("\(presentation.metricsText), \(presentation.encodingText)")
+        .accessibilityValue(
+            "\(presentation.metricsText), \(presentation.encodingText). \(InformationBarPresentation.tokenHelpText)"
+        )
     }
 }

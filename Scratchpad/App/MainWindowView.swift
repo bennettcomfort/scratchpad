@@ -4,6 +4,7 @@ import SwiftUI
 struct MainWindowView: View {
     @Environment(ApplicationModel.self) private var model
     @Environment(\.colorScheme) private var colorScheme
+    @State private var editorFocusRequest = 0
 
     var body: some View {
         let presentation = MainWindowPresentation(
@@ -22,6 +23,12 @@ struct MainWindowView: View {
         )
         .task(id: model.launchAttempt) {
             await model.restoreCurrentLaunchAttempt(windowFrame: currentWindowFrame)
+            presentUITestBannerIfRequested()
+        }
+        .onChange(of: model.pendingDecision != nil) { wasPresented, isPresented in
+            if wasPresented, !isPresented {
+                editorFocusRequest &+= 1
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -44,6 +51,14 @@ struct MainWindowView: View {
             return CGRect(x: 0, y: 0, width: 820, height: 640)
         }
         return frame
+    }
+
+    private func presentUITestBannerIfRequested() {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["SCRATCHPAD_UI_TEST_FORCE_BANNER"] == "1" {
+            model.presentPendingLifecycleFailure()
+        }
+        #endif
     }
 
     private func launchFailureView(message: String) -> some View {
@@ -96,6 +111,8 @@ struct MainWindowView: View {
                     onEdit: model.handleCurrentDocumentEdit,
                     onStateChange: model.handleCurrentDocumentStateChange,
                     isEditable: model.allowsDocumentEditing,
+                    requestsFocusWhenEditable: true,
+                    focusRequest: editorFocusRequest,
                     canEdit: { model.allowsDocumentEditing }
                 )
                 .id(model.document.id)

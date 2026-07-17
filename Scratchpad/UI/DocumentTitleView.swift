@@ -53,7 +53,8 @@ struct DocumentTitleView: View {
         .padding(.horizontal, layout.nativeControlSafeInset)
         .background(Color(nsColor: theme.titleRegion))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Document title")
+        .accessibilityIdentifier("document-title")
+        .accessibilityLabel(presentation.title)
         .accessibilityValue(presentation.accessibilityValue)
     }
 }

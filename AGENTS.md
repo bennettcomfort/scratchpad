@@ -6,7 +6,7 @@ Rules for every coding agent in this repository. Read this file before acting.
 
 > **Recovery Stage 5 — Accessibility, performance, and release proof**
 >
-> **Implementation lock: OFF.** Stage 4 is approved. Task 5.1 is current; do not begin Task 5.2 until Task 5.1 is verified.
+> **Implementation lock: OFF.** Stage 4 is approved. Task 5.1 is verified; Task 5.2 is current and has not begun.
 
 Work only on the current stage and current task recorded in `TRACKER.md`. Never prepare, scaffold, or begin a later stage without the user's explicit approval.
 

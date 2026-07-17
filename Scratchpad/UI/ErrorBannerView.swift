@@ -5,6 +5,7 @@ struct ErrorBannerView: View {
     let banner: ErrorBanner
     let theme: ThemeDefinition
     let onAction: (BannerAction) -> Void
+    @FocusState private var focusedActionIndex: Int?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -12,10 +13,11 @@ struct ErrorBannerView: View {
                 .symbolRenderingMode(.monochrome)
             Text(banner.message)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            ForEach(Array(banner.actions.enumerated()), id: \.offset) { _, action in
+            ForEach(Array(banner.actions.enumerated()), id: \.offset) { index, action in
                 Button(label(for: action)) {
                     onAction(action)
                 }
+                .focused($focusedActionIndex, equals: index)
             }
         }
         .font(.system(size: 12))
@@ -24,7 +26,12 @@ struct ErrorBannerView: View {
         .padding(.vertical, 8)
         .background(Color(nsColor: theme.banner))
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("error-banner")
         .accessibilityLabel("Error")
+        .accessibilityValue(banner.message)
+        .onAppear {
+            focusedActionIndex = banner.actions.indices.first
+        }
     }
 
     private func label(for action: BannerAction) -> String {

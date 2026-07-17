@@ -4143,11 +4143,11 @@ After Tasks 4.1–4.5 are `verified`, stop before hardening. Present the warning
 
 ### Task 5.1: Prove Accessibility and Keyboard-Only Operation
 
-**Files:** Create `ScratchpadUITests/AccessibilityUITests.swift`; modify `Scratchpad/UI/DocumentTitleView.swift`, `Scratchpad/UI/InformationBarView.swift`, `Scratchpad/UI/ErrorBannerView.swift`, `Scratchpad/Settings/SettingsView.swift`, `Scratchpad/App/MainWindowView.swift`, `Scratchpad/Editor/EditorHost.swift`, `project.yml`, and `TRACKER.md`.
+**Files:** Create `ScratchpadUITests/AccessibilityUITests.swift`; modify `Scratchpad/UI/DocumentTitleView.swift`, `Scratchpad/UI/InformationBarView.swift`, `Scratchpad/UI/ErrorBannerView.swift`, `Scratchpad/Settings/SettingsView.swift`, `Scratchpad/App/MainWindowView.swift`, `Scratchpad/App/ScratchpadApp.swift`, `Scratchpad/App/ApplicationModel.swift`, `Scratchpad/App/ApplicationServices.swift`, `Scratchpad/Editor/EditorHost.swift`, `project.yml`, `AGENTS.md`, and `TRACKER.md`.
 
 **Interfaces:** Launches the real app with DEBUG-only isolated Application Support and defaults roots. The Release build contains no UI-test branch.
 
-- [ ] **Step 1: Add the failing UI accessibility tests**
+- [x] **Step 1: Add the failing UI accessibility tests**
 
 Create tests named exactly:
 
@@ -4164,16 +4164,16 @@ func testNativeFindAndServicesRemainReachable()
 
 Launch with a temporary root passed through `SCRATCHPAD_UI_TEST_ROOT`; the app honors it only under `#if DEBUG`. Expected initial run: tests fail on missing identifiers or focus behavior, not because they touch the user's real recovery state.
 
-- [ ] **Step 2: Fix semantics without duplicating visible text state**
+- [x] **Step 2: Fix semantics without duplicating visible text state**
 
 Use stable identifiers `editor`, `document-title`, `information-bar`, `error-banner`, `decision-sheet`, and `settings-<tab/control>`. Add accessibility labels/values/help to existing views; do not create hidden duplicate text. On launch and after Cancel, request first responder through `EditorHost`. Keep native `NSTextView` as the editable accessibility element.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run the UI test target. Expected: 8 UI tests pass; cumulative test count is 253.
 
 ```sh
-git add ScratchpadUITests/AccessibilityUITests.swift Scratchpad/UI/DocumentTitleView.swift Scratchpad/UI/InformationBarView.swift Scratchpad/UI/ErrorBannerView.swift Scratchpad/Settings/SettingsView.swift Scratchpad/App/MainWindowView.swift Scratchpad/Editor/EditorHost.swift project.yml TRACKER.md
+git add ScratchpadUITests/AccessibilityUITests.swift Scratchpad/UI/DocumentTitleView.swift Scratchpad/UI/InformationBarView.swift Scratchpad/UI/ErrorBannerView.swift Scratchpad/Settings/SettingsView.swift Scratchpad/App/MainWindowView.swift Scratchpad/App/ScratchpadApp.swift Scratchpad/App/ApplicationModel.swift Scratchpad/App/ApplicationServices.swift Scratchpad/Editor/EditorHost.swift project.yml AGENTS.md TRACKER.md
 git commit -m "test: prove editor accessibility"
 ```
 

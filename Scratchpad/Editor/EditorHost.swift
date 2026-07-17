@@ -4,6 +4,13 @@ import SwiftUI
 @MainActor
 private final class RestoringScrollView: NSScrollView {
     var restoredScrollOffsetY: Double?
+    var requestsEditorFocus = false
+    var handledFocusRequest = 0
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        requestEditorFocusIfPossible()
+    }
 
     override func layout() {
         super.layout()
@@ -32,6 +39,14 @@ private final class RestoringScrollView: NSScrollView {
         contentView.postsBoundsChangedNotifications = postsBoundsChanges
         self.restoredScrollOffsetY = nil
     }
+
+    func requestEditorFocusIfPossible() {
+        guard requestsEditorFocus,
+              let textView = documentView as? ScratchTextView,
+              textView.isEditable,
+              let window else { return }
+        window.makeFirstResponder(textView)
+    }
 }
 
 @MainActor
@@ -41,6 +56,8 @@ struct EditorHost: NSViewRepresentable {
     var onEdit: @MainActor (DocumentSession) -> Void = { _ in }
     var onStateChange: @MainActor (DocumentSession) -> Void = { _ in }
     var isEditable = true
+    var requestsFocusWhenEditable = true
+    var focusRequest = 0
     var canEdit: @MainActor () -> Bool = { true }
 
     func makeCoordinator() -> EditorCoordinator {
@@ -57,20 +74,32 @@ struct EditorHost: NSViewRepresentable {
             document: document,
             coordinator: context.coordinator,
             settings: settings,
-            isEditable: isEditable
+            isEditable: isEditable,
+            requestsFocusWhenEditable: requestsFocusWhenEditable,
+            focusRequest: focusRequest
         )
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         precondition(context.coordinator.documentID == document.id)
+        guard let restoringScrollView = scrollView as? RestoringScrollView else {
+            preconditionFailure("EditorHost lost its RestoringScrollView")
+        }
         guard let textView = scrollView.documentView as? ScratchTextView else {
             preconditionFailure("EditorHost lost its ScratchTextView")
         }
         precondition(textView.textLayoutManager != nil)
         precondition(textView.textStorage === document.storage)
+        let becameEditable = !textView.isEditable && isEditable
+        let receivedFocusRequest = restoringScrollView.handledFocusRequest != focusRequest
         textView.isEditable = isEditable
+        restoringScrollView.requestsEditorFocus = requestsFocusWhenEditable
+        restoringScrollView.handledFocusRequest = focusRequest
         textView.commandContext = .defaults(lineEnding: document.lineEnding)
         context.coordinator.apply(settings: settings, to: textView)
+        if becameEditable || receivedFocusRequest {
+            restoringScrollView.requestEditorFocusIfPossible()
+        }
     }
 
     static func dismantleNSView(
@@ -87,14 +116,20 @@ struct EditorHost: NSViewRepresentable {
         document: DocumentSession,
         coordinator: EditorCoordinator,
         settings: EditorSettingsSnapshot = .editorDefaults,
-        isEditable: Bool = true
+        isEditable: Bool = true,
+        requestsFocusWhenEditable: Bool = true,
+        focusRequest: Int = 0
     ) -> NSScrollView {
         let scrollView = RestoringScrollView()
+        scrollView.requestsEditorFocus = requestsFocusWhenEditable
+        scrollView.handledFocusRequest = focusRequest
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
 
         let textView = ScratchTextView(usingTextLayoutManager: true)
+        textView.setAccessibilityIdentifier("editor")
+        textView.setAccessibilityLabel("Editor")
         textView.commandContext = .defaults(lineEnding: document.lineEnding)
         guard let contentStorage = textView.textContentStorage else {
             preconditionFailure("TextKit 2 content storage is unavailable")

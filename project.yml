@@ -99,7 +99,16 @@ targets:
       GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: Scratchpad
+  ScratchpadUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - ScratchpadUITests/AccessibilityUITests.swift
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: Scratchpad
 schemes:
   Scratchpad:
     build: { targets: { Scratchpad: all } }
-    test: { targets: [ScratchpadTests] }
+    test: { targets: [ScratchpadTests, ScratchpadUITests] }

@@ -23,6 +23,17 @@ enum SettingsTab: String, Hashable {
     }
 }
 
+private struct SettingsTabSelectionKey: FocusedValueKey {
+    typealias Value = Binding<SettingsTab>
+}
+
+extension FocusedValues {
+    var settingsTabSelection: Binding<SettingsTab>? {
+        get { self[SettingsTabSelectionKey.self] }
+        set { self[SettingsTabSelectionKey.self] = newValue }
+    }
+}
+
 struct SettingsPresentation {
     static let tabs: [SettingsTab] = [.general, .editor, .theme]
 }
@@ -79,6 +90,7 @@ struct SettingsView: View {
     @Bindable private var settings: SettingsStore
     let recoveryFolder: URL
     @State private var fontPanelCoordinator: FontPanelCoordinator
+    @State private var selectedTab: SettingsTab = .general
 
     init(settings: SettingsStore, recoveryFolder: URL) {
         self.settings = settings
@@ -89,13 +101,19 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             ForEach(SettingsPresentation.tabs, id: \.self) { tab in
                 settingsTab(tab)
-                    .tabItem { Label(tab.title, systemImage: tab.symbolName) }
+                    .tag(tab)
+                    .tabItem {
+                        Label(tab.title, systemImage: tab.symbolName)
+                            .accessibilityIdentifier("settings-\(tab.rawValue)")
+                            .accessibilityLabel(tab.title)
+                    }
             }
         }
         .frame(width: 520, height: 390)
+        .focusedSceneValue(\.settingsTabSelection, $selectedTab)
         .onDisappear { fontPanelCoordinator.close() }
     }
 
@@ -153,10 +171,12 @@ struct SettingsView: View {
                     set: { settings.setLaunchAtLogin($0) }
                 )
             )
+            .accessibilityIdentifier("settings-launch-at-login")
         case .openRecoveryFolder:
             Button("Open Recovery Folder") {
                 _ = NSWorkspace.shared.open(recoveryFolder)
             }
+            .accessibilityIdentifier("settings-open-recovery-folder")
         }
     }
 
@@ -166,6 +186,7 @@ struct SettingsView: View {
         case .chooseFont:
             LabeledContent("Font") {
                 Button("Choose Font") { fontPanelCoordinator.open() }
+                    .accessibilityIdentifier("settings-choose-font")
             }
         case .smartSubstitutions:
             Toggle(
@@ -175,6 +196,7 @@ struct SettingsView: View {
                     set: { settings.setSmartSubstitutionsEnabled($0) }
                 )
             )
+            .accessibilityIdentifier("settings-smart-substitutions")
         case .spellingAndCorrection:
             Toggle(
                 "Spelling checking and correction",
@@ -183,6 +205,7 @@ struct SettingsView: View {
                     set: { settings.setSpellingEnabled($0) }
                 )
             )
+            .accessibilityIdentifier("settings-spelling-and-correction")
         case .spacesInsteadOfTabs:
             Toggle(
                 "Insert spaces instead of tabs",
@@ -191,6 +214,7 @@ struct SettingsView: View {
                     set: { settings.setInsertsSpaces($0) }
                 )
             )
+            .accessibilityIdentifier("settings-spaces-instead-of-tabs")
         case .tabWidth:
             Stepper(
                 "Tab width: \(settings.snapshot.tabWidth)",
@@ -200,6 +224,7 @@ struct SettingsView: View {
                 ),
                 in: EditorSettingsPresentation.tabWidthRange
             )
+            .accessibilityIdentifier("settings-tab-width")
         case .keepIndentation:
             Toggle(
                 "Keep indentation on new lines",
@@ -208,6 +233,7 @@ struct SettingsView: View {
                     set: { settings.setKeepsIndentation($0) }
                 )
             )
+            .accessibilityIdentifier("settings-keep-indentation")
         case .countWhitespace:
             Toggle(
                 "Count whitespace in characters",
@@ -216,6 +242,7 @@ struct SettingsView: View {
                     set: { settings.setCountsWhitespace($0) }
                 )
             )
+            .accessibilityIdentifier("settings-count-whitespace")
         case .informationBar:
             Toggle(
                 "Information bar",
@@ -224,6 +251,7 @@ struct SettingsView: View {
                     set: { settings.setShowsInformationBar($0) }
                 )
             )
+            .accessibilityIdentifier("settings-information-bar")
         }
     }
 
@@ -243,8 +271,10 @@ struct SettingsView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .accessibilityIdentifier("settings-appearance")
         case .preview:
             ThemePreviewView(settings: settings.snapshot)
+                .accessibilityIdentifier("settings-preview")
         }
     }
 }

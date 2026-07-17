@@ -7,16 +7,24 @@ struct ApplicationServices: Sendable {
     let recoveryClock: any RecoveryClock
 
     @MainActor
-    static func live() throws -> ApplicationServices {
-        let applicationSupport = try FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        let paths = ApplicationSupportPaths(
-            root: applicationSupport.appending(path: "Scratchpad", directoryHint: .isDirectory)
-        )
+    static func live(paths providedPaths: ApplicationSupportPaths? = nil) throws -> ApplicationServices {
+        let paths: ApplicationSupportPaths
+        if let providedPaths {
+            paths = providedPaths
+        } else {
+            let applicationSupport = try FileManager.default.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            paths = ApplicationSupportPaths(
+                root: applicationSupport.appending(
+                    path: "Scratchpad",
+                    directoryHint: .isDirectory
+                )
+            )
+        }
         try paths.createDirectories(using: .default)
 
         let fileSystem = LiveAtomicFileSystem()

@@ -2,7 +2,7 @@
 
 > **Current stage:** Recovery Stage 5 — Accessibility, performance, and release proof
 > **Current phase:** Implementation
-> **Next task:** Task 5.1 — prove accessibility and keyboard-only operation
+> **Next task:** Task 5.2 — measure the published performance budgets
 > **Implementation lock:** OFF
 
 Only these task states are valid: `pending`, `in progress`, `blocked`, and `verified`. Only `verified` work counts toward a gate or stage. Application and test code remain locked until Gates 4A–4E and the final consistency gate are approved.
@@ -80,7 +80,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 
 | Task | Deliverable | State | Evidence |
 |---|---|---|---|
-| 5.1 | Prove accessibility and keyboard-only operation | in progress | Approved plan; Stage 4 approved by user; implementation begins from a clean 245/245 baseline |
+| 5.1 | Prove accessibility and keyboard-only operation | verified | Exact 8/8 accessibility UI suite; full 253/253 suite; warning-as-error build; Release hook scan; keyboard-only settings operation; independent re-review clean; this task commit |
 | 5.2 | Measure the published performance budgets | pending | Approved plan; awaits Task 5.1 verification |
 | 5.3 | Automate the final source and release audit | pending | Approved plan; awaits Task 5.2 verification |
 | 5.4 | Complete dogfood and destructive failure injection | pending | Approved plan; awaits Task 5.3 verification |
@@ -137,6 +137,7 @@ The roadmap rows are stage anchors. Each approved Gate 4 section adds its task-l
 | 2026-07-16 | User approved correcting signed Save As so a panel-selected nonexistent URL is atomically written and verified before its durable bookmark is created; original dirty recovery remains authoritative until promotion | `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
 | 2026-07-16 | User approved deterministic fault-injection evidence for suspended-Save timing and quarantine-move failure, accepted the complete Stage 3 matrix, and authorized the pointer advance to Stage 4 | `AGENTS.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
 | 2026-07-16 | User approved the complete Stage 4 code and visual/settings matrix; Stage 5 Task 5.1 is authorized | `AGENTS.md`, `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
+| 2026-07-17 | User approved the Task 5.1 file-map amendment for isolated UI-test application paths, transient settings, and typed settings-tab commands | `IMPLEMENTATION_PLAN.md`, `TRACKER.md` |
 
 ## Blockers
 
@@ -200,6 +201,7 @@ When blocked, record the concrete evidence, affected task, safe work already exh
 | 2026-07-16 | Task 4.5 native settings automated gate | Exact six-test compile RED failed on the absent `FontManaging` and settings-presentation interfaces; focused GREEN passed 6/6. Fresh Stage 4 gate used `xcodegen`, `/tmp/ScratchpadStage4`, a warning-as-error build, and the full 239/239 suite. `git diff --check`, exact control inventory, H1-H14, scope, deferred-feature, settings-persistence, preview-nonmutation, and data-loss review pass. | verified | One native Settings scene now contains only General, Editor, and Theme tabs; font-manager prior target/action ownership is weak/restored; recovery opening is a direct button action. Later manual acceptance found and corrected two integration defects. |
 | 2026-07-16 | Task 4.5 review corrections | Review-regression compile RED proved the missing inventory-driven Settings rendering and injectable real-preview construction boundary; coordinator release regression covered the stale `changeFont:` action left by destruction while owning. Four added lifecycle tests cover destruction, repeated open, close/reopen recapture, and actual font-panel close notification. Focused GREEN passed 10/10; fresh `/tmp/ScratchpadStage4Review` build succeeded and full suite passed 243/243. | verified | `isolated deinit` restores captured target/action and removes the observer; typed tab and control inventories drive every rendered section; the real preview body resolves an injected appearance without mutating document or settings state. |
 | 2026-07-16 | Task 4.5 manual matrix and final Stage 4 review | The signed manual run captured fixed Light and Dark at 820 by 640 and exact 480 by 320, live metrics and help, selection/caret/banner contrast, information-bar and whitespace toggles, native font selection, General settings, and recovery-folder Finder navigation. It reproduced a missing native font panel and a 480 by 352 content/frame mismatch; regression-first corrections landed in `d182017`. Fresh warning-as-error build and 245/245 suite passed; independent whole-Stage-4 review reported no findings. | verified | All ten matrix rows and required screenshots are recorded. The original container preference and session SHA-256 hashes were restored exactly after testing. Stage 5 remains unauthorized until explicit user approval. |
+| 2026-07-17 | Task 5.1 accessibility and keyboard-only operation | Initial isolated launch baseline failed all eight exact UI tests. Review-correction REDs then proved missing exact token-help coverage and incomplete keyboard traversal. Final focused accessibility suite passed 8/8; the full xcresult at `Test-Scratchpad-2026.07.17_12-31-18--0500.xcresult` reports 253/253 tests and succeeded. Required warning-as-error build passed; Xcode emitted only its known test-framework parse and internal QoS diagnostics. Release build succeeded and its executable contains no `SCRATCHPAD_UI_TEST` hook strings. `git diff --check`, H1-H14 scan, DEBUG isolation, native Find/Services, launch and post-Cancel editor focus, and every interactive Settings control passed. | verified | User enabled macOS Keyboard Navigation and Accessibility access; no separate Xcode Automation entries appeared. The approved file-map amendment covers `ScratchpadApp`, `ApplicationModel`, and `ApplicationServices`. Independent re-review found no actionable issues. Task 5.2 has not begun. |
 
 ## Current Manual Acceptance Matrix
 
