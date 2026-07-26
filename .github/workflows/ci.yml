@@ -7,9 +7,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
         run: brew install xcodegen
-      - name: Generate project
-        run: xcodegen
-      - name: Build
-        run: xcodebuild -scheme Scratchpad -destination 'platform=macOS' build
-      - name: Test
-        run: xcodebuild -scheme Scratchpad -destination 'platform=macOS' test
+      - name: Verify recovery release
+        run: scripts/verify_recovery_release.sh

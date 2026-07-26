@@ -4130,7 +4130,7 @@ After Tasks 4.1–4.5 are `verified`, stop before hardening. Present the warning
 - `ScratchpadTests/Performance/PerformanceBudgetTests.swift` — deterministic logic budgets.
 - `ScratchpadUITests/AccessibilityUITests.swift` — labels, focus, keyboard, and decision accessibility.
 - `ScratchpadUITests/PerformanceUITests.swift` — launch and hitch measurements.
-- `Scripts/verify_recovery_release.sh` — one reproducible final verification command.
+- `scripts/verify_recovery_release.sh` — one reproducible final verification command.
 
 **Modify**
 
@@ -4219,9 +4219,9 @@ git commit -m "test: enforce recovery performance budgets"
 
 ### Task 5.3: Automate the Final Source and Release Audit
 
-**Files:** Create `ScratchpadTests/Policy/ReleasePolicyTests.swift` and `Scripts/verify_recovery_release.sh`; modify `.github/workflows/ci.yml`, `project.yml`, and `TRACKER.md`.
+**Files:** Create `ScratchpadTests/Policy/ReleasePolicyTests.swift` and `scripts/verify_recovery_release.sh`; modify `.github/workflows/ci.yml`, `project.yml`, and `TRACKER.md`.
 
-**Interfaces:** Produces the single final command `Scripts/verify_recovery_release.sh`; consumes no application APIs.
+**Interfaces:** Produces the single final command `scripts/verify_recovery_release.sh`; consumes no application APIs.
 
 - [ ] **Step 1: Add failing final policy tests**
 
@@ -4243,9 +4243,18 @@ The script uses `set -euo pipefail` and runs exactly:
 ```sh
 xcodegen
 xcodebuild -scheme Scratchpad -configuration Release -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadRelease build
-xcodebuild -scheme Scratchpad -configuration Release -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadRelease test
-codesign --verify --deep --strict /tmp/ScratchpadRelease/Build/Products/Release/Scratchpad.app
-codesign -d --entitlements :- /tmp/ScratchpadRelease/Build/Products/Release/Scratchpad.app
+xcodebuild -scheme Scratchpad -configuration Performance -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadRelease test
+app_path=/tmp/ScratchpadRelease/Build/Products/Release/Scratchpad.app
+entitlements_path="$(mktemp /tmp/ScratchpadReleaseEntitlements.XXXXXX)"
+trap 'rm -f "$entitlements_path"' EXIT
+codesign --verify --deep --strict "$app_path"
+codesign -d --xml --entitlements "$entitlements_path" "$app_path"
+entitlement_dump="$(plutil -p "$entitlements_path")"
+[[ "$(/usr/bin/grep -c ' => ' <<< "$entitlement_dump")" -eq 3 ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$entitlements_path")" == true ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.files.user-selected.read-write' "$entitlements_path")" == true ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.files.bookmarks.app-scope' "$entitlements_path")" == true ]]
+plutil -p "$entitlements_path"
 git diff --check
 ```
 
@@ -4253,10 +4262,10 @@ CI invokes this script directly and does not override deployment target, concurr
 
 - [ ] **Step 3: Verify and commit**
 
-Expected: 4 new policy tests pass; cumulative count is 149; Release build and signature verification pass.
+Expected: 4 new policy tests pass; cumulative count is 261; Release build and signature verification pass. Tests use the optimized, test-host-compatible `Performance` configuration because the hardened `Release` application cannot host XCTest.
 
 ```sh
-git add ScratchpadTests/Policy/ReleasePolicyTests.swift Scripts/verify_recovery_release.sh .github/workflows/ci.yml project.yml TRACKER.md
+git add ScratchpadTests/Policy/ReleasePolicyTests.swift scripts/verify_recovery_release.sh .github/workflows/ci.yml project.yml TRACKER.md
 git commit -m "chore: automate recovery release audit"
 ```
 
@@ -4266,7 +4275,7 @@ git commit -m "chore: automate recovery release audit"
 
 - [ ] **Step 1: Run the final command from a clean worktree**
 
-Run `Scripts/verify_recovery_release.sh`. Expected: Release build, 149 tests, signature, entitlements, and whitespace checks pass with zero warnings.
+Run `scripts/verify_recovery_release.sh`. Expected: Release build, 261 tests, signature, entitlements, and whitespace checks pass with zero warnings.
 
 - [ ] **Step 2: Run three fresh dogfood cycles**
 
@@ -4300,7 +4309,7 @@ git commit -m "test: record recovery milestone acceptance"
 
 Stop with the app still single-document. Present:
 
-- clean `Scripts/verify_recovery_release.sh` output;
+- clean `scripts/verify_recovery_release.sh` output;
 - 261 passing tests and zero warnings;
 - signed sandbox entitlement evidence;
 - accessibility and performance `.xcresult` paths;
@@ -4314,6 +4323,6 @@ The user must explicitly accept Stage 5 before the recovery milestone is complet
 
 # Gate 5 — Cross-Document Consistency and Implementation Unlock
 
-The completed review is recorded in `PLANNING_CONSISTENCY_REPORT.md`. It verifies authority, product coverage, invariants, file/type naming, 29-task ordering, 149-test arithmetic, historical-document status, stage gates, and deferred-feature absence.
+The completed review is recorded in `PLANNING_CONSISTENCY_REPORT.md`. It verifies authority, product coverage, invariants, file/type naming, 29-task ordering, the test-count arithmetic current when that historical review was written, historical-document status, stage gates, and deferred-feature absence.
 
 Gate 5 approval authorizes only the documentation unlock transaction in that report. The first implementation action remains Task 0.1; approval does not authorize Task 0.2, application feature work, or a later recovery stage.

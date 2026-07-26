@@ -105,6 +105,7 @@ targets:
       - ScratchpadTests/Files/FileServiceTests.swift
       - ScratchpadTests/Files/ExternalChangeMonitorTests.swift
       - ScratchpadTests/Performance/PerformanceBudgetTests.swift
+      - ScratchpadTests/Policy/ReleasePolicyTests.swift
     settings:
       GENERATE_INFOPLIST_FILE: YES
     dependencies:

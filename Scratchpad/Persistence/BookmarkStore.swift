@@ -276,7 +276,7 @@ actor BookmarkStore: BookmarkAccessing {
     }
 
     private func standardizedPath(forPathHint pathHint: String) -> String {
-        URL(filePath: pathHint).standardizedFileURL.path
+        (pathHint as NSString).standardizingPath
     }
 
     private func acquireOperation() async {
