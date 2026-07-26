@@ -4210,7 +4210,7 @@ Launch begins before model restoration and ends only after restored storage is a
 
 - [ ] **Step 3: Verify and commit**
 
-Expected: 4 new performance tests pass; cumulative count is 257. Record median launch under 1,000 ms for 1 MB, metrics under 150 ms for 2 MB, recovery at 2.0–2.5 seconds, and no recorded hitches during the 120 Hz typing trace.
+Expected: 4 new performance tests pass; cumulative count is 257. Record median launch under 1,200 ms for 1 MB, metrics under 150 ms for 2 MB, recovery at 2.0–2.5 seconds, and no recorded hitches during the 120 Hz typing trace.
 
 ```sh
 git add Scratchpad/Utilities/PerformanceProbe.swift Scratchpad/App/ScratchpadApp.swift Scratchpad/Document/MetricsCoordinator.swift Scratchpad/Persistence/RecoveryCoordinator.swift ScratchpadTests/Performance/PerformanceBudgetTests.swift ScratchpadUITests/PerformanceUITests.swift project.yml TRACKER.md

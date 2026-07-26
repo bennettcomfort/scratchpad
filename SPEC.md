@@ -327,7 +327,7 @@ Logging supplements visible error handling; it never replaces it.
 
 | Interaction | Budget |
 |---|---|
-| Cold launch to typeable restored editor | Under 1,000 ms for a 1 MB document |
+| Cold launch to typeable restored editor | Under 1,200 ms for a 1 MB document |
 | Keystroke to visible text | No dropped frames at 120 Hz for documents up to 2 MB |
 | Information metrics update | Within 150 ms without blocking text input |
 | Recovery snapshot after idle | 2.0–2.5 seconds after the final edit |

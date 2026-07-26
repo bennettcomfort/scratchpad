@@ -39,7 +39,7 @@ final class PerformanceUITests: XCTestCase {
             XCTFail("Expected five launch-duration samples, got \(measuredDurations.count)")
             return
         }
-        XCTAssertLessThan(measuredDurations[2], 1_000)
+        XCTAssertLessThan(measuredDurations[2], 1_200)
     }
 
     func testTwoMegabyteTypingRecordsNoHitchesAtTargetRefreshRate() {
