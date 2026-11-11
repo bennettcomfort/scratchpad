@@ -11,7 +11,6 @@ enum LaunchState: Equatable {
 
 enum ApplicationModelLaunchError: Error, Equatable {
     case missingServices
-    case unresolvedBookmark(UUID)
 }
 
 enum DocumentOperationState: Equatable, Sendable {
@@ -229,11 +228,15 @@ final class ApplicationModel {
     }
 
     func requestClose() async -> Bool {
+        // A failed launch has no editable text in memory; recovery and session
+        // records on disk are untouched, so closing cannot lose anything.
+        if case .failed = launchState { return true }
         guard launchState == .ready else { return false }
         return await requestExit(.closeWindow, operation: .closing)
     }
 
     func requestTermination() async -> Bool {
+        if case .failed = launchState { return true }
         guard launchState == .ready else { return false }
         return await requestExit(.terminateApplication, operation: .terminating)
     }
@@ -410,7 +413,7 @@ final class ApplicationModel {
             if !recoveryWins,
                !session.hasUnsavedChanges,
                let bookmarkID = session.fileReferenceID {
-                cleanFileReference = try await requireReference(
+                cleanFileReference = await availableReference(
                     bookmarkID: bookmarkID,
                     bookmarks: bookmarks
                 )
@@ -422,27 +425,40 @@ final class ApplicationModel {
             cleanFileReference = nil
         }
 
-        let source = RecoveryCoordinator.restoreSource(
+        var source = RecoveryCoordinator.restoreSource(
             session: session,
             recovery: recovery,
             fileReference: cleanFileReference
         )
         let restoredFileReference: ExternalFileReference?
+        var detachesRecoveryFromFile = false
         if case .recovery(let recovery) = source,
            let bookmarkID = recovery.fileReferenceID {
-            restoredFileReference = try await requireReference(
+            restoredFileReference = await availableReference(
                 bookmarkID: bookmarkID,
                 bookmarks: bookmarks
             )
+            detachesRecoveryFromFile = restoredFileReference == nil
         } else {
             restoredFileReference = cleanFileReference
         }
-        try await applyLaunchSource(
-            source,
-            session: session,
-            fileReference: restoredFileReference,
-            files: files
-        )
+        if case .empty = source,
+           let session,
+           !session.hasUnsavedChanges,
+           session.fileReferenceID != nil {
+            // A clean file-backed session whose file can't be resolved holds no
+            // unsaved text, so it falls back to an empty untitled document.
+            replaceCurrentDocument(with: DocumentSession())
+            publishUnavailableFileBanner(displayName: session.displayName)
+        } else {
+            source = await applyLaunchSource(
+                source,
+                session: session,
+                fileReference: restoredFileReference,
+                detachesRecoveryFromFile: detachesRecoveryFromFile,
+                files: files
+            )
+        }
         try await recoveryCoordinator.flushSession(
             for: document,
             windowFrame: session?.windowFrame ?? windowFrame,
@@ -525,42 +541,55 @@ final class ApplicationModel {
         )
     }
 
-    private func requireReference(
+    private func availableReference(
         bookmarkID: UUID,
         bookmarks: any BookmarkAccessing
-    ) async throws -> ExternalFileReference {
-        guard let reference = try await bookmarks.reference(for: bookmarkID) else {
-            throw ApplicationModelLaunchError.unresolvedBookmark(bookmarkID)
+    ) async -> ExternalFileReference? {
+        do {
+            return try await bookmarks.reference(for: bookmarkID)
+        } catch {
+            AppLog.bookmarks.error(
+                "Launch bookmark lookup failed: \(String(describing: type(of: error)), privacy: .public)"
+            )
+            return nil
         }
-        return reference
     }
 
     private func applyLaunchSource(
         _ source: RestoreSource,
         session: SessionRecord?,
         fileReference: ExternalFileReference?,
+        detachesRecoveryFromFile: Bool,
         files: any FileServicing
-    ) async throws {
+    ) async -> RestoreSource {
         switch source {
         case .recovery(let recovery):
             let restoredSaveState: DocumentSaveState
-            switch session?.saveState {
-            case .clean, .untitled, .none:
+            if detachesRecoveryFromFile {
                 restoredSaveState = .edited
-            case .edited, .conflicted, .deleted, .readOnly:
-                restoredSaveState = session?.saveState ?? .edited
+            } else {
+                switch session?.saveState {
+                case .clean, .untitled, .none:
+                    restoredSaveState = .edited
+                case .edited, .conflicted, .deleted, .readOnly:
+                    restoredSaveState = session?.saveState ?? .edited
+                }
             }
+            // Detaching keeps the recovery document ID so the next launch still
+            // matches the on-disk recovery record; only the file link is dropped.
             let restoredDocument = DocumentSession(
                 id: recovery.documentID,
-                fileReference: fileReference,
-                displayName: session?.displayName ?? "Untitled",
+                fileReference: detachesRecoveryFromFile ? nil : fileReference,
+                displayName: detachesRecoveryFromFile
+                    ? "Untitled"
+                    : session?.displayName ?? "Untitled",
                 saveState: restoredSaveState,
                 hasUnsavedChanges: true,
                 generation: generationBeforeReplacement(
                     recovery.documentGeneration ?? session?.documentGeneration
                 ),
-                lastSavedHash: recovery.baseDiskHash,
-                lastKnownDiskMTime: recovery.baseDiskMTime,
+                lastSavedHash: detachesRecoveryFromFile ? nil : recovery.baseDiskHash,
+                lastKnownDiskMTime: detachesRecoveryFromFile ? nil : recovery.baseDiskMTime,
                 lineEnding: recovery.lineEnding,
                 selection: recovery.selection,
                 scrollOffsetY: recovery.scrollOffsetY
@@ -571,8 +600,24 @@ final class ApplicationModel {
                 selection: recovery.selection
             )
             replaceCurrentDocument(with: restoredDocument)
+            if detachesRecoveryFromFile {
+                publishDetachedRecoveryBanner(
+                    path: recovery.filePathHint ?? session?.displayName ?? "the original file"
+                )
+            }
+            return source
         case .file(let session, let reference):
-            let openedFile = try await files.open(reference)
+            let openedFile: FileOpenResult
+            do {
+                openedFile = try await files.open(reference)
+            } catch {
+                AppLog.files.error(
+                    "Launch reopen failed: \(String(describing: type(of: error)), privacy: .public); path: \(reference.pathHint, privacy: .private)"
+                )
+                replaceCurrentDocument(with: DocumentSession())
+                publishUnavailableFileBanner(displayName: session.displayName)
+                return .empty
+            }
             let restoredDocument = DocumentSession(
                 id: session.documentID,
                 fileReference: reference,
@@ -592,9 +637,30 @@ final class ApplicationModel {
                 selection: session.selection
             )
             replaceCurrentDocument(with: restoredDocument)
+            return source
         case .empty:
             replaceCurrentDocument(with: DocumentSession())
+            return source
         }
+    }
+
+    private func publishUnavailableFileBanner(displayName: String) {
+        banner = ErrorBanner(
+            id: UUID(),
+            message: "Scratchpad couldn't reopen \(displayName). It may have been moved or deleted.",
+            actions: [.reselectFile, .dismiss]
+        )
+    }
+
+    private func publishDetachedRecoveryBanner(path: String) {
+        AppLog.bookmarks.error(
+            "Recovered text detached from its file; path: \(path, privacy: .private)"
+        )
+        banner = ErrorBanner(
+            id: UUID(),
+            message: "Scratchpad couldn't reconnect your unsaved text to \(path). It's open as Untitled; use Save As to keep it.",
+            actions: [.saveAs, .dismiss]
+        )
     }
 
     // MARK: - Operation State Machine

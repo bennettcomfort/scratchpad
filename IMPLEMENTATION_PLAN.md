@@ -3448,8 +3448,8 @@ func testLaunchGateRemainsClosedUntilUncleanSessionWriteCompletes()
 func testLaunchFailureKeepsGateClosedAndRetrySucceeds()
 func testProductionLaunchUsesLiveServicesAndConstructsEditorOnlyWhenReady()
 func testCurrentDocumentEditSchedulesRecoveryThroughLaunchCoordinator()
-func testCleanFileBackedLaunchFailsWhenSessionBookmarkCannotResolve()
-func testRecoveryLaunchFailsWhenRecoveryBookmarkCannotResolve()
+func testCleanFileBackedLaunchWithUnresolvedBookmarkOpensUntitledWithBanner()
+func testRecoveryWithUnresolvedBookmarkRestoresTextUntitledAndKeepsRecord()
 ```
 
 The model tests inject a repository whose `writeSession` can suspend or fail. Assert `launchState == .restoring` until the suspended write resumes, then `.ready`; on failure assert `.failed`, increment the retry attempt, allow the repository to succeed, and assert `.ready`. The policy test reads production sources and proves `ScratchpadApp` creates `ApplicationModel.live()`, `MainWindowView` starts `.task(id: model.launchAttempt)`, and `EditorHost` appears only inside the `.ready` switch branch.
