@@ -76,7 +76,7 @@ On launch, Scratchpad performs exactly one of these outcomes:
 
 The window shows a native loading state while restoration runs. No editable `NSTextView` is constructed until the selected source has been applied and the active session has been written successfully with `didCloseCleanly = false`. A launch failure keeps the editor closed and offers Retry; it never falls back to a fresh editable document. While launch has failed, Close and Quit proceed without writing state, because no unsaved text is in memory and recovery and session records on disk stay untouched.
 
-A file that cannot be reached is not a launch failure. If a clean file-backed session's bookmark cannot be resolved or its file cannot be opened, launch opens an empty untitled document and shows a banner naming the file with Reselect and Dismiss. If recovered text's bookmark cannot be resolved, launch restores the text as an edited, unsaved Untitled document that keeps its document identity and leaves the recovery record unchanged, and shows a banner naming the original path with Save As and Dismiss.
+A file that cannot be reached is not a launch failure. If a clean file-backed session's bookmark cannot be resolved or its file cannot be opened, launch opens an empty untitled document and shows a banner naming the file with Reselect and Dismiss. If recovered text's bookmark cannot be resolved, launch restores the text as an edited, unsaved Untitled document that keeps its document identity, without launch rewriting or deleting the recovery record, and shows a banner naming the original path with Save As and Dismiss.
 
 After the gate opens, the editor becomes first responder without a welcome screen or file picker.
 

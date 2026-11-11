@@ -1310,9 +1310,23 @@ final class RecoveryCoordinatorTests: XCTestCase {
             text: "preserve association",
             baseDiskHash: "base-hash"
         )
-        let repository = RecoveryRepositorySpy(session: session, recoveries: [recovery])
+        let firstLaunch = RecoveryRepositorySpy(session: session, recoveries: [recovery])
+        var repository = firstLaunch
 
         for launch in 1...2 {
+            if launch == 2 {
+                // The second launch reads the session the first launch wrote.
+                let firstSessionWrites = await firstLaunch.sessionWrites
+                let writtenSession = try XCTUnwrap(firstSessionWrites.last)
+                XCTAssertNil(writtenSession.fileReferenceID)
+                XCTAssertTrue(writtenSession.hasUnsavedChanges)
+                let firstStoredRecovery = await firstLaunch.storedRecovery(documentID: documentID)
+                let storedRecovery = try XCTUnwrap(firstStoredRecovery)
+                repository = RecoveryRepositorySpy(
+                    session: writtenSession,
+                    recoveries: [storedRecovery]
+                )
+            }
             let model = ApplicationModel()
             let coordinator = RecoveryCoordinator(
                 repository: repository,
@@ -1341,12 +1355,14 @@ final class RecoveryCoordinatorTests: XCTestCase {
             XCTAssertEqual(model.banner?.actions, [.saveAs, .dismiss], "launch \(launch)")
         }
 
-        let stored = await repository.storedRecovery(documentID: documentID)
-        XCTAssertEqual(stored, recovery)
-        let recoveryWrites = await repository.recoveryWrites
-        XCTAssertEqual(recoveryWrites, [])
-        let deleted = await repository.deletedRecoveryIDs
-        XCTAssertEqual(deleted, [])
+        for launchRepository in [firstLaunch, repository] {
+            let stored = await launchRepository.storedRecovery(documentID: documentID)
+            XCTAssertEqual(stored, recovery)
+            let recoveryWrites = await launchRepository.recoveryWrites
+            XCTAssertEqual(recoveryWrites, [])
+            let deleted = await launchRepository.deletedRecoveryIDs
+            XCTAssertEqual(deleted, [])
+        }
     }
 
     private func assertEmptyUntitled(

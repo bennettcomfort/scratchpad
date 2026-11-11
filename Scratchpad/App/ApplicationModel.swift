@@ -647,7 +647,7 @@ final class ApplicationModel {
     private func publishUnavailableFileBanner(displayName: String) {
         banner = ErrorBanner(
             id: UUID(),
-            message: "Scratchpad couldn't reopen \(displayName). It may have been moved or deleted.",
+            message: "Scratchpad couldn't reopen \(displayName).",
             actions: [.reselectFile, .dismiss]
         )
     }
