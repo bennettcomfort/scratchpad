@@ -629,6 +629,9 @@ final class ApplicationModel {
         case .unchanged:
             return
         case .missing:
+            // The monitor repeats unchanged statuses every second. Acting on a
+            // repeat would restart the recovery debounce before it can fire.
+            guard document.saveState != .deleted else { return }
             document.markDeleted()
             recovery.scheduleRecovery(for: document)
             if let reference = document.fileReference {
@@ -649,6 +652,7 @@ final class ApplicationModel {
             }
         case .changed:
             if document.hasUnsavedChanges {
+                guard document.saveState != .conflicted else { return }
                 document.markConflicted()
                 recovery.scheduleRecovery(for: document)
                 return

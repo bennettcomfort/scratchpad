@@ -270,6 +270,109 @@ final class ExternalChangeMonitorTests: XCTestCase {
             XCTAssertEqual(model.banner?.actions, expectedActions)
         }
     }
+
+    func testPersistentMissingFileWritesRecoveryOnceWithoutStarvation() async throws {
+        let clock = ExternalMonitorVirtualClock()
+        let files = ExternalMonitorFileServiceFake(steadyStatus: .missing)
+        let repository = ExternalMonitorRepositoryFake()
+        let document = makeFileBackedDocument(text: "kept while missing")
+        let model = makeModel(
+            document: document,
+            files: files,
+            repository: repository,
+            clock: clock
+        )
+
+        model.startExternalChangeMonitoring()
+        await clock.waitForSleepers(1)
+        await advanceMonitorTick(1, clock: clock, files: files, sleepers: 2)
+        await advanceMonitorTick(2, clock: clock, files: files, sleepers: 2)
+        await clock.advance(by: .seconds(1))
+        await assertRecoveryWrites(1, in: repository)
+        await files.waitForInspectEntries(3)
+        await clock.waitForSleepers(1)
+        for tick in 4...10 {
+            await advanceMonitorTick(tick, clock: clock, files: files, sleepers: 1)
+        }
+
+        let writes = await repository.recoveryWrites
+        XCTAssertEqual(writes.count, 1)
+        XCTAssertEqual(writes.first?.unsavedText, "kept while missing")
+        XCTAssertEqual(document.saveState, .deleted)
+        XCTAssertTrue(document.hasUnsavedChanges)
+    }
+
+    func testEditDuringPersistentConflictReachesRecovery() async throws {
+        let clock = ExternalMonitorVirtualClock()
+        let files = ExternalMonitorFileServiceFake(
+            steadyStatus: .changed(
+                contentHash: "external-hash",
+                modificationDate: Date(timeIntervalSince1970: 2)
+            )
+        )
+        let repository = ExternalMonitorRepositoryFake()
+        let document = makeFileBackedDocument(text: "base")
+        document.storage.setAttributedString(NSAttributedString(string: "local edits"))
+        document.noteUserEdit()
+        let model = makeModel(
+            document: document,
+            files: files,
+            repository: repository,
+            clock: clock
+        )
+
+        model.startExternalChangeMonitoring()
+        await clock.waitForSleepers(1)
+        await advanceMonitorTick(1, clock: clock, files: files, sleepers: 2)
+        await advanceMonitorTick(2, clock: clock, files: files, sleepers: 2)
+        await clock.advance(by: .seconds(1))
+        await assertRecoveryWrites(1, in: repository)
+        await files.waitForInspectEntries(3)
+        await clock.waitForSleepers(1)
+
+        document.storage.setAttributedString(
+            NSAttributedString(string: "edited during conflict")
+        )
+        document.noteUserEdit()
+        model.handleCurrentDocumentEdit(document)
+        await clock.waitForSleepers(2)
+        await advanceMonitorTick(4, clock: clock, files: files, sleepers: 2)
+        await clock.advance(by: .seconds(1))
+        await assertRecoveryWrites(2, in: repository)
+        await files.waitForInspectEntries(5)
+        await clock.waitForSleepers(1)
+        for tick in 6...7 {
+            await advanceMonitorTick(tick, clock: clock, files: files, sleepers: 1)
+        }
+
+        let writes = await repository.recoveryWrites
+        XCTAssertEqual(writes.map(\.unsavedText), ["local edits", "edited during conflict"])
+        XCTAssertEqual(document.storage.string, "edited during conflict")
+        XCTAssertEqual(document.saveState, .conflicted)
+    }
+
+    private func advanceMonitorTick(
+        _ tick: Int,
+        clock: ExternalMonitorVirtualClock,
+        files: ExternalMonitorFileServiceFake,
+        sleepers: Int
+    ) async {
+        await clock.advance(by: .seconds(1))
+        await files.waitForInspectEntries(tick)
+        await clock.waitForSleepers(sleepers)
+    }
+
+    private func assertRecoveryWrites(
+        _ count: Int,
+        in repository: ExternalMonitorRepositoryFake
+    ) async {
+        let written = expectation(description: "\(count) recovery write(s)")
+        Task {
+            await repository.waitForRecoveryWrites(count)
+            written.fulfill()
+        }
+        await fulfillment(of: [written], timeout: 2)
+    }
 }
 
 @MainActor
@@ -427,18 +530,21 @@ private actor ExternalMonitorFileServiceFake: FileServicing {
     private var saveWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
     private var saveContinuations: [CheckedContinuation<Void, Never>] = []
     private let configuredOpenResult: FileOpenResult?
+    private let steadyStatus: ExternalFileStatus
     private(set) var openCount = 0
 
     init(
         suspendInspectCount: Int = 0,
         suspendOpenCount: Int = 0,
         suspendSaveCount: Int = 0,
-        openResult: FileOpenResult? = nil
+        openResult: FileOpenResult? = nil,
+        steadyStatus: ExternalFileStatus = .unchanged
     ) {
         self.suspendedInspects = suspendInspectCount
         self.suspendedOpens = suspendOpenCount
         self.suspendedSaves = suspendSaveCount
         self.configuredOpenResult = openResult
+        self.steadyStatus = steadyStatus
     }
 
     var inspectCount: Int { inspectEntries }
@@ -482,7 +588,7 @@ private actor ExternalMonitorFileServiceFake: FileServicing {
     func inspect(_ snapshot: DocumentSnapshot) async throws -> ExternalFileStatus {
         inspectEntries += 1
         resumeSatisfiedInspectWaiters()
-        guard suspendedInspects > 0 else { return .unchanged }
+        guard suspendedInspects > 0 else { return steadyStatus }
         suspendedInspects -= 1
         return await withCheckedContinuation { inspectContinuations.append($0) }
     }
@@ -546,12 +652,25 @@ private final class ExternalMonitorPanelFake: FilePanelProviding {
 }
 
 private actor ExternalMonitorRepositoryFake: SessionPersisting {
+    private(set) var recoveryWrites: [RecoveryRecord] = []
+    private var recoveryWriteWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
     func loadSession() async throws -> SessionRecord? { nil }
     func writeSession(_ record: SessionRecord) async throws {}
     func loadRecovery(documentID: UUID) async throws -> RecoveryRecord? { nil }
     func loadAllRecovery() async throws -> [RecoveryRecord] { [] }
-    func writeRecovery(_ record: RecoveryRecord) async throws {}
+    func writeRecovery(_ record: RecoveryRecord) async throws {
+        recoveryWrites.append(record)
+        let ready = recoveryWriteWaiters.filter { recoveryWrites.count >= $0.0 }
+        recoveryWriteWaiters.removeAll { recoveryWrites.count >= $0.0 }
+        for waiter in ready { waiter.1.resume() }
+    }
     func deleteRecovery(documentID: UUID) async throws {}
+
+    func waitForRecoveryWrites(_ count: Int) async {
+        guard recoveryWrites.count < count else { return }
+        await withCheckedContinuation { recoveryWriteWaiters.append((count, $0)) }
+    }
 }
 
 private actor ExternalMonitorBookmarkFake: BookmarkAccessing {
