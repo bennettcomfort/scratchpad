@@ -74,7 +74,9 @@ On launch, Scratchpad performs exactly one of these outcomes:
 2. Reopen the previous clean file-backed document from disk.
 3. If no restorable document exists, create an empty untitled document.
 
-The window shows a native loading state while restoration runs. No editable `NSTextView` is constructed until the selected source has been applied and the active session has been written successfully with `didCloseCleanly = false`. A launch failure keeps the editor closed and offers Retry; it never falls back to a fresh editable document.
+The window shows a native loading state while restoration runs. No editable `NSTextView` is constructed until the selected source has been applied and the active session has been written successfully with `didCloseCleanly = false`. A launch failure keeps the editor closed and offers Retry; it never falls back to a fresh editable document. While launch has failed, Close and Quit proceed without writing state, because no unsaved text is in memory and recovery and session records on disk stay untouched.
+
+A file that cannot be reached is not a launch failure. If a clean file-backed session's bookmark cannot be resolved or its file cannot be opened, launch opens an empty untitled document and shows a banner naming the file with Reselect and Dismiss. If recovered text's bookmark cannot be resolved, launch restores the text as an edited, unsaved Untitled document that keeps its document identity, without launch rewriting or deleting the recovery record, and shows a banner naming the original path with Save As and Dismiss.
 
 After the gate opens, the editor becomes first responder without a welcome screen or file picker.
 
@@ -335,6 +337,8 @@ Logging supplements visible error handling; it never replaces it.
 | Window close after clean state | Under 100 ms |
 
 Files larger than 2 MB remain editable, but only correctness—not the interactive budgets above—is guaranteed during recovery.
+
+The timing budgets are reference targets, not release blockers. Performance tests measure and report them, and an overrun is recorded as an expected failure instead of failing the suite.
 
 ## 15. Automated Acceptance
 

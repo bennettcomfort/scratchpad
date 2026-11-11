@@ -1225,7 +1225,7 @@ final class RecoveryCoordinatorTests: XCTestCase {
         XCTAssertTrue(model.document.hasUnsavedChanges)
     }
 
-    func testCleanFileBackedLaunchFailsWhenSessionBookmarkCannotResolve() async throws {
+    func testCleanFileBackedLaunchWithUnresolvedBookmarkOpensUntitledWithBanner() async throws {
         let documentID = UUID()
         let bookmarkID = UUID()
         let session = makeSession(
@@ -1242,38 +1242,35 @@ final class RecoveryCoordinatorTests: XCTestCase {
             documentProvider: { id in model.document.id == id ? model.document : nil }
         )
 
-        do {
-            _ = try await model.restoreAtLaunch(
-                repository: repository,
-                bookmarks: BookmarkAccessSpy(),
-                files: LaunchFileServiceSpy(),
-                recoveryCoordinator: coordinator,
-                windowFrame: session.windowFrame
-            )
-            XCTFail("Expected unresolved session bookmark to fail launch restore")
-        } catch {
-            XCTAssertEqual(
-                error as? ApplicationModelLaunchError,
-                .unresolvedBookmark(bookmarkID)
-            )
-        }
+        let source = try await model.restoreAtLaunch(
+            repository: repository,
+            bookmarks: BookmarkAccessSpy(),
+            files: LaunchFileServiceSpy(),
+            recoveryCoordinator: coordinator,
+            windowFrame: session.windowFrame
+        )
+
+        XCTAssertEqual(source, .empty)
+        assertEmptyUntitled(model.document)
+        XCTAssertEqual(model.banner?.actions, [.reselectFile, .dismiss])
+        let sessionWrites = await repository.sessionWrites
+        XCTAssertEqual(sessionWrites.count, 1)
+        XCTAssertNil(sessionWrites.first?.fileReferenceID)
+        XCTAssertEqual(sessionWrites.first?.didCloseCleanly, false)
     }
 
-    func testRecoveryLaunchFailsWhenRecoveryBookmarkCannotResolve() async throws {
+    func testCleanFileBackedLaunchWithMissingFileOpensUntitledWithBanner() async throws {
         let documentID = UUID()
         let bookmarkID = UUID()
+        let reference = ExternalFileReference(bookmarkID: bookmarkID, pathHint: "/Notes/File.md")
         let session = makeSession(
             documentID: documentID,
-            hasUnsavedChanges: true,
-            saveState: .edited
-        )
-        let recovery = makeRecovery(
-            documentID: documentID,
             fileReferenceID: bookmarkID,
-            filePathHint: "/Notes/Missing.md",
-            text: "preserve association"
+            hasUnsavedChanges: false,
+            saveState: .clean
         )
-        let repository = RecoveryRepositorySpy(session: session, recoveries: [recovery])
+        let repository = RecoveryRepositorySpy(session: session)
+        let files = LaunchFileServiceSpy(openError: .missing)
         let model = ApplicationModel()
         let coordinator = RecoveryCoordinator(
             repository: repository,
@@ -1281,21 +1278,103 @@ final class RecoveryCoordinatorTests: XCTestCase {
             documentProvider: { id in model.document.id == id ? model.document : nil }
         )
 
-        do {
-            _ = try await model.restoreAtLaunch(
+        let source = try await model.restoreAtLaunch(
+            repository: repository,
+            bookmarks: BookmarkAccessSpy(references: [bookmarkID: reference]),
+            files: files,
+            recoveryCoordinator: coordinator,
+            windowFrame: session.windowFrame
+        )
+
+        XCTAssertEqual(source, .empty)
+        assertEmptyUntitled(model.document)
+        XCTAssertEqual(model.banner?.actions, [.reselectFile, .dismiss])
+        let openedReferences = await files.openedReferences
+        XCTAssertEqual(openedReferences, [reference])
+    }
+
+    func testRecoveryWithUnresolvedBookmarkRestoresTextUntitledAndKeepsRecord() async throws {
+        let documentID = UUID()
+        let bookmarkID = UUID()
+        let session = makeSession(
+            documentID: documentID,
+            fileReferenceID: bookmarkID,
+            hasUnsavedChanges: true,
+            saveState: .conflicted
+        )
+        let recovery = makeRecovery(
+            documentID: documentID,
+            documentGeneration: 4,
+            fileReferenceID: bookmarkID,
+            filePathHint: "/Notes/Missing.md",
+            text: "preserve association",
+            baseDiskHash: "base-hash"
+        )
+        let firstLaunch = RecoveryRepositorySpy(session: session, recoveries: [recovery])
+        var repository = firstLaunch
+
+        for launch in 1...2 {
+            if launch == 2 {
+                // The second launch reads the session the first launch wrote.
+                let firstSessionWrites = await firstLaunch.sessionWrites
+                let writtenSession = try XCTUnwrap(firstSessionWrites.last)
+                XCTAssertNil(writtenSession.fileReferenceID)
+                XCTAssertTrue(writtenSession.hasUnsavedChanges)
+                let firstStoredRecovery = await firstLaunch.storedRecovery(documentID: documentID)
+                let storedRecovery = try XCTUnwrap(firstStoredRecovery)
+                repository = RecoveryRepositorySpy(
+                    session: writtenSession,
+                    recoveries: [storedRecovery]
+                )
+            }
+            let model = ApplicationModel()
+            let coordinator = RecoveryCoordinator(
+                repository: repository,
+                clock: VirtualRecoveryClock(),
+                documentProvider: { id in model.document.id == id ? model.document : nil }
+            )
+
+            let source = try await model.restoreAtLaunch(
                 repository: repository,
                 bookmarks: BookmarkAccessSpy(),
                 files: LaunchFileServiceSpy(),
                 recoveryCoordinator: coordinator,
                 windowFrame: session.windowFrame
             )
-            XCTFail("Expected unresolved recovery bookmark to fail launch restore")
-        } catch {
-            XCTAssertEqual(
-                error as? ApplicationModelLaunchError,
-                .unresolvedBookmark(bookmarkID)
-            )
+
+            XCTAssertEqual(source, .recovery(recovery), "launch \(launch)")
+            let document = model.document
+            XCTAssertEqual(document.id, documentID, "launch \(launch)")
+            XCTAssertEqual(document.storage.string, "preserve association", "launch \(launch)")
+            XCTAssertNil(document.fileReference, "launch \(launch)")
+            XCTAssertEqual(document.displayName, "Untitled", "launch \(launch)")
+            XCTAssertEqual(document.saveState, .edited, "launch \(launch)")
+            XCTAssertTrue(document.hasUnsavedChanges, "launch \(launch)")
+            XCTAssertNil(document.lastSavedHash, "launch \(launch)")
+            XCTAssertNil(document.lastKnownDiskMTime, "launch \(launch)")
+            XCTAssertEqual(model.banner?.actions, [.saveAs, .dismiss], "launch \(launch)")
         }
+
+        for launchRepository in [firstLaunch, repository] {
+            let stored = await launchRepository.storedRecovery(documentID: documentID)
+            XCTAssertEqual(stored, recovery)
+            let recoveryWrites = await launchRepository.recoveryWrites
+            XCTAssertEqual(recoveryWrites, [])
+            let deleted = await launchRepository.deletedRecoveryIDs
+            XCTAssertEqual(deleted, [])
+        }
+    }
+
+    private func assertEmptyUntitled(
+        _ document: DocumentSession,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(document.storage.string, "", file: file, line: line)
+        XCTAssertNil(document.fileReference, file: file, line: line)
+        XCTAssertEqual(document.displayName, "Untitled", file: file, line: line)
+        XCTAssertEqual(document.saveState, .untitled, file: file, line: line)
+        XCTAssertFalse(document.hasUnsavedChanges, file: file, line: line)
     }
 }
 

@@ -61,6 +61,30 @@ final class ApplicationModelTests: XCTestCase {
         XCTAssertTrue(writes.allSatisfy { !$0.didCloseCleanly })
     }
 
+    func testFailedLaunchAllowsCloseAndTerminationWithoutWritingSession() async throws {
+        let repository = LaunchRepositoryFake(sessionWriteFailures: 1)
+        let model = ApplicationModel(
+            launchState: .restoring,
+            servicesFactory: { makeLaunchServices(repository: repository) }
+        )
+
+        await model.restoreCurrentLaunchAttempt(
+            windowFrame: CGRect(x: 0, y: 0, width: 820, height: 640)
+        )
+        guard case .failed = model.launchState else {
+            return XCTFail("Expected launch to fail")
+        }
+        let writesBefore = await repository.sessionWrites.count
+
+        let closed = await model.requestClose()
+        let terminated = await model.requestTermination()
+
+        XCTAssertTrue(closed)
+        XCTAssertTrue(terminated)
+        let writesAfter = await repository.sessionWrites.count
+        XCTAssertEqual(writesAfter, writesBefore)
+    }
+
     func testLaunchContainmentFlushPreservesLoadedSessionFrame() async throws {
         let savedFrame = CGRect(x: 173, y: 91, width: 930, height: 711)
         let preRestorationFrame = CGRect(x: 0, y: 0, width: 820, height: 640)
