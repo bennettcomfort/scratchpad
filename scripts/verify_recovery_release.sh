@@ -3,7 +3,9 @@ set -euo pipefail
 
 xcodegen
 xcodebuild -scheme Scratchpad -configuration Release -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadRelease build
-xcodebuild -scheme Scratchpad -configuration Performance -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadRelease test
+# Hosted CI runners lack Full Keyboard Access and a usable font panel, so the
+# keyboard-driven accessibility UI suite runs only on local machines.
+xcodebuild -scheme Scratchpad -configuration Performance -destination 'platform=macOS' -derivedDataPath /tmp/ScratchpadRelease test ${CI:+-skip-testing:ScratchpadUITests}
 app_path=/tmp/ScratchpadRelease/Build/Products/Release/Scratchpad.app
 entitlements_path="$(mktemp /tmp/ScratchpadReleaseEntitlements.XXXXXX)"
 trap 'rm -f "$entitlements_path"' EXIT

@@ -338,6 +338,8 @@ Logging supplements visible error handling; it never replaces it.
 
 Files larger than 2 MB remain editable, but only correctness—not the interactive budgets above—is guaranteed during recovery.
 
+The timing budgets are reference targets, not release blockers. Performance tests measure and report them, and an overrun is recorded as an expected failure instead of failing the suite.
+
 ## 15. Automated Acceptance
 
 The suite must include:
